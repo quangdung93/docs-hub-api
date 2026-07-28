@@ -1,4 +1,4 @@
-module document-hub-api
+module github.com/quangdung393/docs-hub-api
 
 // Go 1.25 — dịch vụ Go đầu tiên của ISC.
 // Lưu ý: đây là module path tạm ("bare"). Khi repo có URL git chính thức,

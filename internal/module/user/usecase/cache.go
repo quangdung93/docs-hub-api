@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/port"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 const (

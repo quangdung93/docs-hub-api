@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"document-hub-api/internal/common/port"
-	userhttp "document-hub-api/internal/module/user/delivery/http"
-	"document-hub-api/internal/module/user/repository"
-	"document-hub-api/internal/module/user/usecase"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	userhttp "github.com/quangdung393/docs-hub-api/internal/module/user/delivery/http"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/repository"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
 )
 
 // Deps là phụ thuộc hạ tầng mà module user cần (bootstrap cung cấp).

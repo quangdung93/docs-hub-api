@@ -4,9 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/validatorx"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/validatorx"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // bindBody bind JSON body; lỗi -> REQ_400 kèm details. Trả false nếu lỗi.

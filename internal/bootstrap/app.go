@@ -14,11 +14,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"document-hub-api/internal/config"
-	"document-hub-api/internal/infrastructure/httpserver"
-	"document-hub-api/internal/infrastructure/telemetry"
-	"document-hub-api/internal/middleware"
-	"document-hub-api/internal/module/health"
+	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/httpserver"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/telemetry"
+	"github.com/quangdung393/docs-hub-api/internal/middleware"
+	"github.com/quangdung393/docs-hub-api/internal/module/health"
 )
 
 // Run là điểm vào của ứng dụng: chạy tới khi ctx bị hủy (SIGINT/SIGTERM) rồi

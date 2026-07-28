@@ -1,6 +1,6 @@
-// Command api là entrypoint của HTTP API service document-hub-api.
+// Command api là entrypoint của HTTP API service docs-hub-api.
 //
-// @title        document-hub-api
+// @title        docs-hub-api
 // @version      1.0
 // @description  Boilerplate Go Clean Architecture cho ISC.
 // @BasePath     /
@@ -14,9 +14,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"document-hub-api/internal/bootstrap"
-	"document-hub-api/internal/config"
-	"document-hub-api/pkg/logger"
+	"github.com/quangdung393/docs-hub-api/internal/bootstrap"
+	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/pkg/logger"
 )
 
 // version được set qua -ldflags khi build.

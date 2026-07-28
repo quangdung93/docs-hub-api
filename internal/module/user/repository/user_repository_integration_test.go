@@ -19,10 +19,10 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"document-hub-api/internal/common/pagination"
-	"document-hub-api/internal/infrastructure/database/mysql"
-	"document-hub-api/internal/module/user/domain"
-	"document-hub-api/internal/module/user/repository"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/repository"
 )
 
 // paginationQuery là helper tạo query đã normalize cho test.

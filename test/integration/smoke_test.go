@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"document-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/internal/config"
 )
 
 func TestConfig_LoadLocalForIntegration(t *testing.T) {

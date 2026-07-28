@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"document-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/internal/config"
 )
 
 // localConfigPath trả về đường dẫn config.local.yaml tính từ thư mục package.
@@ -19,7 +19,7 @@ func localConfigPath(t *testing.T) string {
 func TestLoad_LocalConfig(t *testing.T) {
 	cfg, err := config.Load(localConfigPath(t))
 	require.NoError(t, err)
-	require.Equal(t, "document-hub-api", cfg.App.Name)
+	require.Equal(t, "github.com/quangdung393/docs-hub-api", cfg.App.Name)
 	require.Equal(t, config.EnvLocal, cfg.App.Env)
 	require.True(t, cfg.App.IsLocal())
 	require.Equal(t, 8080, cfg.HTTP.APIPort)

@@ -10,8 +10,8 @@ import "github.com/swaggo/swag"
 const docTemplate = `{
   "swagger": "2.0",
   "info": {
-    "title": "document-hub-api",
-    "description": "API document-hub-api (chạy 'make swagger' để cập nhật đầy đủ)",
+    "title": "docs-hub-api",
+    "description": "API docs-hub-api (chạy 'make swagger' để cập nhật đầy đủ)",
     "version": "1.0"
   },
   "basePath": "/",
@@ -24,8 +24,8 @@ var SwaggerInfo = &swag.Spec{ //nolint:gochecknoglobals // swaggo yêu cầu bi�
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "document-hub-api",
-	Description:      "API document-hub-api",
+	Title:            "docs-hub-api",
+	Description:      "API docs-hub-api",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -3,8 +3,8 @@ package repository
 import (
 	"gorm.io/gorm"
 
-	"document-hub-api/internal/common/pagination"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // sortableColumns là WHITELIST cột được phép sort. Đây là hàng rào chống SQL

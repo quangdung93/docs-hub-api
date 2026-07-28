@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/contextx"
+	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
 )
 
 // HeaderRequestID là tên header mang request id xuyên hệ thống.

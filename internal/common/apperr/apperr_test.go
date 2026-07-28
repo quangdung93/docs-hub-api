@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
 )
 
 func TestBusinessError_WithDetailsDoesNotMutateSentinel(t *testing.T) {

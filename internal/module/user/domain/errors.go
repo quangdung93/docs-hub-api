@@ -1,8 +1,8 @@
 package domain
 
 import (
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
 )
 
 // Lỗi NGHIỆP VỤ của module user (trả HTTP 200 + success=false).

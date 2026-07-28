@@ -8,16 +8,16 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"document-hub-api/internal/common/port"
-	"document-hub-api/internal/config"
-	rediscache "document-hub-api/internal/infrastructure/cache/redis"
-	"document-hub-api/internal/infrastructure/database/mysql"
-	"document-hub-api/internal/infrastructure/mq"
-	"document-hub-api/internal/infrastructure/mq/rabbitmq"
-	miniostore "document-hub-api/internal/infrastructure/storage/minio"
-	"document-hub-api/internal/infrastructure/telemetry"
-	"document-hub-api/pkg/hashing"
-	"document-hub-api/pkg/jwt"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/config"
+	rediscache "github.com/quangdung393/docs-hub-api/internal/infrastructure/cache/redis"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/mq"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/mq/rabbitmq"
+	miniostore "github.com/quangdung393/docs-hub-api/internal/infrastructure/storage/minio"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/telemetry"
+	"github.com/quangdung393/docs-hub-api/pkg/hashing"
+	"github.com/quangdung393/docs-hub-api/pkg/jwt"
 )
 
 // Infra gom toàn bộ client hạ tầng và các port đã hiện thực hóa.

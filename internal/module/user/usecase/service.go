@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/pagination"
-	"document-hub-api/internal/common/port"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // PasswordHasher là hợp đồng băm mật khẩu mà usecase cần (implement bằng pkg/hashing).

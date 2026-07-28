@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"document-hub-api/internal/common/port"
-	"document-hub-api/internal/module/user/usecase"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
 )
 
 // MockTxManager — port.TxManager. Do chạy luôn callback với cùng ctx (mô phỏng

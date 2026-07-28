@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
 )
 
 // UserRepository là PORT (interface) mà usecase phụ thuộc. Implementation cụ thể

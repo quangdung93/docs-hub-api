@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"github.com/gin-gonic/gin"
 
-	"document-hub-api/internal/config"
-	"document-hub-api/internal/middleware"
+	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/internal/middleware"
 )
 
 // registerRoutes dựng 2 nhóm route và gắn các module.

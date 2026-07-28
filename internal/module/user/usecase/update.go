@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // Update cập nhật hồ sơ theo optimistic lock. Khi repo báo không có dòng nào bị

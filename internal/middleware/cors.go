@@ -6,7 +6,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	"document-hub-api/internal/config"
+	"github.com/quangdung393/docs-hub-api/internal/config"
 )
 
 // CORS cấu hình CORS từ config. Whitelist origin cụ thể — KHÔNG dùng "*" khi

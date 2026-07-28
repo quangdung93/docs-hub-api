@@ -16,7 +16,7 @@
 package response
 
 import (
-	"document-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
 )
 
 // Envelope là cấu trúc phản hồi gốc.

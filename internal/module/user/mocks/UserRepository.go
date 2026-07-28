@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
-	"document-hub-api/internal/common/pagination"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // MockUserRepository là mock của domain.UserRepository.

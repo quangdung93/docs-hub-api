@@ -3,7 +3,7 @@ package apperr
 import (
 	"fmt"
 
-	"document-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
 )
 
 // TechnicalError là lỗi kỹ thuật. Middleware render thành HTTP 4xx/5xx.

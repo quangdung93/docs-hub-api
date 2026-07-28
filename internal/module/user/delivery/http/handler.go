@@ -3,10 +3,10 @@ package http
 import (
 	"github.com/gin-gonic/gin"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/response"
-	"document-hub-api/internal/common/validatorx"
-	"document-hub-api/internal/module/user/usecase"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/response"
+	"github.com/quangdung393/docs-hub-api/internal/common/validatorx"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
 )
 
 // Handler xử lý HTTP cho module user. Chỉ giữ tham chiếu service — không state khác.

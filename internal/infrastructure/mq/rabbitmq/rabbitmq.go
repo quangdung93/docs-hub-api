@@ -13,7 +13,7 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"document-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
 )
 
 // Config là tham số kết nối.

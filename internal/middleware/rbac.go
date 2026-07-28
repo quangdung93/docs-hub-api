@@ -3,8 +3,8 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/contextx"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
 )
 
 // RequireRoles chặn request nếu actor không có ÍT NHẤT MỘT trong các role yêu cầu.

@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/errcode"
-	"document-hub-api/internal/middleware"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/middleware"
 )
 
 func setupRouter(handler gin.HandlerFunc) *gin.Engine {

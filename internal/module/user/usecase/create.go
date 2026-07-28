@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // userCreatedEvent là payload sự kiện user.created.

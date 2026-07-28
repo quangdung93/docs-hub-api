@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
 // GetByID lấy user theo id, có cache-aside:

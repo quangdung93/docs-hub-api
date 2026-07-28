@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/errcode"
-	"document-hub-api/internal/common/response"
-	"document-hub-api/pkg/logger"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/common/response"
+	"github.com/quangdung393/docs-hub-api/pkg/logger"
 )
 
 // ErrorHandler là TRÁI TIM của việc chuẩn hóa lỗi theo ISC.

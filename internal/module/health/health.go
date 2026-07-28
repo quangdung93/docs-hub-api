@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"document-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
 )
 
 const checkTimeout = 2 * time.Second

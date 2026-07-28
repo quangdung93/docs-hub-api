@@ -3,9 +3,9 @@
 package http
 
 import (
-	"document-hub-api/internal/common/pagination"
-	"document-hub-api/internal/module/user/domain"
-	"document-hub-api/internal/module/user/usecase"
+	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
 )
 
 // CreateUserRequest là body tạo user. Tag json snake_case theo templates/02;

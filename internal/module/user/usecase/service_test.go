@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"document-hub-api/internal/common/apperr"
-	"document-hub-api/internal/common/errcode"
-	"document-hub-api/internal/common/port"
-	"document-hub-api/internal/module/user/domain"
-	"document-hub-api/internal/module/user/mocks"
-	"document-hub-api/internal/module/user/usecase"
+	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung393/docs-hub-api/internal/common/errcode"
+	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/mocks"
+	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
 )
 
 // harness gom service + các mock để test tiện lợi.
