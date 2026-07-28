@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# Đổi module path từ "document-hub-api" sang path git chính thức trong 1 lệnh.
-# Dùng: ./scripts/rename-module.sh git.fpt.net/isc/document-hub/document-hub-api
+# Đổi module path hiện tại (đọc từ go.mod) sang path mới trong 1 lệnh.
+# Dùng: ./scripts/rename-module.sh github.com/quangdung393/docs-hub-api
 set -euo pipefail
 
 NEW_MODULE="${1:-}"
-OLD_MODULE="document-hub-api"
+# Tự phát hiện module hiện tại từ dòng "module ..." trong go.mod (không hardcode).
+OLD_MODULE="$(awk '/^module /{print $2; exit}' go.mod)"
 
 if [ -z "$NEW_MODULE" ]; then
   echo "Usage: $0 <new-module-path>"
-  echo "Ví dụ: $0 git.fpt.net/isc/document-hub/document-hub-api"
+  echo "Ví dụ: $0 github.com/quangdung393/docs-hub-api"
+  echo "Module hiện tại: ${OLD_MODULE:-<không đọc được go.mod>}"
   exit 1
+fi
+
+if [ -z "$OLD_MODULE" ]; then
+  echo "❌ Không đọc được module hiện tại từ go.mod"; exit 1
 fi
 
 echo "▶ Đổi module: $OLD_MODULE -> $NEW_MODULE"

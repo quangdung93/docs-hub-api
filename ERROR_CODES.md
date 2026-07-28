@@ -1,4 +1,4 @@
-# ERROR_CODES — document-hub-api
+# ERROR_CODES — docs-hub-api
 
 Kế thừa catalogue chuẩn ISC (`templates/04`). Tài liệu này chỉ ghi phần **bổ sung** của repo.
 

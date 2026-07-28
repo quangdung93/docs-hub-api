@@ -1,4 +1,4 @@
-# CLAUDE.md — document-hub-api
+# CLAUDE.md — docs-hub-api
 
 Hướng dẫn cho AI/lập trình viên khi làm việc trong repo này.
 

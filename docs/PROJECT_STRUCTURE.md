@@ -1,11 +1,11 @@
-# Cấu trúc thư mục — document-hub-api
+# Cấu trúc thư mục — docs-hub-api
 
 Tài liệu này giải thích **vì sao mỗi thư mục tồn tại** và ranh giới phụ thuộc giữa chúng. Đọc kèm `docs/architecture/ADR-0001` (vertical slice) và `ADR-0002` (tách lỗi).
 
 ## Sơ đồ tổng quan
 
 ```
-document-hub-api/
+docs-hub-api/
 ├── cmd/                  # Điểm vào các chương trình (main package)
 │   ├── api/              # HTTP API server
 │   ├── migrate/          # Chạy DB migration (bước riêng, không nằm trong api)

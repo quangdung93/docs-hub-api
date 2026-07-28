@@ -1,7 +1,7 @@
 # Cấu hình môi trường LOCAL (máy dev).
 # Secret có thể để trần ở local cho tiện; ở dev/staging/production PHẢI đến từ ENV.
 app:
-  name: document-hub-api
+  name: docs-hub-api
   env: local
   enable_dev_token: true # chỉ local mới được bật
 
@@ -57,7 +57,7 @@ minio:
 jwt:
   algorithm: HS256
   secret: local-dev-secret-doi-o-moi-truong-that # local only
-  issuer: document-hub-api
+  issuer: docs-hub-api
   access_ttl: 15m
   refresh_ttl: 168h
 

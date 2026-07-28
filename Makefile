@@ -1,7 +1,7 @@
-# Makefile — document-hub-api
+# Makefile — docs-hub-api
 # Mục tiêu: mọi thao tác thường dùng chỉ 1 lệnh, chạy được cả local lẫn CI.
 
-APP_NAME       := document-hub-api
+APP_NAME       := docs-hub-api
 BIN_DIR        := bin
 MAIN_API       := ./cmd/api
 MAIN_MIGRATE   := ./cmd/migrate

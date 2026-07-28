@@ -1,4 +1,4 @@
-# Hạ tầng local cho document-hub-api.
+# Hạ tầng local cho docs-hub-api.
 # Dùng: make up (bật) / make down (tắt).
 # Mọi service đều có healthcheck để `depends_on: condition: service_healthy` hoạt động.
 name: document-hub

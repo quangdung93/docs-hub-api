@@ -2,7 +2,7 @@
 # Response tuân theo envelope ISC: { success, data, error, meta }.
 openapi: 3.0.3
 info:
-  title: document-hub-api — users
+  title: docs-hub-api — users
   version: "1.0"
 servers:
   - url: /internal/api/v1

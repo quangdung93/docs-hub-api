@@ -2,7 +2,7 @@
 # TẤT CẢ secret đến từ ENV (thường bơm qua Vault/K8s secret). KHÔNG hardcode.
 # pprof + swagger TẮT. Sample tracing thấp để giảm chi phí.
 app:
-  name: document-hub-api
+  name: docs-hub-api
   env: production
   enable_dev_token: false # loader sẽ fail nếu vô tình bật
 
@@ -58,7 +58,7 @@ minio:
 jwt:
   algorithm: HS256
   secret: ""
-  issuer: document-hub-api
+  issuer: docs-hub-api
   access_ttl: 15m
   refresh_ttl: 168h
 

@@ -1,4 +1,4 @@
-# CODING_CONVENTIONS — document-hub-api
+# CODING_CONVENTIONS — docs-hub-api
 
 Kế thừa chuẩn ISC (`templates/01_Coding_Convention.md`). Đây là phần cụ thể hóa cho Go.
 

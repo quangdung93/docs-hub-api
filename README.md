@@ -1,4 +1,4 @@
-# document-hub-api
+# docs-hub-api
 
 Boilerplate backend Go 1.25 theo **Clean Architecture + DDD** — nền tảng cho các dịch vụ Go của ISC. Module `user` được hiện thực end-to-end làm bản mẫu; các module khác ở dạng scaffold.
 
@@ -76,7 +76,7 @@ go test -run TestEnvelope ./internal/common/response/   # golden test chuẩn IS
 
 ## Đổi module path (khi có URL git)
 ```bash
-./scripts/rename-module.sh git.fpt.net/isc/document-hub/document-hub-api
+./scripts/rename-module.sh git.fpt.net/isc/document-hub/docs-hub-api
 go build ./...
 ```
 

@@ -1,7 +1,7 @@
 # Cấu hình môi trường STAGING (gần giống production).
 # TẤT CẢ secret đến từ ENV.
 app:
-  name: document-hub-api
+  name: docs-hub-api
   env: staging
   enable_dev_token: false
 
@@ -57,7 +57,7 @@ minio:
 jwt:
   algorithm: HS256
   secret: ""
-  issuer: document-hub-api
+  issuer: docs-hub-api
   access_ttl: 15m
   refresh_ttl: 168h
 

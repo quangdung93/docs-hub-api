@@ -2,7 +2,7 @@
 # TẤT CẢ secret (mysql.password, redis.password, rabbitmq.password,
 # minio.secret_key, jwt.secret) đến từ ENV: APP_MYSQL_PASSWORD, APP_JWT_SECRET, ...
 app:
-  name: document-hub-api
+  name: docs-hub-api
   env: dev
   enable_dev_token: false
 
@@ -58,7 +58,7 @@ minio:
 jwt:
   algorithm: HS256
   secret: "" # <- APP_JWT_SECRET
-  issuer: document-hub-api
+  issuer: docs-hub-api
   access_ttl: 15m
   refresh_ttl: 168h
 

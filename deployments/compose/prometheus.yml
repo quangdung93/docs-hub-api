@@ -3,7 +3,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: document-hub-api
+  - job_name: docs-hub-api
     metrics_path: /metrics
     static_configs:
       # admin server của app (chạy trên host, cổng 9090).

@@ -19,7 +19,7 @@ func localConfigPath(t *testing.T) string {
 func TestLoad_LocalConfig(t *testing.T) {
 	cfg, err := config.Load(localConfigPath(t))
 	require.NoError(t, err)
-	require.Equal(t, "github.com/quangdung393/docs-hub-api", cfg.App.Name)
+	require.Equal(t, "docs-hub-api", cfg.App.Name)
 	require.Equal(t, config.EnvLocal, cfg.App.Env)
 	require.True(t, cfg.App.IsLocal())
 	require.Equal(t, 8080, cfg.HTTP.APIPort)

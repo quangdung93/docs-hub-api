@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: document-hub-api — users check-email
+  title: docs-hub-api — users check-email
   version: "1.0"
 servers:
   - url: /internal/api/v1
