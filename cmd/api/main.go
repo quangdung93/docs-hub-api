@@ -14,9 +14,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/quangdung393/docs-hub-api/internal/bootstrap"
-	"github.com/quangdung393/docs-hub-api/internal/config"
-	"github.com/quangdung393/docs-hub-api/pkg/logger"
+	"github.com/quangdung93/docs-hub-api/internal/bootstrap"
+	"github.com/quangdung93/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/pkg/logger"
 )
 
 // version được set qua -ldflags khi build.

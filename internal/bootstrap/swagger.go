@@ -5,10 +5,10 @@ import (
 	swaggerfiles "github.com/swaggo/files"
 	ginswagger "github.com/swaggo/gin-swagger"
 
-	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/config"
 
 	// blank import để đăng ký đặc tả swagger (docs/swagger/docs.go).
-	_ "github.com/quangdung393/docs-hub-api/docs/swagger"
+	_ "github.com/quangdung93/docs-hub-api/docs/swagger"
 )
 
 // registerSwagger mount Swagger UI tại /swagger/*any — CHỈ khi bật trong config

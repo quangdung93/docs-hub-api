@@ -3,9 +3,9 @@ package usecase
 import (
 	"context"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // List liệt kê user theo filter + phân trang. Trả kèm pagination.Meta để tầng

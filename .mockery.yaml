@@ -6,13 +6,13 @@ mockname: "Mock{{.InterfaceName}}"
 outpkg: "mocks"
 filename: "{{.InterfaceName}}.go"
 packages:
-  github.com/quangdung393/docs-hub-api/internal/module/user/domain:
+  github.com/quangdung93/docs-hub-api/internal/module/user/domain:
     interfaces:
       UserRepository:
-  github.com/quangdung393/docs-hub-api/internal/module/user/usecase:
+  github.com/quangdung93/docs-hub-api/internal/module/user/usecase:
     interfaces:
       Service:
-  github.com/quangdung393/docs-hub-api/internal/common/port:
+  github.com/quangdung93/docs-hub-api/internal/common/port:
     interfaces:
       TxManager:
       Cache:

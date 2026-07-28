@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
-	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
-	"github.com/quangdung393/docs-hub-api/pkg/jwt"
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
+	"github.com/quangdung93/docs-hub-api/pkg/jwt"
 )
 
 // TokenVerifier là interface tối thiểu mà Auth cần — cho phép test dễ và tránh

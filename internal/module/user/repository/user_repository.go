@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // userRepository implement domain.UserRepository. KHÔNG chứa business logic —

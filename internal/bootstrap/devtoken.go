@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
-	"github.com/quangdung393/docs-hub-api/internal/common/response"
-	"github.com/quangdung393/docs-hub-api/internal/common/validatorx"
-	"github.com/quangdung393/docs-hub-api/pkg/jwt"
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/response"
+	"github.com/quangdung93/docs-hub-api/internal/common/validatorx"
+	"github.com/quangdung93/docs-hub-api/pkg/jwt"
 )
 
 // devTokenRequest là body của endpoint cấp token cho môi trường local.

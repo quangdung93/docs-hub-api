@@ -11,11 +11,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/quangdung393/docs-hub-api/internal/config"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/repository"
-	"github.com/quangdung393/docs-hub-api/pkg/hashing"
+	"github.com/quangdung93/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/repository"
+	"github.com/quangdung93/docs-hub-api/pkg/hashing"
 )
 
 func main() {

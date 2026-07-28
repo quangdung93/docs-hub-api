@@ -4,7 +4,7 @@ package mq
 import (
 	"context"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
 )
 
 // NoopPublisher là publisher không làm gì, dùng khi RabbitMQ bị tắt (enabled=false).

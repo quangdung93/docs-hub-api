@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/telemetry"
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/telemetry"
 )
 
 // Metrics ghi nhận số lượng và thời gian xử lý request.

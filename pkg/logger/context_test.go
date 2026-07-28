@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/quangdung393/docs-hub-api/pkg/logger"
+	"github.com/quangdung93/docs-hub-api/pkg/logger"
 )
 
 func TestFromContext_ReturnsNopWhenAbsent(t *testing.T) {

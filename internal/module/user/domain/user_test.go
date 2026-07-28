@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 func TestNewUser_DefaultsToActiveVersion1(t *testing.T) {

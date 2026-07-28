@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/pkg/jwt"
+	"github.com/quangdung93/docs-hub-api/pkg/jwt"
 )
 
 func newManager(t *testing.T) *jwt.Manager {

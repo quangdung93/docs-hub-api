@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 )
 
 // TestEnvelope là GOLDEN TEST chống trôi khỏi chuẩn ISC (templates/03).

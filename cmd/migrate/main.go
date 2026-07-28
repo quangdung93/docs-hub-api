@@ -20,7 +20,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
-	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/config"
 )
 
 const migrationsPath = "file://migrations"

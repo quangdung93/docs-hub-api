@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // SetStatus đổi trạng thái user (active/inactive/locked) theo optimistic lock.

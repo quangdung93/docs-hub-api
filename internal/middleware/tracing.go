@@ -5,7 +5,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
+	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
 )
 
 // Tracing trả về middleware otelgin tạo span OpenTelemetry cho mỗi request.

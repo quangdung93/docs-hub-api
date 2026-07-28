@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 )
 
 // buildMeta dựng Meta từ context của request (request_id, trace_id) + timestamp.

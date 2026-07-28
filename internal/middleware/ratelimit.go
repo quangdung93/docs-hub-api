@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/apperr"
-	"github.com/quangdung393/docs-hub-api/internal/common/contextx"
-	"github.com/quangdung393/docs-hub-api/internal/common/port"
-	"github.com/quangdung393/docs-hub-api/pkg/logger"
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
+	"github.com/quangdung93/docs-hub-api/pkg/logger"
 )
 
 // RateLimiterDeps là phụ thuộc của rate limit middleware.

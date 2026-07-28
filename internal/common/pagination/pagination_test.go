@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 )
 
 func TestNormalize_AppliesDefaultsAndCaps(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/config"
 )
 
 // localConfigPath trả về đường dẫn config.local.yaml tính từ thư mục package.

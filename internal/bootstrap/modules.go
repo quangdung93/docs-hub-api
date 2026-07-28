@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/quangdung393/docs-hub-api/internal/module/user"
+	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
 // Module là hợp đồng mà mọi feature phải thỏa để bootstrap đăng ký route.

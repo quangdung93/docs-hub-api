@@ -10,7 +10,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/port"
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
 )
 
 // Config là tham số kết nối Redis.

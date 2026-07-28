@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // toDomain chuyển bản ghi DB sang entity nghiệp vụ (trả VALUE để tránh copylocks

@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 	gormlogger "gorm.io/gorm/logger"
 
-	applogger "github.com/quangdung393/docs-hub-api/pkg/logger"
+	applogger "github.com/quangdung93/docs-hub-api/pkg/logger"
 )
 
 // gormZapLogger nối GORM logger vào Zap, và tự lấy logger theo request từ context

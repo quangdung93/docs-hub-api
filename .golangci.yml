@@ -45,7 +45,7 @@ linters:
 
 linters-settings:
   goimports:
-    local-prefixes: github.com/quangdung393/docs-hub-api
+    local-prefixes: github.com/quangdung93/docs-hub-api
 
   gocyclo:
     min-complexity: 15

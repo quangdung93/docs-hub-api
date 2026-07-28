@@ -3,7 +3,7 @@ package http
 import (
 	"time"
 
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // UserResponse là biểu diễn user trả ra client. CỐ TÌNH không có password_hash.

@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
-	"github.com/quangdung393/docs-hub-api/internal/middleware"
-	userhttp "github.com/quangdung393/docs-hub-api/internal/module/user/delivery/http"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
-	"github.com/quangdung393/docs-hub-api/internal/module/user/usecase"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/middleware"
+	userhttp "github.com/quangdung93/docs-hub-api/internal/module/user/delivery/http"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/user/usecase"
 )
 
 // fakeService là stub của usecase.Service để test handler độc lập.

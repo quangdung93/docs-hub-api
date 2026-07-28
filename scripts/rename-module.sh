@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Đổi module path hiện tại (đọc từ go.mod) sang path mới trong 1 lệnh.
-# Dùng: ./scripts/rename-module.sh github.com/quangdung393/docs-hub-api
+# Dùng: ./scripts/rename-module.sh github.com/quangdung93/docs-hub-api
 set -euo pipefail
 
 NEW_MODULE="${1:-}"
@@ -9,7 +9,7 @@ OLD_MODULE="$(awk '/^module /{print $2; exit}' go.mod)"
 
 if [ -z "$NEW_MODULE" ]; then
   echo "Usage: $0 <new-module-path>"
-  echo "Ví dụ: $0 github.com/quangdung393/docs-hub-api"
+  echo "Ví dụ: $0 github.com/quangdung93/docs-hub-api"
   echo "Module hiện tại: ${OLD_MODULE:-<không đọc được go.mod>}"
   exit 1
 fi
