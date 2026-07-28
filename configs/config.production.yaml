@@ -18,13 +18,13 @@ log:
   level: info
   encoding: json
 
-mysql:
-  host: mysql
-  port: 3306
+postgres:
+  host: postgres
+  port: 5432
   user: app
   password: ""
   database: document_hub
-  params: charset=utf8mb4&parseTime=True&loc=UTC
+  ssl_mode: require
   max_open_conns: 100
   max_idle_conns: 25
   conn_max_lifetime: 30m

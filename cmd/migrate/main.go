@@ -17,7 +17,7 @@ import (
 	"strconv"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/mysql"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/quangdung393/docs-hub-api/internal/config"
@@ -46,7 +46,7 @@ func run() error {
 		return fmt.Errorf("nạp cấu hình: %w", err)
 	}
 
-	m, err := migrate.New(migrationsPath, cfg.MySQL.MigrationDSN())
+	m, err := migrate.New(migrationsPath, cfg.Postgres.MigrationDSN())
 	if err != nil {
 		return fmt.Errorf("khởi tạo migrate: %w", err)
 	}

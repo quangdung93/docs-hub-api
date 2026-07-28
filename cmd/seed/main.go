@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/quangdung393/docs-hub-api/internal/config"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 	"github.com/quangdung393/docs-hub-api/internal/module/user/repository"
 	"github.com/quangdung393/docs-hub-api/pkg/hashing"
@@ -38,15 +38,15 @@ func run() error {
 	}
 
 	log := zap.NewNop()
-	db, err := mysql.New(mysql.Config{
-		DSN:          cfg.MySQL.DSN(),
-		MaxOpenConns: cfg.MySQL.MaxOpenConns,
-		MaxIdleConns: cfg.MySQL.MaxIdleConns,
+	db, err := postgres.New(postgres.Config{
+		DSN:          cfg.Postgres.DSN(),
+		MaxOpenConns: cfg.Postgres.MaxOpenConns,
+		MaxIdleConns: cfg.Postgres.MaxIdleConns,
 	}, log)
 	if err != nil {
-		return fmt.Errorf("kết nối MySQL: %w", err)
+		return fmt.Errorf("kết nối PostgreSQL: %w", err)
 	}
-	defer func() { _ = mysql.Close(db) }()
+	defer func() { _ = postgres.Close(db) }()
 
 	return seedAdmin(context.Background(), repository.New(db), hashing.NewHasher(0))
 }

@@ -73,7 +73,7 @@ type Clock interface {
 
 // HealthChecker là interface kiểm tra sức khỏe một dependency (dùng cho /readyz).
 type HealthChecker interface {
-	// Name trả về tên dependency (ví dụ "mysql").
+	// Name trả về tên dependency (ví dụ "postgres").
 	Name() string
 	// Check trả về nil nếu healthy, error nếu không.
 	Check(ctx context.Context) error

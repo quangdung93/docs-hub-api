@@ -22,7 +22,7 @@ docs-hub-api/
 │   │   ├── validatorx/   # Bọc validator: tên field snake_case, đổi lỗi→details
 │   │   └── port/         # Interface hạ tầng dùng chung (TxManager, Cache, Publisher, ObjectStore, Clock, HealthChecker)
 │   ├── infrastructure/   # Nơi DUY NHẤT biết gorm/redis/amqp/minio
-│   │   ├── database/mysql/   # GORM + transaction/context + errmap + health
+│   │   ├── database/postgres/   # GORM + transaction/context + errmap + health
 │   │   ├── cache/redis/      # Client + port.Cache + health
 │   │   ├── mq/               # NoopPublisher + rabbitmq/ (publisher, health)
 │   │   ├── storage/minio/    # port.ObjectStore + health

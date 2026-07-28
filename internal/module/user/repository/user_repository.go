@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 )
 
@@ -26,7 +26,7 @@ func New(db *gorm.DB) domain.UserRepository {
 
 func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
 	model := fromDomain(u)
-	if err := mysql.DBFrom(ctx, r.db).Create(model).Error; err != nil {
+	if err := postgres.DBFrom(ctx, r.db).Create(model).Error; err != nil {
 		return translate(err)
 	}
 	return nil
@@ -34,7 +34,7 @@ func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
 
 // Update cập nhật theo optimistic lock (khớp id + version), tự tăng version.
 func (r *userRepository) Update(ctx context.Context, u *domain.User) error {
-	res := mysql.DBFrom(ctx, r.db).Model(&userModel{}).
+	res := postgres.DBFrom(ctx, r.db).Model(&userModel{}).
 		Where("id = ? AND version = ?", u.ID.String(), u.Version).
 		Updates(map[string]any{
 			"full_name": u.FullName,
@@ -53,7 +53,7 @@ func (r *userRepository) Update(ctx context.Context, u *domain.User) error {
 
 func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	var m userModel
-	if err := mysql.DBFrom(ctx, r.db).First(&m, "id = ?", id.String()).Error; err != nil {
+	if err := postgres.DBFrom(ctx, r.db).First(&m, "id = ?", id.String()).Error; err != nil {
 		return nil, translate(err)
 	}
 	return toDomainOrWrap(&m)
@@ -61,14 +61,14 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Us
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	var m userModel
-	if err := mysql.DBFrom(ctx, r.db).First(&m, "email = ?", email).Error; err != nil {
+	if err := postgres.DBFrom(ctx, r.db).First(&m, "email = ?", email).Error; err != nil {
 		return nil, translate(err)
 	}
 	return toDomainOrWrap(&m)
 }
 
 func (r *userRepository) ExistsByEmail(ctx context.Context, email string, excludeID *uuid.UUID) (bool, error) {
-	q := mysql.DBFrom(ctx, r.db).Model(&userModel{}).Where("email = ?", email)
+	q := postgres.DBFrom(ctx, r.db).Model(&userModel{}).Where("email = ?", email)
 	if excludeID != nil {
 		q = q.Where("id <> ?", excludeID.String())
 	}
@@ -82,7 +82,7 @@ func (r *userRepository) ExistsByEmail(ctx context.Context, email string, exclud
 func (r *userRepository) List(
 	ctx context.Context, f domain.Filter, page pagination.Query,
 ) ([]domain.User, int64, error) {
-	base := mysql.DBFrom(ctx, r.db).Model(&userModel{}).Scopes(scopeFilter(f))
+	base := postgres.DBFrom(ctx, r.db).Model(&userModel{}).Scopes(scopeFilter(f))
 
 	var total int64
 	if err := base.Count(&total).Error; err != nil {
@@ -106,7 +106,7 @@ func (r *userRepository) List(
 
 // SoftDelete xóa mềm theo optimistic lock (khớp id + version).
 func (r *userRepository) SoftDelete(ctx context.Context, id uuid.UUID, version int) error {
-	res := mysql.DBFrom(ctx, r.db).
+	res := postgres.DBFrom(ctx, r.db).
 		Where("id = ? AND version = ?", id.String(), version).
 		Delete(&userModel{})
 	if res.Error != nil {
@@ -118,15 +118,15 @@ func (r *userRepository) SoftDelete(ctx context.Context, id uuid.UUID, version i
 	return nil
 }
 
-// translate chuyển lỗi hạ tầng (qua mysql.Translate) sang sentinel của domain.
+// translate chuyển lỗi hạ tầng (qua postgres.Translate) sang sentinel của domain.
 func translate(err error) error {
 	if err == nil {
 		return nil
 	}
-	switch mapped := mysql.Translate(err); {
-	case errors.Is(mapped, mysql.ErrNotFound):
+	switch mapped := postgres.Translate(err); {
+	case errors.Is(mapped, postgres.ErrNotFound):
 		return domain.ErrNotFound
-	case errors.Is(mapped, mysql.ErrDuplicateKey):
+	case errors.Is(mapped, postgres.ErrDuplicateKey):
 		return domain.ErrDuplicate
 	default:
 		return fmt.Errorf("user repository: %w", mapped)

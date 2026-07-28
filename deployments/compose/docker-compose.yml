@@ -4,20 +4,19 @@
 name: document-hub
 
 services:
-  mysql:
-    image: mysql:8.4
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+  postgres:
+    # Ảnh pgvector/pgvector kèm sẵn extension vector cho RAG.
+    image: pgvector/pgvector:pg16
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: document_hub
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app_password
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+      POSTGRES_DB: document_hub
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD-SHELL", "pg_isready -U app -d document_hub"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -98,9 +97,9 @@ services:
     entrypoint: ["/app/migrate", "-config", "/app/configs/config.dev.yaml", "up"]
     environment:
       APP_ENV: dev
-      APP_MYSQL_PASSWORD: app_password
+      APP_POSTGRES_PASSWORD: app_password
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     restart: "no"
 
@@ -111,7 +110,7 @@ services:
     command: ["/app/api", "-config", "/app/configs/config.dev.yaml"]
     environment:
       APP_ENV: dev
-      APP_MYSQL_PASSWORD: app_password
+      APP_POSTGRES_PASSWORD: app_password
       APP_RABBITMQ_PASSWORD: app_password
       APP_MINIO_SECRET_KEY: minioadmin
       APP_JWT_SECRET: dev-secret-doi-o-that
@@ -119,7 +118,7 @@ services:
       - "8080:8080" # API
       - "9090:9090" # admin (metrics/health/pprof)
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -131,5 +130,5 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  mysql_data:
+  postgres_data:
   minio_data:

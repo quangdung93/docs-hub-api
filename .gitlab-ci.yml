@@ -47,29 +47,28 @@ test:unit:
 test:integration:
   stage: test
   services:
-    - name: mysql:8.4
-      alias: mysql
-      command: ["--character-set-server=utf8mb4"]
+    - name: pgvector/pgvector:pg16
+      alias: postgres
   variables:
-    MYSQL_ROOT_PASSWORD: root
-    MYSQL_DATABASE: document_hub
-    TEST_MYSQL_DSN: "root:root@tcp(mysql:3306)/document_hub?charset=utf8mb4&parseTime=True&loc=UTC"
+    POSTGRES_USER: app
+    POSTGRES_PASSWORD: app_password
+    POSTGRES_DB: document_hub
+    TEST_POSTGRES_DSN: "host=postgres port=5432 user=app password=app_password dbname=document_hub sslmode=disable TimeZone=UTC"
   script:
-    # Chờ MySQL sẵn sàng rồi chạy test có build tag integration.
     - go test -tags=integration -race ./internal/module/user/repository/... ./test/integration/...
 
 # ------------------------------------------------------------------ migrate check (up rồi down)
 migrate:check:
   stage: test
   services:
-    - name: mysql:8.4
-      alias: mysql
+    - name: pgvector/pgvector:pg16
+      alias: postgres
   variables:
-    MYSQL_ROOT_PASSWORD: root
-    MYSQL_DATABASE: document_hub
-    # Override user/password của config.dev.yaml sang root cho tiện trong CI.
-    APP_MYSQL_USER: root
-    APP_MYSQL_PASSWORD: root
+    POSTGRES_USER: app
+    POSTGRES_PASSWORD: app_password
+    POSTGRES_DB: document_hub
+    # config.dev.yaml đã trỏ host "postgres", user "app".
+    APP_POSTGRES_PASSWORD: app_password
     APP_JWT_SECRET: ci-secret
   script:
     - go build -o bin/migrate ./cmd/migrate

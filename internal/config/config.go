@@ -14,7 +14,7 @@ type Config struct {
 	App       AppConfig       `mapstructure:"app"       validate:"required"`
 	HTTP      HTTPConfig      `mapstructure:"http"      validate:"required"`
 	Log       LogConfig       `mapstructure:"log"       validate:"required"`
-	MySQL     MySQLConfig     `mapstructure:"mysql"     validate:"required"`
+	Postgres  PostgresConfig  `mapstructure:"postgres"  validate:"required"`
 	Redis     RedisConfig     `mapstructure:"redis"     validate:"required"`
 	RabbitMQ  RabbitMQConfig  `mapstructure:"rabbitmq"`
 	MinIO     MinIOConfig     `mapstructure:"minio"`
@@ -66,15 +66,15 @@ type LogConfig struct {
 	Encoding string `mapstructure:"encoding" validate:"required,oneof=json console"`
 }
 
-// MySQLConfig cấu hình kết nối MySQL qua GORM.
-// Password đến từ ENV: APP_MYSQL_PASSWORD.
-type MySQLConfig struct {
+// PostgresConfig cấu hình kết nối PostgreSQL (có pgvector) qua GORM.
+// Password đến từ ENV: APP_POSTGRES_PASSWORD.
+type PostgresConfig struct {
 	Host            string        `mapstructure:"host"     validate:"required"`
 	Port            int           `mapstructure:"port"     validate:"required"`
 	User            string        `mapstructure:"user"     validate:"required"`
 	Password        string        `mapstructure:"password"`
 	Database        string        `mapstructure:"database" validate:"required"`
-	Params          string        `mapstructure:"params"`
+	SSLMode         string        `mapstructure:"ssl_mode" validate:"required,oneof=disable require verify-ca verify-full"`
 	MaxOpenConns    int           `mapstructure:"max_open_conns"    validate:"required,min=1"`
 	MaxIdleConns    int           `mapstructure:"max_idle_conns"    validate:"required,min=1"`
 	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime" validate:"required"`

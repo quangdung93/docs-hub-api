@@ -5,7 +5,7 @@ Boilerplate backend Go 1.25 theo **Clean Architecture + DDD** — nền tảng c
 > Đây là dịch vụ Go đầu tiên của ISC. Tuân theo chuẩn ISC (`templates/01..05,07`): envelope response, catalogue mã lỗi, quy ước đặt tên API, timeout.
 
 ## Công nghệ
-Gin · GORM/MySQL · Redis · RabbitMQ · MinIO · Viper · Zap · validator · JWT · Swagger · OpenTelemetry · Prometheus · Docker.
+Gin · GORM/PostgreSQL + pgvector · Redis · RabbitMQ · MinIO · Viper · Zap · validator · JWT · Swagger · OpenTelemetry · Prometheus · Docker.
 
 ## Kiến trúc (tóm tắt)
 ```
@@ -37,7 +37,7 @@ delivery ──→ usecase ──→ domain ←── repository
 ```bash
 # 0) Cần Go 1.25 (brew install go) + Docker.
 make tidy                 # go mod tidy + verify (GATE kiểm tra version thư viện)
-make up                   # bật MySQL/Redis/RabbitMQ/MinIO/Jaeger/Prometheus
+make up                   # bật PostgreSQL/Redis/RabbitMQ/MinIO/Jaeger/Prometheus
 make migrate-up           # tạo schema
 make seed                 # tạo admin@local / Admin@12345
 make run                  # chạy API :8080, admin :9090

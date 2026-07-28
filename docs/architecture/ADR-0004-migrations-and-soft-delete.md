@@ -1,7 +1,12 @@
 # ADR-0004: golang-migrate + ngữ nghĩa Soft Delete
 
-- Trạng thái: Được chấp nhận
+- Trạng thái: Được chấp nhận (Quyết định 2 **được thay thế một phần** bởi ADR-0006)
 - Ngày: 2026-07-28
+
+> **Cập nhật (ADR-0006):** Hệ đã chuyển sang PostgreSQL. Vấn đề unique khi soft-delete
+> nay giải bằng **partial unique index** `UNIQUE(email) WHERE deleted_at IS NULL` —
+> sạch hơn composite `(email, deleted_at)` mô tả bên dưới (vốn dành cho MySQL).
+> Quyết định 1 (golang-migrate thay vì AutoMigrate) vẫn giữ nguyên.
 
 ## Quyết định 1: golang-migrate thay vì GORM AutoMigrate
 Dùng `golang-migrate` với SQL versioned trong `migrations/`. **Không** dùng AutoMigrate.

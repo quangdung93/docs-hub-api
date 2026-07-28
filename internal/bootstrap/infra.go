@@ -11,7 +11,7 @@ import (
 	"github.com/quangdung393/docs-hub-api/internal/common/port"
 	"github.com/quangdung393/docs-hub-api/internal/config"
 	rediscache "github.com/quangdung393/docs-hub-api/internal/infrastructure/cache/redis"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung393/docs-hub-api/internal/infrastructure/mq"
 	"github.com/quangdung393/docs-hub-api/internal/infrastructure/mq/rabbitmq"
 	miniostore "github.com/quangdung393/docs-hub-api/internal/infrastructure/storage/minio"
@@ -45,7 +45,7 @@ type Infra struct {
 func NewInfra(ctx context.Context, cfg *config.Config, log *zap.Logger, metrics *telemetry.Metrics, tracer *telemetry.TracerProvider) (*Infra, error) {
 	infra := &Infra{Log: log, Metrics: metrics, Tracer: tracer}
 
-	if err := infra.initMySQL(cfg, log); err != nil {
+	if err := infra.initPostgres(cfg, log); err != nil {
 		return nil, err
 	}
 	if err := infra.initRedis(ctx, cfg); err != nil {
@@ -63,20 +63,20 @@ func NewInfra(ctx context.Context, cfg *config.Config, log *zap.Logger, metrics 
 	return infra, nil
 }
 
-func (i *Infra) initMySQL(cfg *config.Config, log *zap.Logger) error {
-	db, err := mysql.New(mysql.Config{
-		DSN:             cfg.MySQL.DSN(),
-		MaxOpenConns:    cfg.MySQL.MaxOpenConns,
-		MaxIdleConns:    cfg.MySQL.MaxIdleConns,
-		ConnMaxLifetime: cfg.MySQL.ConnMaxLifetime,
-		ConnMaxIdleTime: cfg.MySQL.ConnMaxIdleTime,
+func (i *Infra) initPostgres(cfg *config.Config, log *zap.Logger) error {
+	db, err := postgres.New(postgres.Config{
+		DSN:             cfg.Postgres.DSN(),
+		MaxOpenConns:    cfg.Postgres.MaxOpenConns,
+		MaxIdleConns:    cfg.Postgres.MaxIdleConns,
+		ConnMaxLifetime: cfg.Postgres.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.Postgres.ConnMaxIdleTime,
 	}, log)
 	if err != nil {
-		return fmt.Errorf("khởi tạo MySQL: %w", err)
+		return fmt.Errorf("khởi tạo PostgreSQL: %w", err)
 	}
 	i.DB = db
-	i.Tx = mysql.NewTxManager(db)
-	i.Checkers = append(i.Checkers, mysql.NewHealthChecker(db))
+	i.Tx = postgres.NewTxManager(db)
+	i.Checkers = append(i.Checkers, postgres.NewHealthChecker(db))
 	return nil
 }
 
@@ -165,8 +165,8 @@ func (i *Infra) Close(_ context.Context) {
 		}
 	}
 	if i.DB != nil {
-		if err := mysql.Close(i.DB); err != nil {
-			i.Log.Error("đóng MySQL lỗi", zap.Error(err))
+		if err := postgres.Close(i.DB); err != nil {
+			i.Log.Error("đóng PostgreSQL lỗi", zap.Error(err))
 		}
 	}
 }

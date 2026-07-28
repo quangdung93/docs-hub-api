@@ -14,7 +14,7 @@ import (
 // userModel là ánh xạ bảng `users`. Cột/khóa/unique index được định nghĩa bằng
 // SQL migration (golang-migrate); tag gorm ở đây chỉ mô tả kiểu để query đúng.
 type userModel struct {
-	ID           string `gorm:"type:char(36);primaryKey"`
+	ID           string `gorm:"type:uuid;primaryKey"`
 	Email        string `gorm:"type:varchar(255);not null"`
 	FullName     string `gorm:"type:varchar(255);not null"`
 	PasswordHash string `gorm:"type:varchar(255);not null"`

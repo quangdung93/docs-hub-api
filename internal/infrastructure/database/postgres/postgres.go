@@ -1,19 +1,20 @@
-// Package mysql cấu hình kết nối MySQL qua GORM và cung cấp các tiện ích
-// transaction/context để tầng repository dùng, giữ cho usecase không biết GORM.
-package mysql
+// Package postgres cấu hình kết nối PostgreSQL (có pgvector) qua GORM và cung
+// cấp các tiện ích transaction/context để tầng repository dùng, giữ cho usecase
+// không biết GORM.
+package postgres
 
 import (
 	"fmt"
 	"time"
 
 	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
+	gormpg "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
-// Config là tham số kết nối (do caller ánh xạ từ config.MySQLConfig sang, để
+// Config là tham số kết nối (do caller ánh xạ từ config.PostgresConfig sang, để
 // package hạ tầng không phụ thuộc ngược lên package config).
 type Config struct {
 	DSN             string
@@ -25,7 +26,7 @@ type Config struct {
 	LogLevel        logger.LogLevel
 }
 
-// New mở kết nối GORM tới MySQL, cấu hình pool và gắn plugin OpenTelemetry.
+// New mở kết nối GORM tới PostgreSQL, cấu hình pool và gắn plugin OpenTelemetry.
 func New(cfg Config, zlog *zap.Logger) (*gorm.DB, error) {
 	gormCfg := &gorm.Config{
 		Logger:                 newGormLogger(zlog, cfg.SlowThreshold, cfg.LogLevel),
@@ -33,9 +34,9 @@ func New(cfg Config, zlog *zap.Logger) (*gorm.DB, error) {
 		PrepareStmt:            true, // cache prepared statement
 	}
 
-	db, err := gorm.Open(mysql.Open(cfg.DSN), gormCfg)
+	db, err := gorm.Open(gormpg.Open(cfg.DSN), gormCfg)
 	if err != nil {
-		return nil, fmt.Errorf("mở kết nối MySQL thất bại: %w", err)
+		return nil, fmt.Errorf("mở kết nối PostgreSQL thất bại: %w", err)
 	}
 
 	// Gắn tracing: mỗi query tạo span con.
@@ -62,7 +63,7 @@ func Close(db *gorm.DB) error {
 		return fmt.Errorf("lấy *sql.DB để đóng thất bại: %w", err)
 	}
 	if err := sqlDB.Close(); err != nil {
-		return fmt.Errorf("đóng pool MySQL thất bại: %w", err)
+		return fmt.Errorf("đóng pool PostgreSQL thất bại: %w", err)
 	}
 	return nil
 }

@@ -75,7 +75,7 @@ linters-settings:
             desc: "domain/usecase không được phụ thuộc HTTP framework (Clean Architecture)"
           - pkg: gorm.io/gorm
             desc: "domain/usecase không được phụ thuộc ORM — dùng port repository"
-          - pkg: gorm.io/driver/mysql
+          - pkg: gorm.io/driver/postgres
             desc: "domain/usecase không được biết driver DB"
           - pkg: github.com/redis/go-redis/v9
             desc: "domain/usecase chỉ được dùng port.Cache, không dùng client Redis trực tiếp"

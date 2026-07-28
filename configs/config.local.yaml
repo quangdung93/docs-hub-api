@@ -17,13 +17,13 @@ log:
   level: debug
   encoding: console
 
-mysql:
+postgres:
   host: 127.0.0.1
-  port: 3306
+  port: 5432
   user: app
   password: app_password # local only
   database: document_hub
-  params: charset=utf8mb4&parseTime=True&loc=UTC
+  ssl_mode: disable
   max_open_conns: 25
   max_idle_conns: 10
   conn_max_lifetime: 30m

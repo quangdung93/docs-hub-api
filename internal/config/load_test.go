@@ -28,14 +28,14 @@ func TestLoad_LocalConfig(t *testing.T) {
 
 // TestLoad_EnvOverridesYAML là bằng chứng ENV override được YAML.
 func TestLoad_EnvOverridesYAML(t *testing.T) {
-	t.Setenv("APP_MYSQL_PASSWORD", "secret-from-env")
+	t.Setenv("APP_POSTGRES_PASSWORD", "secret-from-env")
 	t.Setenv("APP_JWT_SECRET", "jwt-from-env")
 	t.Setenv("APP_HTTP_API_PORT", "9999")
 
 	cfg, err := config.Load(localConfigPath(t))
 	require.NoError(t, err)
 
-	require.Equal(t, "secret-from-env", cfg.MySQL.Password, "ENV phải override password trong YAML")
+	require.Equal(t, "secret-from-env", cfg.Postgres.Password, "ENV phải override password trong YAML")
 	require.Equal(t, "jwt-from-env", cfg.JWT.Secret)
 	require.Equal(t, 9999, cfg.HTTP.APIPort, "ENV phải override cả kiểu số")
 }
@@ -52,13 +52,17 @@ func TestLoad_RejectsDevTokenOutsideLocal(t *testing.T) {
 	require.Contains(t, err.Error(), "enable_dev_token")
 }
 
-func TestMySQLConfig_DSN(t *testing.T) {
-	m := config.MySQLConfig{
-		Host: "127.0.0.1", Port: 3306, User: "app", Password: "p",
-		Database: "document_hub", Params: "charset=utf8mb4&parseTime=True",
+func TestPostgresConfig_DSN(t *testing.T) {
+	p := config.PostgresConfig{
+		Host: "127.0.0.1", Port: 5432, User: "app", Password: "p",
+		Database: "document_hub", SSLMode: "disable",
 	}
 	require.Equal(t,
-		"app:p@tcp(127.0.0.1:3306)/document_hub?charset=utf8mb4&parseTime=True",
-		m.DSN(),
+		"host=127.0.0.1 port=5432 user=app password=p dbname=document_hub sslmode=disable TimeZone=UTC",
+		p.DSN(),
+	)
+	require.Equal(t,
+		"postgres://app:p@127.0.0.1:5432/document_hub?sslmode=disable",
+		p.MigrationDSN(),
 	)
 }

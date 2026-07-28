@@ -1,7 +1,7 @@
 // Package health cung cấp liveness và readiness probe.
 //
 //   - Liveness  : tiến trình còn sống? (luôn 200 nếu HTTP handler chạy được)
-//   - Readiness : mọi dependency (MySQL, Redis, ...) đã sẵn sàng chưa?
+//   - Readiness : mọi dependency (PostgreSQL, Redis, ...) đã sẵn sàng chưa?
 //
 // Readiness chạy các checker song song với timeout, trả 200 nếu tất cả OK,
 // 503 nếu có bất kỳ dependency nào lỗi.

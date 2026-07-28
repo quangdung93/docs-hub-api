@@ -17,5 +17,5 @@ import (
 func TestConfig_LoadLocalForIntegration(t *testing.T) {
 	cfg, err := config.Load("../../configs/config.local.yaml")
 	require.NoError(t, err)
-	require.NotEmpty(t, cfg.MySQL.DSN())
+	require.NotEmpty(t, cfg.Postgres.DSN())
 }

@@ -20,4 +20,4 @@ Upload/download/quản lý tài liệu qua MinIO (S3-compatible), presigned URL,
 - `port.Publisher` để phát `file.uploaded` cho module notification/quét virus.
 
 ## Cách bắt đầu
-Sao chép `internal/module/user/`. Metadata file lưu ở MySQL (bảng `files`), nội dung lưu ở MinIO.
+Sao chép `internal/module/user/`. Metadata file lưu ở PostgreSQL (bảng `files`), nội dung lưu ở MinIO.

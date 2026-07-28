@@ -2,12 +2,14 @@
 
 // Integration test cho user repository. Chạy: make test-integration (cần Docker).
 //
-// Tự phát hiện DSN: nếu có env TEST_MYSQL_DSN (ví dụ trong CI với service mysql)
-// thì dùng luôn; ngược lại tự spawn container MySQL bằng testcontainers.
+// Tự phát hiện DSN: nếu có env TEST_POSTGRES_DSN (ví dụ trong CI với service
+// postgres) thì dùng luôn; ngược lại tự spawn container Postgres (pgvector) bằng
+// testcontainers.
 package repository_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/quangdung393/docs-hub-api/internal/common/pagination"
-	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/mysql"
+	"github.com/quangdung393/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung393/docs-hub-api/internal/module/user/domain"
 	"github.com/quangdung393/docs-hub-api/internal/module/user/repository"
 )
@@ -30,45 +32,47 @@ func paginationQuery(page, limit int) pagination.Query {
 	return pagination.Query{Page: page, Limit: limit}.Normalize()
 }
 
+// createUsersTable dựng schema tối thiểu cho test (khớp migration Postgres):
+// dùng UNIQUE partial index thay vì composite (email, deleted_at).
 const createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
-    id CHAR(36) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255) NOT NULL,
+    id            UUID PRIMARY KEY,
+    email         VARCHAR(255) NOT NULL,
+    full_name     VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'active',
-    roles VARCHAR(512) NOT NULL DEFAULT '[]',
-    version INT NOT NULL DEFAULT 1,
-    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-    deleted_at DATETIME(3) NULL DEFAULT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_users_email_deleted (email, deleted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+    status        VARCHAR(20)  NOT NULL DEFAULT 'active',
+    roles         VARCHAR(512) NOT NULL DEFAULT '[]',
+    version       INT          NOT NULL DEFAULT 1,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    deleted_at    TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_users_email_active ON users (email) WHERE deleted_at IS NULL;`
 
 func setupDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := os.Getenv("TEST_MYSQL_DSN")
+	dsn := os.Getenv("TEST_POSTGRES_DSN")
 	if dsn == "" {
-		dsn = startMySQLContainer(t)
+		dsn = startPostgresContainer(t)
 	}
-	db, err := mysql.New(mysql.Config{DSN: dsn, MaxOpenConns: 5, MaxIdleConns: 2}, zap.NewNop())
+	db, err := postgres.New(postgres.Config{DSN: dsn, MaxOpenConns: 5, MaxIdleConns: 2}, zap.NewNop())
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(createUsersTable).Error)
 	return db
 }
 
-func startMySQLContainer(t *testing.T) string {
+func startPostgresContainer(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	req := testcontainers.ContainerRequest{
-		Image:        "mysql:8.4",
-		ExposedPorts: []string{"3306/tcp"},
+		Image:        "pgvector/pgvector:pg16",
+		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"MYSQL_ROOT_PASSWORD": "root",
-			"MYSQL_DATABASE":      "document_hub",
+			"POSTGRES_USER":     "app",
+			"POSTGRES_PASSWORD": "app_password",
+			"POSTGRES_DB":       "document_hub",
 		},
-		WaitingFor: wait.ForListeningPort("3306/tcp").WithStartupTimeout(2 * time.Minute),
+		WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(2 * time.Minute),
 	}
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req, Started: true,
@@ -78,10 +82,11 @@ func startMySQLContainer(t *testing.T) string {
 
 	host, err := c.Host(ctx)
 	require.NoError(t, err)
-	port, err := c.MappedPort(ctx, "3306")
+	port, err := c.MappedPort(ctx, "5432")
 	require.NoError(t, err)
 
-	return "root:root@tcp(" + host + ":" + port.Port() + ")/document_hub?charset=utf8mb4&parseTime=True&loc=UTC"
+	return fmt.Sprintf("host=%s port=%s user=app password=app_password dbname=document_hub sslmode=disable TimeZone=UTC",
+		host, port.Port())
 }
 
 func TestUserRepository_CRUD(t *testing.T) {

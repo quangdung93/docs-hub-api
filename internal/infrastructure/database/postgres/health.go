@@ -1,4 +1,4 @@
-package mysql
+package postgres
 
 import (
 	"context"
@@ -7,17 +7,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// healthChecker kiểm tra kết nối MySQL cho readiness probe.
+// healthChecker kiểm tra kết nối PostgreSQL cho readiness probe.
 type healthChecker struct {
 	db *gorm.DB
 }
 
-// NewHealthChecker tạo checker sức khỏe MySQL (implement port.HealthChecker).
+// NewHealthChecker tạo checker sức khỏe PostgreSQL (implement port.HealthChecker).
 func NewHealthChecker(db *gorm.DB) *healthChecker {
 	return &healthChecker{db: db}
 }
 
-func (h *healthChecker) Name() string { return "mysql" }
+func (h *healthChecker) Name() string { return "postgres" }
 
 // Check ping DB với context (tôn trọng timeout của readiness).
 func (h *healthChecker) Check(ctx context.Context) error {
@@ -26,7 +26,7 @@ func (h *healthChecker) Check(ctx context.Context) error {
 		return fmt.Errorf("lấy *sql.DB: %w", err)
 	}
 	if err := sqlDB.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping mysql: %w", err)
+		return fmt.Errorf("ping postgres: %w", err)
 	}
 	return nil
 }

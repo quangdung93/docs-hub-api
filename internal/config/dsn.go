@@ -2,17 +2,16 @@ package config
 
 import "fmt"
 
-// DSN dựng chuỗi kết nối MySQL cho GORM driver.
-// Định dạng: user:pass@tcp(host:port)/db?params
-func (m MySQLConfig) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s",
-		m.User, m.Password, m.Host, m.Port, m.Database, m.Params)
+// DSN dựng chuỗi kết nối PostgreSQL cho GORM driver (dạng key-value).
+func (p PostgresConfig) DSN() string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
+		p.Host, p.Port, p.User, p.Password, p.Database, p.SSLMode)
 }
 
-// MigrationDSN dựng DSN cho golang-migrate (scheme mysql://).
-func (m MySQLConfig) MigrationDSN() string {
-	return fmt.Sprintf("mysql://%s:%s@tcp(%s:%d)/%s?multiStatements=true",
-		m.User, m.Password, m.Host, m.Port, m.Database)
+// MigrationDSN dựng URL cho golang-migrate (scheme postgres://).
+func (p PostgresConfig) MigrationDSN() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		p.User, p.Password, p.Host, p.Port, p.Database, p.SSLMode)
 }
 
 // Addr trả về host:port của Redis.

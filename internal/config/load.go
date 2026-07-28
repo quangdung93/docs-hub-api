@@ -10,8 +10,8 @@ import (
 
 // envPrefix là tiền tố cho biến môi trường override. Ví dụ:
 //
-//	APP_MYSQL_PASSWORD  -> mysql.password
-//	APP_JWT_SECRET      -> jwt.secret
+//	APP_POSTGRES_PASSWORD -> postgres.password
+//	APP_JWT_SECRET        -> jwt.secret
 //	APP_HTTP_API_PORT   -> http.api_port
 const envPrefix = "APP"
 
@@ -34,7 +34,7 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 
-	// ENV override: APP_MYSQL_PASSWORD -> mysql.password
+	// ENV override: APP_POSTGRES_PASSWORD -> postgres.password
 	v.SetEnvPrefix(envPrefix)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
@@ -90,11 +90,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.encoding", "json")
 
-	v.SetDefault("mysql.max_open_conns", 25)
-	v.SetDefault("mysql.max_idle_conns", 10)
-	v.SetDefault("mysql.conn_max_lifetime", "30m")
-	v.SetDefault("mysql.conn_max_idle_time", "10m")
-	v.SetDefault("mysql.params", "charset=utf8mb4&parseTime=True&loc=UTC")
+	v.SetDefault("postgres.port", 5432)
+	v.SetDefault("postgres.ssl_mode", "disable")
+	v.SetDefault("postgres.max_open_conns", 25)
+	v.SetDefault("postgres.max_idle_conns", 10)
+	v.SetDefault("postgres.conn_max_lifetime", "30m")
+	v.SetDefault("postgres.conn_max_idle_time", "10m")
 
 	v.SetDefault("redis.pool_size", 10)
 
