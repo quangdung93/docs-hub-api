@@ -1,0 +1,78 @@
+// Command seed nạp dữ liệu mẫu (idempotent). Seed là DỮ LIỆU, không phải schema
+// (schema do cmd/migrate lo). Bị CHẶN chạy trên production để tránh tai nạn.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+
+	"go.uber.org/zap"
+
+	"document-hub-api/internal/config"
+	"document-hub-api/internal/infrastructure/database/mysql"
+	"document-hub-api/internal/module/user/domain"
+	"document-hub-api/internal/module/user/repository"
+	"document-hub-api/pkg/hashing"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "seed lỗi: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	configPath := flag.String("config", "configs/config.local.yaml", "đường dẫn file cấu hình")
+	flag.Parse()
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("nạp cấu hình: %w", err)
+	}
+	if cfg.App.IsProduction() {
+		return errors.New("từ chối seed trên môi trường production")
+	}
+
+	log := zap.NewNop()
+	db, err := mysql.New(mysql.Config{
+		DSN:          cfg.MySQL.DSN(),
+		MaxOpenConns: cfg.MySQL.MaxOpenConns,
+		MaxIdleConns: cfg.MySQL.MaxIdleConns,
+	}, log)
+	if err != nil {
+		return fmt.Errorf("kết nối MySQL: %w", err)
+	}
+	defer func() { _ = mysql.Close(db) }()
+
+	return seedAdmin(context.Background(), repository.New(db), hashing.NewHasher(0))
+}
+
+// seedAdmin tạo tài khoản admin mặc định nếu chưa tồn tại (idempotent).
+func seedAdmin(ctx context.Context, repo domain.UserRepository, hasher *hashing.Hasher) error {
+	const adminEmail = "admin@local"
+
+	exists, err := repo.ExistsByEmail(ctx, adminEmail, nil)
+	if err != nil {
+		return fmt.Errorf("kiểm tra admin tồn tại: %w", err)
+	}
+	if exists {
+		fmt.Println("seed: admin đã tồn tại, bỏ qua")
+		return nil
+	}
+
+	hash, err := hasher.Hash("Admin@12345")
+	if err != nil {
+		return fmt.Errorf("băm mật khẩu admin: %w", err)
+	}
+	admin := domain.NewUser(adminEmail, "Quản trị viên", hash, []string{"admin"})
+	if err := repo.Create(ctx, admin); err != nil {
+		return fmt.Errorf("tạo admin: %w", err)
+	}
+
+	fmt.Printf("seed: đã tạo admin %s / Admin@12345\n", adminEmail)
+	return nil
+}

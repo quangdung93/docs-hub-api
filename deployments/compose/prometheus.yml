@@ -1,0 +1,11 @@
+# Prometheus scrape config cho local.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: document-hub-api
+    metrics_path: /metrics
+    static_configs:
+      # admin server của app (chạy trên host, cổng 9090).
+      # Khi app chạy trong compose, đổi thành ["api:9090"].
+      - targets: ["host.docker.internal:9090"]

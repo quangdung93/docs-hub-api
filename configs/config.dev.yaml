@@ -1,0 +1,91 @@
+# Cấu hình môi trường DEV.
+# TẤT CẢ secret (mysql.password, redis.password, rabbitmq.password,
+# minio.secret_key, jwt.secret) đến từ ENV: APP_MYSQL_PASSWORD, APP_JWT_SECRET, ...
+app:
+  name: document-hub-api
+  env: dev
+  enable_dev_token: false
+
+http:
+  api_port: 8080
+  admin_port: 9090
+  max_body_bytes: 1048576
+  shutdown_timeout: 15s
+  enable_pprof: true
+  enable_swagger: true
+
+log:
+  level: debug
+  encoding: json
+
+mysql:
+  host: mysql
+  port: 3306
+  user: app
+  password: "" # <- APP_MYSQL_PASSWORD
+  database: document_hub
+  params: charset=utf8mb4&parseTime=True&loc=UTC
+  max_open_conns: 25
+  max_idle_conns: 10
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+
+redis:
+  host: redis
+  port: 6379
+  password: "" # <- APP_REDIS_PASSWORD
+  db: 0
+  pool_size: 20
+
+rabbitmq:
+  enabled: true
+  host: rabbitmq
+  port: 5672
+  user: app
+  password: "" # <- APP_RABBITMQ_PASSWORD
+  vhost: /
+  exchange: document_hub.events
+
+minio:
+  enabled: true
+  endpoint: minio:9000
+  access_key: app
+  secret_key: "" # <- APP_MINIO_SECRET_KEY
+  bucket: document-hub
+  use_ssl: false
+  region: us-east-1
+
+jwt:
+  algorithm: HS256
+  secret: "" # <- APP_JWT_SECRET
+  issuer: document-hub-api
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+cors:
+  allowed_origins: ["https://dev.document-hub.isc.fpt.net"]
+  allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
+  allow_credentials: true
+  max_age: 300
+
+rate_limit:
+  enabled: true
+  requests_per_window: 200
+  window: 1m
+
+telemetry:
+  tracing_enabled: true
+  otlp_endpoint: otel-collector:4317
+  sample_ratio: 1.0
+
+timeout:
+  read_header: 5s
+  read: 15s
+  write: 20s
+  idle: 60s
+  handler: 10s
+  db: 3s
+  redis: 2s
+  mq: 3s
+  external: 5s

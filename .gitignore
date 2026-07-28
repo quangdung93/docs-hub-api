@@ -1,0 +1,30 @@
+# Binary output
+/bin/
+/dist/
+*.exe
+*.out
+
+# Test & coverage
+coverage.out
+coverage.html
+*.test
+
+# Local env & secrets — KHÔNG commit secret vào repo
+.env
+.env.local
+*.local.env
+
+# Go build/vendor cache
+/vendor/
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Swagger sinh tự động (nếu chọn không commit)
+# docs/swagger/docs.go

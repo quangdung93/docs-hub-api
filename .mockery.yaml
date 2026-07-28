@@ -1,0 +1,21 @@
+# mockery v2 — sinh mock theo config, không rải //go:generate khắp nơi.
+# Chạy: make mocks (mockery)
+with-expecter: true
+dir: "{{.InterfaceDir}}/mocks"
+mockname: "Mock{{.InterfaceName}}"
+outpkg: "mocks"
+filename: "{{.InterfaceName}}.go"
+packages:
+  document-hub-api/internal/module/user/domain:
+    interfaces:
+      UserRepository:
+  document-hub-api/internal/module/user/usecase:
+    interfaces:
+      Service:
+  document-hub-api/internal/common/port:
+    interfaces:
+      TxManager:
+      Cache:
+      Publisher:
+      ObjectStore:
+      Clock:

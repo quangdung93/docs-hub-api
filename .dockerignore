@@ -1,0 +1,15 @@
+# Giảm build context gửi lên Docker daemon.
+.git/
+bin/
+dist/
+vendor/
+.cache/
+coverage.out
+coverage.html
+*.md
+docs/architecture/
+.env
+.env.local
+.idea/
+.vscode/
+.github/

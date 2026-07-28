@@ -1,0 +1,135 @@
+# Makefile — document-hub-api
+# Mục tiêu: mọi thao tác thường dùng chỉ 1 lệnh, chạy được cả local lẫn CI.
+
+APP_NAME       := document-hub-api
+BIN_DIR        := bin
+MAIN_API       := ./cmd/api
+MAIN_MIGRATE   := ./cmd/migrate
+MAIN_SEED      := ./cmd/seed
+CONFIG         ?= configs/config.local.yaml
+COMPOSE_FILE   := deployments/compose/docker-compose.yml
+GIT_SHA        := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+LDFLAGS        := -s -w -X main.version=$(GIT_SHA)
+
+# Công cụ (pin version để mọi máy giống nhau)
+GOLANGCI_VERSION := v1.61.0
+MOCKERY_VERSION  := v2.46.3
+SWAG_VERSION     := v1.16.4
+MIGRATE_VERSION  := v4.18.1
+
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help: ## Hiển thị danh sách lệnh
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+## ------------------------------------------------------------------ Build
+.PHONY: build
+build: ## Build cả 3 binary vào bin/
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/api $(MAIN_API)
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/migrate $(MAIN_MIGRATE)
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/seed $(MAIN_SEED)
+
+.PHONY: run
+run: ## Chạy API ở môi trường local
+	APP_ENV=local go run $(MAIN_API) -config $(CONFIG)
+
+.PHONY: tidy
+tidy: ## go mod tidy + verify
+	go mod tidy
+	go mod verify
+
+## ------------------------------------------------------------------ Quality
+.PHONY: fmt
+fmt: ## Format code (gofmt + goimports)
+	gofmt -w .
+	go run golang.org/x/tools/cmd/goimports@latest -w -local $(APP_NAME) .
+
+.PHONY: vet
+vet: ## go vet
+	go vet ./...
+
+.PHONY: lint
+lint: ## Chạy golangci-lint
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_VERSION) run --timeout 5m
+
+.PHONY: lint-fmt-check
+lint-fmt-check: ## Kiểm tra code đã format chưa (dùng trong CI)
+	@test -z "$$(gofmt -l . | tee /dev/stderr)" || (echo "❌ Code chưa gofmt, chạy 'make fmt'"; exit 1)
+
+## ------------------------------------------------------------------ Test
+.PHONY: test
+test: ## Unit test (nhanh, không cần Docker)
+	go test -race -short -coverprofile=coverage.out ./...
+
+.PHONY: cover
+cover: test ## Báo cáo coverage dạng HTML
+	go tool cover -html=coverage.out -o coverage.html
+	go tool cover -func=coverage.out | tail -1
+
+.PHONY: test-integration
+test-integration: ## Integration test (cần Docker daemon)
+	go test -tags=integration -race -v ./internal/module/user/repository/... ./test/integration/...
+
+## ------------------------------------------------------------------ Codegen
+.PHONY: mocks
+mocks: ## Sinh mock bằng mockery
+	go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
+
+.PHONY: swagger
+swagger: ## Sinh tài liệu Swagger từ annotation
+	go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) init \
+		-g cmd/api/main.go -o docs/swagger --parseInternal --parseDepth 2
+
+## ------------------------------------------------------------------ Database
+.PHONY: migrate-up
+migrate-up: ## Chạy migration lên mới nhất
+	go run $(MAIN_MIGRATE) -config $(CONFIG) up
+
+.PHONY: migrate-down
+migrate-down: ## Rollback 1 bước migration
+	go run $(MAIN_MIGRATE) -config $(CONFIG) down 1
+
+.PHONY: migrate-create
+migrate-create: ## Tạo migration mới: make migrate-create name=create_xxx
+	@test -n "$(name)" || (echo "Thiếu name: make migrate-create name=create_xxx"; exit 1)
+	go run github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION) \
+		create -ext sql -dir migrations -seq $(name)
+
+.PHONY: seed
+seed: ## Nạp dữ liệu mẫu
+	go run $(MAIN_SEED) -config $(CONFIG)
+
+## ------------------------------------------------------------------ Infra
+.PHONY: up
+up: ## Bật toàn bộ hạ tầng local (docker compose)
+	docker compose -f $(COMPOSE_FILE) up -d
+
+.PHONY: down
+down: ## Tắt hạ tầng local
+	docker compose -f $(COMPOSE_FILE) down
+
+.PHONY: logs
+logs: ## Xem log hạ tầng
+	docker compose -f $(COMPOSE_FILE) logs -f
+
+.PHONY: ps
+ps: ## Trạng thái hạ tầng
+	docker compose -f $(COMPOSE_FILE) ps
+
+## ------------------------------------------------------------------ Docker
+.PHONY: docker-build
+docker-build: ## Build Docker image
+	docker build -f deployments/docker/Dockerfile -t $(APP_NAME):$(GIT_SHA) .
+
+## ------------------------------------------------------------------ Hooks
+.PHONY: hooks
+hooks: ## Cài git pre-commit hook
+	git config core.hooksPath scripts/githooks
+	@echo "✅ Đã trỏ core.hooksPath -> scripts/githooks"
+
+## ------------------------------------------------------------------ CI gộp
+.PHONY: ci
+ci: lint-fmt-check vet lint test ## Chạy toàn bộ kiểm tra như CI

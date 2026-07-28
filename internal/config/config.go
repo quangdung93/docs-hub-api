@@ -1,0 +1,163 @@
+// Package config định nghĩa toàn bộ cấu hình của service dưới dạng struct
+// và nạp từ file YAML theo môi trường + biến môi trường (ENV override).
+//
+// Nguyên tắc:
+//   - Không có biến global. Config được truyền qua constructor (DI).
+//   - Secret (mật khẩu DB, JWT secret...) LUÔN đến từ ENV, không hardcode trong YAML.
+//   - Mỗi trường có tag `validate` để fail-fast khi cấu hình sai.
+package config
+
+import "time"
+
+// Config là gốc cấu hình, gom toàn bộ thành phần con.
+type Config struct {
+	App       AppConfig       `mapstructure:"app"       validate:"required"`
+	HTTP      HTTPConfig      `mapstructure:"http"      validate:"required"`
+	Log       LogConfig       `mapstructure:"log"       validate:"required"`
+	MySQL     MySQLConfig     `mapstructure:"mysql"     validate:"required"`
+	Redis     RedisConfig     `mapstructure:"redis"     validate:"required"`
+	RabbitMQ  RabbitMQConfig  `mapstructure:"rabbitmq"`
+	MinIO     MinIOConfig     `mapstructure:"minio"`
+	JWT       JWTConfig       `mapstructure:"jwt"       validate:"required"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+	Telemetry TelemetryConfig `mapstructure:"telemetry"`
+	Timeout   TimeoutConfig   `mapstructure:"timeout"   validate:"required"`
+}
+
+// Environment là các môi trường được hỗ trợ.
+type Environment string
+
+const (
+	EnvLocal      Environment = "local"
+	EnvDev        Environment = "dev"
+	EnvStaging    Environment = "staging"
+	EnvProduction Environment = "production"
+)
+
+// AppConfig chứa thông tin định danh dịch vụ.
+type AppConfig struct {
+	Name string      `mapstructure:"name" validate:"required"`
+	Env  Environment `mapstructure:"env"  validate:"required,oneof=local dev staging production"`
+	// EnableDevToken bật endpoint /auth/dev-token để test.
+	// Chỉ được phép true khi Env=local — loader sẽ chặn ở môi trường khác.
+	EnableDevToken bool `mapstructure:"enable_dev_token"`
+}
+
+// IsLocal trả về true nếu đang chạy môi trường local.
+func (a AppConfig) IsLocal() bool { return a.Env == EnvLocal }
+
+// IsProduction trả về true nếu đang chạy production.
+func (a AppConfig) IsProduction() bool { return a.Env == EnvProduction }
+
+// HTTPConfig cấu hình 2 server: API (public) và Admin (nội bộ: metrics, health, pprof).
+type HTTPConfig struct {
+	APIPort         int           `mapstructure:"api_port"          validate:"required,min=1,max=65535"`
+	AdminPort       int           `mapstructure:"admin_port"        validate:"required,min=1,max=65535"`
+	MaxBodyBytes    int64         `mapstructure:"max_body_bytes"    validate:"required,min=1024"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"  validate:"required"`
+	EnablePprof     bool          `mapstructure:"enable_pprof"`
+	EnableSwagger   bool          `mapstructure:"enable_swagger"`
+}
+
+// LogConfig cấu hình logger Zap.
+type LogConfig struct {
+	Level    string `mapstructure:"level"    validate:"required,oneof=debug info warn error"`
+	Encoding string `mapstructure:"encoding" validate:"required,oneof=json console"`
+}
+
+// MySQLConfig cấu hình kết nối MySQL qua GORM.
+// Password đến từ ENV: APP_MYSQL_PASSWORD.
+type MySQLConfig struct {
+	Host            string        `mapstructure:"host"     validate:"required"`
+	Port            int           `mapstructure:"port"     validate:"required"`
+	User            string        `mapstructure:"user"     validate:"required"`
+	Password        string        `mapstructure:"password"`
+	Database        string        `mapstructure:"database" validate:"required"`
+	Params          string        `mapstructure:"params"`
+	MaxOpenConns    int           `mapstructure:"max_open_conns"    validate:"required,min=1"`
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"    validate:"required,min=1"`
+	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime" validate:"required"`
+	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time"`
+}
+
+// RedisConfig cấu hình Redis (cache + rate limit).
+// Password đến từ ENV: APP_REDIS_PASSWORD.
+type RedisConfig struct {
+	Host     string `mapstructure:"host"     validate:"required"`
+	Port     int    `mapstructure:"port"     validate:"required"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+	PoolSize int    `mapstructure:"pool_size" validate:"required,min=1"`
+}
+
+// RabbitMQConfig cấu hình message queue.
+// Password đến từ ENV: APP_RABBITMQ_PASSWORD.
+type RabbitMQConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	VHost    string `mapstructure:"vhost"`
+	Exchange string `mapstructure:"exchange"`
+}
+
+// MinIOConfig cấu hình object storage (S3-compatible).
+// SecretKey đến từ ENV: APP_MINIO_SECRET_KEY.
+type MinIOConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+	Region    string `mapstructure:"region"`
+}
+
+// JWTConfig cấu hình ký/verify token.
+// Secret/khóa đến từ ENV: APP_JWT_SECRET.
+type JWTConfig struct {
+	Algorithm  string        `mapstructure:"algorithm"   validate:"required,oneof=HS256 RS256"`
+	Secret     string        `mapstructure:"secret"`
+	Issuer     string        `mapstructure:"issuer"      validate:"required"`
+	AccessTTL  time.Duration `mapstructure:"access_ttl"  validate:"required"`
+	RefreshTTL time.Duration `mapstructure:"refresh_ttl" validate:"required"`
+}
+
+// CORSConfig cấu hình CORS.
+type CORSConfig struct {
+	AllowedOrigins   []string `mapstructure:"allowed_origins"`
+	AllowedMethods   []string `mapstructure:"allowed_methods"`
+	AllowedHeaders   []string `mapstructure:"allowed_headers"`
+	AllowCredentials bool     `mapstructure:"allow_credentials"`
+	MaxAge           int      `mapstructure:"max_age"`
+}
+
+// RateLimitConfig cấu hình giới hạn số request (token bucket trên Redis).
+type RateLimitConfig struct {
+	Enabled           bool          `mapstructure:"enabled"`
+	RequestsPerWindow int           `mapstructure:"requests_per_window"`
+	Window            time.Duration `mapstructure:"window"`
+}
+
+// TelemetryConfig cấu hình OpenTelemetry tracing + Prometheus.
+type TelemetryConfig struct {
+	TracingEnabled bool    `mapstructure:"tracing_enabled"`
+	OTLPEndpoint   string  `mapstructure:"otlp_endpoint"`
+	SampleRatio    float64 `mapstructure:"sample_ratio"`
+}
+
+// TimeoutConfig gom các mốc timeout theo chuẩn ISC (templates/05).
+// Không hardcode timeout trong code — luôn đọc từ đây.
+type TimeoutConfig struct {
+	ReadHeader time.Duration `mapstructure:"read_header" validate:"required"`
+	Read       time.Duration `mapstructure:"read"        validate:"required"`
+	Write      time.Duration `mapstructure:"write"       validate:"required"`
+	Idle       time.Duration `mapstructure:"idle"        validate:"required"`
+	Handler    time.Duration `mapstructure:"handler"     validate:"required"` // timeout xử lý 1 request
+	DB         time.Duration `mapstructure:"db"          validate:"required"`
+	Redis      time.Duration `mapstructure:"redis"       validate:"required"`
+	MQ         time.Duration `mapstructure:"mq"`
+	External   time.Duration `mapstructure:"external"`
+}

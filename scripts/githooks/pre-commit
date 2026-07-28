@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Pre-commit hook — cài bằng: make hooks
+# Chạy nhanh các kiểm tra cơ bản trước khi commit.
+set -euo pipefail
+
+echo "▶ pre-commit: gofmt"
+UNFORMATTED="$(gofmt -l . || true)"
+if [ -n "$UNFORMATTED" ]; then
+  echo "❌ Các file chưa gofmt:"
+  echo "$UNFORMATTED"
+  echo "Chạy: make fmt"
+  exit 1
+fi
+
+echo "▶ pre-commit: go vet"
+go vet ./...
+
+echo "▶ pre-commit: golangci-lint (chỉ thay đổi mới)"
+go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0 run --new-from-rev=HEAD --timeout 3m || {
+  echo "❌ golangci-lint phát hiện vấn đề"; exit 1;
+}
+
+echo "▶ pre-commit: unit test nhanh"
+go test -short ./... >/dev/null
+
+echo "✅ pre-commit OK"

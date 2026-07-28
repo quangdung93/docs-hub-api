@@ -1,0 +1,135 @@
+# Hạ tầng local cho document-hub-api.
+# Dùng: make up (bật) / make down (tắt).
+# Mọi service đều có healthcheck để `depends_on: condition: service_healthy` hoạt động.
+name: document-hub
+
+services:
+  mysql:
+    image: mysql:8.4
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: document_hub
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: app_password
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC (nếu không dùng collector riêng)
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4318:4318" # OTLP HTTP
+    depends_on:
+      - jaeger
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090" # UI (tránh trùng admin port 9090 của app)
+
+  # Service chạy migration TRƯỚC khi api khởi động (bước riêng, không nằm trong main.go).
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    entrypoint: ["/app/migrate", "-config", "/app/configs/config.dev.yaml", "up"]
+    environment:
+      APP_ENV: dev
+      APP_MYSQL_PASSWORD: app_password
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    command: ["/app/api", "-config", "/app/configs/config.dev.yaml"]
+    environment:
+      APP_ENV: dev
+      APP_MYSQL_PASSWORD: app_password
+      APP_RABBITMQ_PASSWORD: app_password
+      APP_MINIO_SECRET_KEY: minioadmin
+      APP_JWT_SECRET: dev-secret-doi-o-that
+    ports:
+      - "8080:8080" # API
+      - "9090:9090" # admin (metrics/health/pprof)
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  mysql_data:
+  minio_data:

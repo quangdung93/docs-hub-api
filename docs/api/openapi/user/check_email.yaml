@@ -1,0 +1,33 @@
+openapi: 3.0.3
+info:
+  title: document-hub-api — users check-email
+  version: "1.0"
+servers:
+  - url: /internal/api/v1
+paths:
+  /users/check-email:
+    get:
+      summary: Kiểm tra email còn trống
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      email: { type: string, format: email }
+                      available: { type: boolean }
+                  error: { type: object, nullable: true, example: null }
+                  meta:
+                    type: object
+                    properties:
+                      request_id: { type: string }
+                      trace_id: { type: string }
+                      timestamp: { type: string, format: date-time }

@@ -1,0 +1,91 @@
+# Cấu hình môi trường PRODUCTION.
+# TẤT CẢ secret đến từ ENV (thường bơm qua Vault/K8s secret). KHÔNG hardcode.
+# pprof + swagger TẮT. Sample tracing thấp để giảm chi phí.
+app:
+  name: document-hub-api
+  env: production
+  enable_dev_token: false # loader sẽ fail nếu vô tình bật
+
+http:
+  api_port: 8080
+  admin_port: 9090
+  max_body_bytes: 1048576
+  shutdown_timeout: 30s
+  enable_pprof: false
+  enable_swagger: false
+
+log:
+  level: info
+  encoding: json
+
+mysql:
+  host: mysql
+  port: 3306
+  user: app
+  password: ""
+  database: document_hub
+  params: charset=utf8mb4&parseTime=True&loc=UTC
+  max_open_conns: 100
+  max_idle_conns: 25
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+
+redis:
+  host: redis
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 50
+
+rabbitmq:
+  enabled: true
+  host: rabbitmq
+  port: 5672
+  user: app
+  password: ""
+  vhost: /
+  exchange: document_hub.events
+
+minio:
+  enabled: true
+  endpoint: minio:9000
+  access_key: app
+  secret_key: ""
+  bucket: document-hub
+  use_ssl: true
+  region: us-east-1
+
+jwt:
+  algorithm: HS256
+  secret: ""
+  issuer: document-hub-api
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+cors:
+  allowed_origins: ["https://document-hub.isc.fpt.net"]
+  allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
+  allow_credentials: true
+  max_age: 600
+
+rate_limit:
+  enabled: true
+  requests_per_window: 500
+  window: 1m
+
+telemetry:
+  tracing_enabled: true
+  otlp_endpoint: otel-collector:4317
+  sample_ratio: 0.1
+
+timeout:
+  read_header: 5s
+  read: 15s
+  write: 20s
+  idle: 60s
+  handler: 10s
+  db: 3s
+  redis: 2s
+  mq: 3s
+  external: 5s

@@ -1,0 +1,90 @@
+# Cấu hình môi trường LOCAL (máy dev).
+# Secret có thể để trần ở local cho tiện; ở dev/staging/production PHẢI đến từ ENV.
+app:
+  name: document-hub-api
+  env: local
+  enable_dev_token: true # chỉ local mới được bật
+
+http:
+  api_port: 8080
+  admin_port: 9090
+  max_body_bytes: 1048576 # 1 MiB
+  shutdown_timeout: 15s
+  enable_pprof: true
+  enable_swagger: true
+
+log:
+  level: debug
+  encoding: console
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  user: app
+  password: app_password # local only
+  database: document_hub
+  params: charset=utf8mb4&parseTime=True&loc=UTC
+  max_open_conns: 25
+  max_idle_conns: 10
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+
+rabbitmq:
+  enabled: true
+  host: 127.0.0.1
+  port: 5672
+  user: app
+  password: app_password
+  vhost: /
+  exchange: document_hub.events
+
+minio:
+  enabled: true
+  endpoint: 127.0.0.1:9000
+  access_key: minioadmin
+  secret_key: minioadmin
+  bucket: document-hub
+  use_ssl: false
+  region: us-east-1
+
+jwt:
+  algorithm: HS256
+  secret: local-dev-secret-doi-o-moi-truong-that # local only
+  issuer: document-hub-api
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+cors:
+  allowed_origins: ["http://localhost:3000"]
+  allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
+  allow_credentials: true
+  max_age: 300
+
+rate_limit:
+  enabled: true
+  requests_per_window: 100
+  window: 1m
+
+telemetry:
+  tracing_enabled: true
+  otlp_endpoint: 127.0.0.1:4317
+  sample_ratio: 1.0
+
+timeout:
+  read_header: 5s
+  read: 15s
+  write: 20s
+  idle: 60s
+  handler: 10s
+  db: 3s
+  redis: 2s
+  mq: 3s
+  external: 5s
