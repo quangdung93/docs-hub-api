@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/quangdung93/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/module/auth"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -15,7 +17,7 @@ type Module interface {
 
 // buildModules dựng danh sách module từ hạ tầng. Đây là nơi DUY NHẤT bootstrap
 // biết về từng feature cụ thể.
-func buildModules(infra *Infra) []Module {
+func buildModules(cfg *config.Config, infra *Infra) []Module {
 	return []Module{
 		user.New(user.Deps{
 			DB:        infra.DB,
@@ -25,6 +27,10 @@ func buildModules(infra *Infra) []Module {
 			Hasher:    infra.Hasher,
 			Clock:     infra.clock(),
 		}),
-		// auth.New(...), file.New(...), notification.New(...), tenant.New(...) — tương lai.
+		auth.New(auth.Deps{
+			DB:         infra.DB,
+			JWTManager: infra.JWT,
+		}),
+		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}
 }

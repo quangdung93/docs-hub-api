@@ -1,26 +1,25 @@
-# Module `auth` (scaffold)
+# Module `auth`
 
-Chưa hiện thực. Đây là bản mô tả hợp đồng dự kiến để đội phát triển bắt đầu.
+Đảm nhiệm chức năng xác thực người dùng (Authentication) và cấp phát token.
 
 ## Trách nhiệm
-Đăng nhập, cấp/làm mới/thu hồi JWT, xác thực đa yếu tố (tương lai). Thay thế endpoint tạm `POST /public/api/v1/auth/dev-token`.
+Xử lý luồng đăng nhập nội bộ (không có đăng ký tài khoản công khai), quản lý phiên đăng nhập qua JWT và Cookie, hỗ trợ đăng xuất và truy xuất thông tin tài khoản hiện tại.
 
-## Endpoint dự kiến (templates/02)
+## Các API hiện tại
 | Method | Path | Mô tả |
 |---|---|---|
-| POST | `/public/api/v1/auth/login` | Đăng nhập, trả access + refresh token |
-| POST | `/public/api/v1/auth/refresh` | Làm mới access token |
-| POST | `/internal/api/v1/auth/logout` | Thu hồi token (blacklist trên Redis) |
-| POST | `/public/api/v1/auth/resend-otp` | Gửi lại OTP |
+| POST | `/public/api/v1/auth/login` | Đăng nhập bằng `username`/`password`. Trả về thông tin User, token và tự động set Cookie `access_token` (HttpOnly). |
+| POST | `/internal/api/v1/auth/logout` | Đăng xuất. Xóa Cookie ở client và thu hồi token. |
+| GET | `/internal/api/v1/auth/me` | Lấy thông tin user hiện tại. Hỗ trợ xác thực qua Cookie hoặc Header `Authorization: Bearer`. |
 
-## Mã lỗi (templates/04)
-- Nghiệp vụ (HTTP 200): `INVALID_OTP`, `USER_LOCKED`, `INVALID_PASS`, `MFA_REQUIRED`, `SESSION_CONFLICT`.
-- Kỹ thuật: `AUTH_401`, `AUTH_403`.
+## Các tính năng tương lai (cần phát triển thêm)
+- API Làm mới token (`/refresh`)
+- Tính năng gửi OTP/Xác thực đa yếu tố (MFA).
 
-## Port cần
-- `domain.UserRepository` (dùng lại từ module user, hoặc port `Credentials` riêng).
-- `port.Cache` cho JWT blacklist / refresh-token store.
-- `pkg/jwt.Manager`, `pkg/hashing.Hasher` (đã có sẵn).
+## Port/Dependencies cần thiết
+- `domain.UserRepository`: Truy vấn thông tin người dùng từ DB.
+- `domain.SessionRepository`: Lưu trữ phiên đăng nhập vào DB.
+- `jwt.Manager`: Quản lý sinh và xác thực JSON Web Token.- `pkg/jwt.Manager`, `pkg/hashing.Hasher` (đã có sẵn).
 
 ## Cách bắt đầu
 Sao chép cấu trúc `internal/module/user/` (domain → usecase → repository → delivery/http → module.go), rồi thêm 1 dòng vào `internal/bootstrap/modules.go`.
