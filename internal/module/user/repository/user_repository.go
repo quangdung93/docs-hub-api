@@ -29,6 +29,10 @@ func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
 	if err := postgres.DBFrom(ctx, r.db).Create(model).Error; err != nil {
 		return translate(err)
 	}
+	// GORM tự điền CreatedAt/UpdatedAt (autoCreateTime/autoUpdateTime) vào model
+	// sau khi insert — đồng bộ lại vào entity domain để caller nhận giá trị thật.
+	u.CreatedAt = model.CreatedAt
+	u.UpdatedAt = model.UpdatedAt
 	return nil
 }
 
