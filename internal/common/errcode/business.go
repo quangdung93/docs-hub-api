@@ -26,4 +26,10 @@ const (
 	// dùng cho optimistic lock. Cần TL duyệt (xem ADR-0003). Nhóm BUSINESS_RULE_*.
 	// Fallback nếu bị từ chối: dùng SessionConflict.
 	ConflictVersion = "CONFLICT_VERSION" // Dữ liệu đã bị thay đổi bởi request khác
+
+	// AlreadyMember — mã nghiệp vụ BỔ SUNG cho module project: user đã là thành
+	// viên (hoặc đang có lời mời chờ xác nhận) của dự án.
+	AlreadyMember = "ALREADY_MEMBER" // Người dùng đã là thành viên hoặc đang chờ xác nhận
+	// InviteNotPending — lời mời không ở trạng thái 'pending' nên không thể accept.
+	InviteNotPending = "INVITE_NOT_PENDING" // Lời mời không ở trạng thái chờ xác nhận
 )

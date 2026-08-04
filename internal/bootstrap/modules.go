@@ -5,6 +5,7 @@ import (
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth"
+	"github.com/quangdung93/docs-hub-api/internal/module/project"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -30,6 +31,11 @@ func buildModules(_ *config.Config, infra *Infra) []Module {
 		auth.New(auth.Deps{
 			DB:         infra.DB,
 			JWTManager: infra.JWT,
+		}),
+		project.New(project.Deps{
+			DB:    infra.DB,
+			Tx:    infra.Tx,
+			Clock: infra.clock(),
 		}),
 		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}

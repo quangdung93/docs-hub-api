@@ -11,6 +11,8 @@ const (
 	Auth403         = "AUTH_403"         // Không có quyền truy cập
 	NotFound        = "NOT_FOUND"        // Resource không tồn tại (generic)
 	UserNotFound    = "USR_404"          // Không tìm thấy người dùng
+	ProjectNotFound = "PRJ_404"          // Không tìm thấy dự án
+	MemberNotFound  = "MBR_404"          // Không tìm thấy thành viên dự án
 	ReqTimeout      = "REQ_TIMEOUT"      // Yêu cầu xử lý quá lâu (408)
 	UpgradeRequired = "UPGRADE_REQUIRED" // Cần nâng cấp phiên bản client (426)
 	Rate429         = "RATE_429"         // Gửi quá nhiều request (429)
@@ -30,6 +32,8 @@ var technicalStatus = map[string]int{ //nolint:gochecknoglobals // bảng tra c�
 	Auth403:         http.StatusForbidden,
 	NotFound:        http.StatusNotFound,
 	UserNotFound:    http.StatusNotFound,
+	ProjectNotFound: http.StatusNotFound,
+	MemberNotFound:  http.StatusNotFound,
 	ReqTimeout:      http.StatusRequestTimeout,
 	UpgradeRequired: http.StatusUpgradeRequired,
 	Rate429:         http.StatusTooManyRequests,
