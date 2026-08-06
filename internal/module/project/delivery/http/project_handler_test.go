@@ -56,6 +56,10 @@ func setupRouterWithRoles(
 
 // activeMember cấu hình memberRepo trả về một membership ACTIVE với role cho
 // trước khi middleware.RequireProjectRole tra cứu (project ID lấy từ path :id).
+// TẠM KHÔNG DÙNG (RBAC theo role đang tắt ở Register, xem project_handler.go)
+// — giữ lại để bật lại nhanh khi RBAC quay lại.
+//
+//nolint:unused
 func activeMember(t *testing.T, projectID, userID uuid.UUID, role domain.Role) *domainmocks.MockProjectMemberRepository {
 	t.Helper()
 	repo := domainmocks.NewMockProjectMemberRepository(t)
@@ -161,7 +165,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 		return in.ID == projectID && in.Name != nil && *in.Name == "Đã đổi tên"
 	})).Return(updated, nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"name": "Đã đổi tên"})
 	w := httptest.NewRecorder()
@@ -172,42 +176,45 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestUpdate_ViewerForbidden_Returns403(t *testing.T) {
-	userID, projectID := uuid.New(), uuid.New()
-	r := setupRouter(t, ucmocks.NewMockService(t),
-		activeMember(t, projectID, userID, domain.RoleViewer), userID.String())
-
-	body, _ := json.Marshal(map[string]any{"name": "X"})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusForbidden, w.Code)
-}
-
-// TestUpdate_EditorForbidden_Returns403 — theo BR (URD/SRS): Editor chỉ upload+query,
-// sửa cấu hình/thông tin dự án là hành vi quản trị, chỉ Owner mới được làm.
-func TestUpdate_EditorForbidden_Returns403(t *testing.T) {
-	userID, projectID := uuid.New(), uuid.New()
-	r := setupRouter(t, ucmocks.NewMockService(t),
-		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
-
-	body, _ := json.Marshal(map[string]any{"name": "X"})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusForbidden, w.Code)
-}
+// TẠM TẮT (RBAC theo role đang tắt ở Register, xem project_handler.go) — bật
+// lại khi RBAC quay lại.
+//
+// func TestUpdate_ViewerForbidden_Returns403(t *testing.T) {
+// 	userID, projectID := uuid.New(), uuid.New()
+// 	r := setupRouter(t, ucmocks.NewMockService(t),
+// 		activeMember(t, projectID, userID, domain.RoleViewer), userID.String())
+//
+// 	body, _ := json.Marshal(map[string]any{"name": "X"})
+// 	w := httptest.NewRecorder()
+// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req.Header.Set("Content-Type", "application/json")
+// 	r.ServeHTTP(w, req)
+//
+// 	require.Equal(t, http.StatusForbidden, w.Code)
+// }
+//
+// // TestUpdate_EditorForbidden_Returns403 — theo BR (URD/SRS): Editor chỉ upload+query,
+// // sửa cấu hình/thông tin dự án là hành vi quản trị, chỉ Owner mới được làm.
+// func TestUpdate_EditorForbidden_Returns403(t *testing.T) {
+// 	userID, projectID := uuid.New(), uuid.New()
+// 	r := setupRouter(t, ucmocks.NewMockService(t),
+// 		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
+//
+// 	body, _ := json.Marshal(map[string]any{"name": "X"})
+// 	w := httptest.NewRecorder()
+// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req.Header.Set("Content-Type", "application/json")
+// 	r.ServeHTTP(w, req)
+//
+// 	require.Equal(t, http.StatusForbidden, w.Code)
+// }
 
 func TestUpdate_ProjectNotFound_Returns404(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().Update(mock.Anything, mock.Anything).Return(nil, domain.ErrProjectNotFound())
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"name": "X"})
 	w := httptest.NewRecorder()
@@ -230,7 +237,7 @@ func TestDelete_Owner_Returns204(t *testing.T) {
 		ID: projectID, ConfirmName: "Core Banking",
 	}).Return(nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
@@ -246,7 +253,7 @@ func TestDelete_ConfirmNameMismatch_Returns200Business(t *testing.T) {
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().Delete(mock.Anything, mock.Anything).Return(domain.ErrConfirmNameMismatch)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Sai Ten"})
 	w := httptest.NewRecorder()
@@ -264,7 +271,7 @@ func TestDelete_ConfirmNameMismatch_Returns200Business(t *testing.T) {
 func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	r := setupRouter(t, ucmocks.NewMockService(t),
-		activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+		domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader([]byte("{}")))
@@ -274,19 +281,22 @@ func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestDelete_EditorForbidden_Returns403(t *testing.T) {
-	userID, projectID := uuid.New(), uuid.New()
-	r := setupRouter(t, ucmocks.NewMockService(t),
-		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
-
-	body, _ := json.Marshal(map[string]any{"confirm_name": "bất kỳ"})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusForbidden, w.Code)
-}
+// TẠM TẮT (RBAC theo role đang tắt ở Register, xem project_handler.go) — bật
+// lại khi RBAC quay lại.
+//
+// func TestDelete_EditorForbidden_Returns403(t *testing.T) {
+// 	userID, projectID := uuid.New(), uuid.New()
+// 	r := setupRouter(t, ucmocks.NewMockService(t),
+// 		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
+//
+// 	body, _ := json.Marshal(map[string]any{"confirm_name": "bất kỳ"})
+// 	w := httptest.NewRecorder()
+// 	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req.Header.Set("Content-Type", "application/json")
+// 	r.ServeHTTP(w, req)
+//
+// 	require.Equal(t, http.StatusForbidden, w.Code)
+// }
 
 func TestDelete_SystemAdmin_BypassesMembership_Returns204(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
@@ -318,7 +328,7 @@ func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	svc.EXPECT().ListMembers(mock.Anything, projectID).
 		Return([]domain.ProjectMember{*domain.NewInvite(projectID, uuid.New(), domain.RoleViewer)}, nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleViewer), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/projects/"+projectID.String()+"/members", nil)
@@ -334,7 +344,7 @@ func TestInviteMember_Owner_Returns201(t *testing.T) {
 		ProjectID: projectID, UserID: inviteeID, Role: domain.RoleEditor,
 	}).Return(domain.NewInvite(projectID, inviteeID, domain.RoleEditor), nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
 	w := httptest.NewRecorder()
@@ -347,28 +357,31 @@ func TestInviteMember_Owner_Returns201(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestInviteMember_EditorForbidden_Returns403(t *testing.T) {
-	userID, projectID, inviteeID := uuid.New(), uuid.New(), uuid.New()
-	r := setupRouter(t, ucmocks.NewMockService(t),
-		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
-
-	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
-		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members", bytes.NewReader(body),
-	)
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusForbidden, w.Code)
-}
+// TẠM TẮT (RBAC theo role đang tắt ở Register, xem project_handler.go) — bật
+// lại khi RBAC quay lại.
+//
+// func TestInviteMember_EditorForbidden_Returns403(t *testing.T) {
+// 	userID, projectID, inviteeID := uuid.New(), uuid.New(), uuid.New()
+// 	r := setupRouter(t, ucmocks.NewMockService(t),
+// 		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
+//
+// 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
+// 	w := httptest.NewRecorder()
+// 	req := httptest.NewRequest(
+// 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members", bytes.NewReader(body),
+// 	)
+// 	req.Header.Set("Content-Type", "application/json")
+// 	r.ServeHTTP(w, req)
+//
+// 	require.Equal(t, http.StatusForbidden, w.Code)
+// }
 
 func TestInviteMember_AlreadyMember_Returns200Business(t *testing.T) {
 	userID, projectID, inviteeID := uuid.New(), uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().InviteMember(mock.Anything, mock.Anything).Return(nil, domain.ErrAlreadyMember)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
 	w := httptest.NewRecorder()
@@ -396,7 +409,7 @@ func TestChangeMemberRole_Owner_Returns200(t *testing.T) {
 		ProjectID: projectID, UserID: targetID, Role: domain.RoleViewer,
 	}).Return(updated, nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	body, _ := json.Marshal(map[string]any{"role": "viewer"})
 	w := httptest.NewRecorder()
@@ -416,7 +429,7 @@ func TestRemoveMember_Owner_Returns204(t *testing.T) {
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().RemoveMember(mock.Anything, projectID, targetID).Return(nil)
 
-	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(

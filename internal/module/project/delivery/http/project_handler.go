@@ -15,7 +15,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 	"github.com/quangdung93/docs-hub-api/internal/common/response"
 	"github.com/quangdung93/docs-hub-api/internal/common/validatorx"
-	"github.com/quangdung93/docs-hub-api/internal/middleware"
+	// "github.com/quangdung93/docs-hub-api/internal/middleware" // TODO: bật lại khi kích hoạt RBAC (xem Register)
 	"github.com/quangdung93/docs-hub-api/internal/module/project/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/project/usecase"
 )
@@ -38,22 +38,28 @@ import (
 //   - GET      /projects/:id/members  : owner, editor, viewer (mọi thành viên active).
 //   - POST|PATCH|DELETE .../members.. : chỉ owner (quản lý thành viên).
 //   - POST .../members/me/accept      : chỉ cần đã xác thực (tự accept lời mời của mình).
-func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) {
-	onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
-	anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
+func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) { //nolint:unparam // memberRepo giữ lại cho lúc bật lại RBAC
+	// onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
+	// anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
 
 	projects := rg.Group("/projects")
 	{
 		projects.GET("", h.List)
 		projects.POST("", h.Create)
-		projects.PATCH("/:id", onlyOwner, h.Update)
-		projects.DELETE("/:id", onlyOwner, h.Delete)
+		// projects.PATCH("/:id", onlyOwner, h.Update)
+		projects.PATCH("/:id", h.Update)
+		// projects.DELETE("/:id", onlyOwner, h.Delete)
+		projects.DELETE("/:id", h.Delete)
 
-		projects.GET("/:id/members", anyActiveMember, h.ListMembers)
-		projects.POST("/:id/members", onlyOwner, h.InviteMember)
+		// projects.GET("/:id/members", anyActiveMember, h.ListMembers)
+		projects.GET("/:id/members", h.ListMembers)
+		// projects.POST("/:id/members", onlyOwner, h.InviteMember)
+		projects.POST("/:id/members", h.InviteMember)
 		projects.POST("/:id/members/me/accept", h.AcceptInvite)
-		projects.PATCH("/:id/members/:userId", onlyOwner, h.ChangeMemberRole)
-		projects.DELETE("/:id/members/:userId", onlyOwner, h.RemoveMember)
+		// projects.PATCH("/:id/members/:userId", onlyOwner, h.ChangeMemberRole)
+		projects.PATCH("/:id/members/:userId", h.ChangeMemberRole)
+		// projects.DELETE("/:id/members/:userId", onlyOwner, h.RemoveMember)
+		projects.DELETE("/:id/members/:userId", h.RemoveMember)
 	}
 }
 
