@@ -15,6 +15,20 @@ var (
 	// ErrInviteNotPending — accept một lời mời không còn ở trạng thái pending.
 	ErrInviteNotPending = apperr.NewBusiness(
 		errcode.InviteNotPending, "Lời mời không ở trạng thái chờ xác nhận", false)
+
+	// ErrCannotModifyOwner — đổi role/gỡ chính owner qua API quản lý thành viên.
+	// Owner luôn phải có đúng 1 hàng role=owner trong project_members (khớp
+	// projects.owner_id); nếu cho phép đổi/gỡ, owner sẽ tự khóa quyền quản lý
+	// chính dự án của mình (RequireProjectRole tra role qua project_members,
+	// không qua projects.owner_id).
+	ErrCannotModifyOwner = apperr.NewBusiness(
+		errcode.CannotModifyOwner, "Không thể đổi vai trò hoặc gỡ chủ dự án qua API này", false)
+
+	// ErrConfirmNameMismatch — xóa dự án yêu cầu xác nhận đúng tên dự án (BR
+	// SRS: "xóa dự án không thể hoàn tác, cần xác nhận hai bước"). Tên gửi lên
+	// không khớp tên hiện tại của dự án -> chặn, không xóa.
+	ErrConfirmNameMismatch = apperr.NewBusiness(
+		errcode.ConfirmNameMismatch, "Tên xác nhận không khớp tên dự án", true)
 )
 
 // ErrProjectNotFound trả về lỗi KỸ THUẬT 404 (PRJ_404) — dùng khi không tìm

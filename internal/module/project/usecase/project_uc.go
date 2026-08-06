@@ -21,7 +21,7 @@ type Service interface {
 	Create(ctx context.Context, in CreateProjectInput) (*domain.Project, error)
 	List(ctx context.Context, userID uuid.UUID, page pagination.Query) ([]domain.Project, pagination.Meta, error)
 	Update(ctx context.Context, in UpdateProjectInput) (*domain.Project, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, in DeleteProjectInput) error
 
 	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error)
 	InviteMember(ctx context.Context, in InviteMemberInput) (*domain.ProjectMember, error)
@@ -72,6 +72,13 @@ type UpdateProjectInput struct {
 	Name        *string
 	Description *string
 	Settings    *domain.ProjectSettings
+}
+
+// DeleteProjectInput là tham số xóa dự án. ConfirmName phải khớp CHÍNH XÁC tên
+// hiện tại của dự án (BR SRS: xóa dự án không thể hoàn tác, cần xác nhận).
+type DeleteProjectInput struct {
+	ID          uuid.UUID
+	ConfirmName string
 }
 
 // InviteMemberInput là tham số mời thành viên mới.
@@ -153,13 +160,26 @@ func (s *service) Update(ctx context.Context, in UpdateProjectInput) (*domain.Pr
 }
 
 // Delete xóa CỨNG dự án (DB tự cascade sang project_members). RBAC (chỉ owner)
-// đã được middleware chặn trước khi vào tới đây.
-func (s *service) Delete(ctx context.Context, id uuid.UUID) error {
-	if err := s.projectRepo.Delete(ctx, id); err != nil {
+// đã được middleware chặn trước khi vào tới đây. BR SRS: xóa dự án không thể
+// hoàn tác -> bắt buộc ConfirmName khớp CHÍNH XÁC tên hiện tại của dự án,
+// không khớp -> ErrConfirmNameMismatch (nghiệp vụ), không xóa.
+func (s *service) Delete(ctx context.Context, in DeleteProjectInput) error {
+	project, err := s.projectRepo.FindByID(ctx, in.ID)
+	if err != nil {
 		if isRepoErr(err, domain.ErrNotFound) {
 			return domain.ErrProjectNotFound()
 		}
-		return apperr.Database("Lỗi xóa dự án").WithCause(err)
+		return apperr.Database("Lỗi truy vấn dự án").WithCause(err)
+	}
+	if project.Name != in.ConfirmName {
+		return domain.ErrConfirmNameMismatch
+	}
+
+	if delErr := s.projectRepo.Delete(ctx, in.ID); delErr != nil {
+		if isRepoErr(delErr, domain.ErrNotFound) {
+			return domain.ErrProjectNotFound()
+		}
+		return apperr.Database("Lỗi xóa dự án").WithCause(delErr)
 	}
 	return nil
 }
@@ -194,8 +214,13 @@ func (s *service) InviteMember(ctx context.Context, in InviteMemberInput) (*doma
 	return member, nil
 }
 
-// ChangeMemberRole đổi vai trò của một thành viên đã tồn tại.
+// ChangeMemberRole đổi vai trò của một thành viên đã tồn tại. Không cho đổi
+// role của owner qua API này (xem ensureNotOwner).
 func (s *service) ChangeMemberRole(ctx context.Context, in ChangeMemberRoleInput) (*domain.ProjectMember, error) {
+	if err := s.ensureNotOwner(ctx, in.ProjectID, in.UserID); err != nil {
+		return nil, err
+	}
+
 	if updErr := s.memberRepo.UpdateRole(ctx, in.ProjectID, in.UserID, in.Role); updErr != nil {
 		if isRepoErr(updErr, domain.ErrNoRowsAffected) || isRepoErr(updErr, domain.ErrNotFound) {
 			return nil, domain.ErrMemberNotFound()
@@ -210,13 +235,37 @@ func (s *service) ChangeMemberRole(ctx context.Context, in ChangeMemberRoleInput
 	return member, nil
 }
 
-// RemoveMember gỡ một thành viên khỏi dự án.
+// RemoveMember gỡ một thành viên khỏi dự án. Không cho gỡ owner qua API này
+// (xem ensureNotOwner).
 func (s *service) RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error {
+	if err := s.ensureNotOwner(ctx, projectID, userID); err != nil {
+		return err
+	}
+
 	if err := s.memberRepo.Delete(ctx, projectID, userID); err != nil {
 		if isRepoErr(err, domain.ErrNotFound) {
 			return domain.ErrMemberNotFound()
 		}
 		return apperr.Database("Lỗi gỡ thành viên").WithCause(err)
+	}
+	return nil
+}
+
+// ensureNotOwner chặn đổi role/gỡ owner qua API quản lý thành viên — owner
+// luôn phải có đúng 1 hàng role=owner trong project_members (khớp
+// projects.owner_id), nếu không sẽ tự khóa quyền quản lý dự án của owner
+// (RequireProjectRole tra role qua project_members, không qua projects.owner_id).
+// Muốn đổi chủ dự án cần API transfer ownership riêng (chưa hiện thực).
+func (s *service) ensureNotOwner(ctx context.Context, projectID, userID uuid.UUID) error {
+	member, err := s.memberRepo.FindByProjectAndUser(ctx, projectID, userID)
+	if err != nil {
+		if isRepoErr(err, domain.ErrNotFound) {
+			return domain.ErrMemberNotFound()
+		}
+		return apperr.Database("Lỗi kiểm tra thành viên").WithCause(err)
+	}
+	if member.Role == domain.RoleOwner {
+		return domain.ErrCannotModifyOwner
 	}
 	return nil
 }

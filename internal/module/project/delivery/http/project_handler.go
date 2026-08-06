@@ -24,23 +24,29 @@ import (
 // memberRepo dùng để middleware.RequireProjectRole tự tra cứu vai trò của actor
 // trong dự án (path param "id") — xem internal/middleware/project_auth.go.
 //
-// Quy ước phân quyền:
+// Quy ước phân quyền (theo BR trong URD/SRS: Owner toàn quyền, Editor chỉ
+// upload+query, Viewer chỉ query — sửa cấu hình/thông tin dự án là hành vi
+// quản trị, thuộc về Owner, không phải Editor).
+//
+// LƯU Ý: "chỉ owner" bên dưới nghĩa là owner trong project_members — admin hệ
+// thống (role "admin" toàn cục từ JWT) LUÔN bypass toàn bộ allowedRoles, xử lý
+// ở đầu middleware.RequireProjectRole, áp dụng chung cho mọi route dùng nó,
+// không cần liệt kê riêng ở đây.
 //   - GET/POST /projects              : chỉ cần đã xác thực (không gắn với 1 dự án cụ thể).
-//   - PATCH    /projects/:id          : owner, editor.
-//   - DELETE   /projects/:id          : chỉ owner.
+//   - PATCH    /projects/:id          : chỉ owner.
+//   - DELETE   /projects/:id          : chỉ owner, yêu cầu xác nhận đúng tên dự án (xem Delete godoc).
 //   - GET      /projects/:id/members  : owner, editor, viewer (mọi thành viên active).
 //   - POST|PATCH|DELETE .../members.. : chỉ owner (quản lý thành viên).
 //   - POST .../members/me/accept      : chỉ cần đã xác thực (tự accept lời mời của mình).
 func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) {
 	onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
-	ownerOrEditor := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor)
 	anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
 
 	projects := rg.Group("/projects")
 	{
 		projects.GET("", h.List)
 		projects.POST("", h.Create)
-		projects.PATCH("/:id", ownerOrEditor, h.Update)
+		projects.PATCH("/:id", onlyOwner, h.Update)
 		projects.DELETE("/:id", onlyOwner, h.Delete)
 
 		projects.GET("/:id/members", anyActiveMember, h.ListMembers)
@@ -92,6 +98,12 @@ type UpdateProjectRequest struct {
 	Name        *string                 `json:"name"        binding:"omitempty,min=1,max=255"`
 	Description *string                 `json:"description" binding:"omitempty,max=2000"`
 	Settings    *ProjectSettingsRequest `json:"settings"    binding:"omitempty"`
+}
+
+// DeleteProjectRequest là body xóa dự án. ConfirmName phải khớp CHÍNH XÁC tên
+// hiện tại của dự án (BR SRS: xóa dự án không thể hoàn tác, cần xác nhận).
+type DeleteProjectRequest struct {
+	ConfirmName string `json:"confirm_name" binding:"required"`
 }
 
 // ListProjectQuery là query string liệt kê dự án (nhúng pagination.Query).
@@ -328,10 +340,12 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 // Delete godoc
-// @Summary  Xóa dự án (chỉ Owner)
+// @Summary  Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
 // @Tags     projects
+// @Accept   json
 // @Produce  json
-// @Param    id  path  string  true  "Project ID"
+// @Param    id    path      string                true  "Project ID"
+// @Param    body  body      DeleteProjectRequest  true  "Xác nhận tên dự án"
 // @Success  204
 // @Security BearerAuth
 // @Router   /internal/api/v1/projects/{id} [delete]
@@ -340,7 +354,13 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+	var req DeleteProjectRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	if err := h.svc.Delete(c.Request.Context(), usecase.DeleteProjectInput{
+		ID: id, ConfirmName: req.ConfirmName,
+	}); err != nil {
 		_ = c.Error(err)
 		return
 	}

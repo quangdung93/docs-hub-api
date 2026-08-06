@@ -73,6 +73,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             }
@@ -170,13 +176,16 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "projects"
                 ],
-                "summary": "Xóa dự án (chỉ Owner)",
+                "summary": "Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)",
                 "parameters": [
                     {
                         "type": "string",
@@ -184,6 +193,15 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Xác nhận tên dự án",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.DeleteProjectRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -833,6 +851,17 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "http.DeleteProjectRequest": {
+            "type": "object",
+            "required": [
+                "confirm_name"
+            ],
+            "properties": {
+                "confirm_name": {
+                    "type": "string"
                 }
             }
         },

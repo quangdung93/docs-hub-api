@@ -186,6 +186,22 @@ func TestUpdate_ViewerForbidden_Returns403(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, w.Code)
 }
 
+// TestUpdate_EditorForbidden_Returns403 — theo BR (URD/SRS): Editor chỉ upload+query,
+// sửa cấu hình/thông tin dự án là hành vi quản trị, chỉ Owner mới được làm.
+func TestUpdate_EditorForbidden_Returns403(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	r := setupRouter(t, ucmocks.NewMockService(t),
+		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
+
+	body, _ := json.Marshal(map[string]any{"name": "X"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
 func TestUpdate_ProjectNotFound_Returns404(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
@@ -210,15 +226,52 @@ func TestUpdate_ProjectNotFound_Returns404(t *testing.T) {
 func TestDelete_Owner_Returns204(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
-	svc.EXPECT().Delete(mock.Anything, projectID).Return(nil)
+	svc.EXPECT().Delete(mock.Anything, usecase.DeleteProjectInput{
+		ID: projectID, ConfirmName: "Core Banking",
+	}).Return(nil)
 
 	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
 
+	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
+}
+
+func TestDelete_ConfirmNameMismatch_Returns200Business(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().Delete(mock.Anything, mock.Anything).Return(domain.ErrConfirmNameMismatch)
+
+	r := setupRouter(t, svc, activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+
+	body, _ := json.Marshal(map[string]any{"confirm_name": "Sai Ten"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	require.Equal(t, false, env["success"])
+	errObj := env["error"].(map[string]any)
+	require.Equal(t, "CONFIRM_NAME_MISMATCH", errObj["code"])
+}
+
+func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	r := setupRouter(t, ucmocks.NewMockService(t),
+		activeMember(t, projectID, userID, domain.RoleOwner), userID.String())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestDelete_EditorForbidden_Returns403(t *testing.T) {
@@ -226,8 +279,10 @@ func TestDelete_EditorForbidden_Returns403(t *testing.T) {
 	r := setupRouter(t, ucmocks.NewMockService(t),
 		activeMember(t, projectID, userID, domain.RoleEditor), userID.String())
 
+	body, _ := json.Marshal(map[string]any{"confirm_name": "bất kỳ"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusForbidden, w.Code)
@@ -236,15 +291,19 @@ func TestDelete_EditorForbidden_Returns403(t *testing.T) {
 func TestDelete_SystemAdmin_BypassesMembership_Returns204(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
-	svc.EXPECT().Delete(mock.Anything, projectID).Return(nil)
+	svc.EXPECT().Delete(mock.Anything, usecase.DeleteProjectInput{
+		ID: projectID, ConfirmName: "Core Banking",
+	}).Return(nil)
 
 	// Admin hệ thống KHÔNG phải thành viên dự án -> memberRepo không set EXPECT nào,
 	// nếu middleware lỡ gọi FindByProjectAndUser test sẽ panic ngay.
 	memberRepo := domainmocks.NewMockProjectMemberRepository(t)
 	r := setupRouterWithRoles(t, svc, memberRepo, userID.String(), "admin")
 
+	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)

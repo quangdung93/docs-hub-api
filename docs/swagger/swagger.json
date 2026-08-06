@@ -67,6 +67,12 @@
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
                     }
                 }
             }
@@ -164,13 +170,16 @@
                         "BearerAuth": []
                     }
                 ],
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "projects"
                 ],
-                "summary": "Xóa dự án (chỉ Owner)",
+                "summary": "Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)",
                 "parameters": [
                     {
                         "type": "string",
@@ -178,6 +187,15 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Xác nhận tên dự án",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.DeleteProjectRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -827,6 +845,17 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "http.DeleteProjectRequest": {
+            "type": "object",
+            "required": [
+                "confirm_name"
+            ],
+            "properties": {
+                "confirm_name": {
+                    "type": "string"
                 }
             }
         },

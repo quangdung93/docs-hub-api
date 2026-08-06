@@ -144,10 +144,31 @@ func TestDelete_HappyPath(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	id := uuid.New()
+	existing := domain.NewProject(uuid.New(), "Core Banking", "", domain.ProjectSettings{})
+	existing.ID = id
 
+	h.projectRepo.EXPECT().FindByID(mock.Anything, id).Return(existing, nil)
 	h.projectRepo.EXPECT().Delete(mock.Anything, id).Return(nil)
 
-	require.NoError(t, h.svc.Delete(ctx, id))
+	err := h.svc.Delete(ctx, usecase.DeleteProjectInput{ID: id, ConfirmName: "Core Banking"})
+	require.NoError(t, err)
+}
+
+func TestDelete_ConfirmNameMismatch_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := uuid.New()
+	existing := domain.NewProject(uuid.New(), "Core Banking", "", domain.ProjectSettings{})
+	existing.ID = id
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, id).Return(existing, nil)
+
+	err := h.svc.Delete(ctx, usecase.DeleteProjectInput{ID: id, ConfirmName: "Sai Ten"})
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "tên xác nhận sai phải là lỗi NGHIỆP VỤ, không được xóa")
+	require.Equal(t, errcode.ConfirmNameMismatch, be.Code)
+	h.projectRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
 }
 
 func TestDelete_NotFound_IsTechnical404(t *testing.T) {
@@ -155,9 +176,9 @@ func TestDelete_NotFound_IsTechnical404(t *testing.T) {
 	ctx := context.Background()
 	id := uuid.New()
 
-	h.projectRepo.EXPECT().Delete(mock.Anything, id).Return(domain.ErrNotFound)
+	h.projectRepo.EXPECT().FindByID(mock.Anything, id).Return(nil, domain.ErrNotFound)
 
-	err := h.svc.Delete(ctx, id)
+	err := h.svc.Delete(ctx, usecase.DeleteProjectInput{ID: id, ConfirmName: "bất kỳ"})
 	require.Error(t, err)
 	te, ok := apperr.AsTechnical(err)
 	require.True(t, ok)
@@ -234,11 +255,14 @@ func TestChangeMemberRole_HappyPath(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	projectID, userID := uuid.New(), uuid.New()
+	existing := domain.NewInvite(projectID, userID, domain.RoleViewer)
+	existing.Status = domain.MemberStatusActive
 	updated := domain.NewInvite(projectID, userID, domain.RoleEditor)
 	updated.Status = domain.MemberStatusActive
 
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(existing, nil).Once()
 	h.memberRepo.EXPECT().UpdateRole(mock.Anything, projectID, userID, domain.RoleEditor).Return(nil)
-	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(updated, nil)
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(updated, nil).Once()
 
 	got, err := h.svc.ChangeMemberRole(ctx, usecase.ChangeMemberRoleInput{
 		ProjectID: projectID, UserID: userID, Role: domain.RoleEditor,
@@ -252,8 +276,7 @@ func TestChangeMemberRole_NotFound_IsTechnical404(t *testing.T) {
 	ctx := context.Background()
 	projectID, userID := uuid.New(), uuid.New()
 
-	h.memberRepo.EXPECT().UpdateRole(mock.Anything, projectID, userID, domain.RoleEditor).
-		Return(domain.ErrNoRowsAffected)
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(nil, domain.ErrNotFound)
 
 	_, err := h.svc.ChangeMemberRole(ctx, usecase.ChangeMemberRoleInput{
 		ProjectID: projectID, UserID: userID, Role: domain.RoleEditor,
@@ -264,11 +287,33 @@ func TestChangeMemberRole_NotFound_IsTechnical404(t *testing.T) {
 	require.Equal(t, errcode.MemberNotFound, te.Code)
 }
 
+func TestChangeMemberRole_TargetIsOwner_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	projectID, ownerID := uuid.New(), uuid.New()
+	owner := domain.NewInvite(projectID, ownerID, domain.RoleOwner)
+	owner.Status = domain.MemberStatusActive
+
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, ownerID).Return(owner, nil)
+
+	_, err := h.svc.ChangeMemberRole(ctx, usecase.ChangeMemberRoleInput{
+		ProjectID: projectID, UserID: ownerID, Role: domain.RoleViewer,
+	})
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "đổi role của owner phải là lỗi NGHIỆP VỤ, không được thực thi")
+	require.Equal(t, errcode.CannotModifyOwner, be.Code)
+	h.memberRepo.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestRemoveMember_HappyPath(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	projectID, userID := uuid.New(), uuid.New()
+	existing := domain.NewInvite(projectID, userID, domain.RoleViewer)
+	existing.Status = domain.MemberStatusActive
 
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(existing, nil)
 	h.memberRepo.EXPECT().Delete(mock.Anything, projectID, userID).Return(nil)
 
 	require.NoError(t, h.svc.RemoveMember(ctx, projectID, userID))
@@ -279,13 +324,30 @@ func TestRemoveMember_NotFound_IsTechnical404(t *testing.T) {
 	ctx := context.Background()
 	projectID, userID := uuid.New(), uuid.New()
 
-	h.memberRepo.EXPECT().Delete(mock.Anything, projectID, userID).Return(domain.ErrNotFound)
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, userID).Return(nil, domain.ErrNotFound)
 
 	err := h.svc.RemoveMember(ctx, projectID, userID)
 	require.Error(t, err)
 	te, ok := apperr.AsTechnical(err)
 	require.True(t, ok)
 	require.Equal(t, errcode.MemberNotFound, te.Code)
+}
+
+func TestRemoveMember_TargetIsOwner_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	projectID, ownerID := uuid.New(), uuid.New()
+	owner := domain.NewInvite(projectID, ownerID, domain.RoleOwner)
+	owner.Status = domain.MemberStatusActive
+
+	h.memberRepo.EXPECT().FindByProjectAndUser(mock.Anything, projectID, ownerID).Return(owner, nil)
+
+	err := h.svc.RemoveMember(ctx, projectID, ownerID)
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "gỡ owner phải là lỗi NGHIỆP VỤ, không được thực thi")
+	require.Equal(t, errcode.CannotModifyOwner, be.Code)
+	h.memberRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAcceptInvite_HappyPath(t *testing.T) {

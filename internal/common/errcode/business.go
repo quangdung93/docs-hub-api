@@ -32,4 +32,8 @@ const (
 	AlreadyMember = "ALREADY_MEMBER" // Người dùng đã là thành viên hoặc đang chờ xác nhận
 	// InviteNotPending — lời mời không ở trạng thái 'pending' nên không thể accept.
 	InviteNotPending = "INVITE_NOT_PENDING" // Lời mời không ở trạng thái chờ xác nhận
+	// CannotModifyOwner — không được đổi role/gỡ chủ dự án qua API quản lý thành viên.
+	CannotModifyOwner = "CANNOT_MODIFY_OWNER" // Không thể đổi vai trò hoặc gỡ chủ dự án
+	// ConfirmNameMismatch — xóa dự án yêu cầu gửi đúng tên dự án để xác nhận.
+	ConfirmNameMismatch = "CONFIRM_NAME_MISMATCH" // Tên xác nhận không khớp tên dự án
 )

@@ -45,6 +45,13 @@ definitions:
     - full_name
     - password
     type: object
+  http.DeleteProjectRequest:
+    properties:
+      confirm_name:
+        type: string
+    required:
+    - confirm_name
+    type: object
   http.DeleteUserRequest:
     properties:
       version:
@@ -220,6 +227,10 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Lấy thông tin cá nhân
@@ -280,12 +291,20 @@ paths:
       - projects
   /internal/api/v1/projects/{id}:
     delete:
+      consumes:
+      - application/json
       parameters:
       - description: Project ID
         in: path
         name: id
         required: true
         type: string
+      - description: Xác nhận tên dự án
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.DeleteProjectRequest'
       produces:
       - application/json
       responses:
@@ -293,7 +312,7 @@ paths:
           description: No Content
       security:
       - BearerAuth: []
-      summary: Xóa dự án (chỉ Owner)
+      summary: Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
       tags:
       - projects
     patch:

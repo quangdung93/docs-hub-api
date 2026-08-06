@@ -206,17 +206,17 @@ func (_c *MockService_Create_Call) RunAndReturn(run func(context.Context, usecas
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, id
-func (_m *MockService) Delete(ctx context.Context, id uuid.UUID) error {
-	ret := _m.Called(ctx, id)
+// Delete provides a mock function with given fields: ctx, in
+func (_m *MockService) Delete(ctx context.Context, in usecase.DeleteProjectInput) error {
+	ret := _m.Called(ctx, in)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
-		r0 = rf(ctx, id)
+	if rf, ok := ret.Get(0).(func(context.Context, usecase.DeleteProjectInput) error); ok {
+		r0 = rf(ctx, in)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -231,14 +231,14 @@ type MockService_Delete_Call struct {
 
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
-//   - id uuid.UUID
-func (_e *MockService_Expecter) Delete(ctx interface{}, id interface{}) *MockService_Delete_Call {
-	return &MockService_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
+//   - in usecase.DeleteProjectInput
+func (_e *MockService_Expecter) Delete(ctx interface{}, in interface{}) *MockService_Delete_Call {
+	return &MockService_Delete_Call{Call: _e.mock.On("Delete", ctx, in)}
 }
 
-func (_c *MockService_Delete_Call) Run(run func(ctx context.Context, id uuid.UUID)) *MockService_Delete_Call {
+func (_c *MockService_Delete_Call) Run(run func(ctx context.Context, in usecase.DeleteProjectInput)) *MockService_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uuid.UUID))
+		run(args[0].(context.Context), args[1].(usecase.DeleteProjectInput))
 	})
 	return _c
 }
@@ -248,7 +248,7 @@ func (_c *MockService_Delete_Call) Return(_a0 error) *MockService_Delete_Call {
 	return _c
 }
 
-func (_c *MockService_Delete_Call) RunAndReturn(run func(context.Context, uuid.UUID) error) *MockService_Delete_Call {
+func (_c *MockService_Delete_Call) RunAndReturn(run func(context.Context, usecase.DeleteProjectInput) error) *MockService_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
