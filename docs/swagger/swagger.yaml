@@ -1,0 +1,384 @@
+basePath: /
+definitions:
+  http.CreateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+    required:
+    - email
+    - full_name
+    - password
+    type: object
+  http.DeleteUserRequest:
+    properties:
+      version:
+        minimum: 1
+        type: integer
+    required:
+    - version
+    type: object
+  http.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  http.UpdateStatusRequest:
+    properties:
+      status:
+        enum:
+        - active
+        - inactive
+        - locked
+        type: string
+      version:
+        minimum: 1
+        type: integer
+    required:
+    - status
+    - version
+    type: object
+  http.UpdateUserRequest:
+    properties:
+      full_name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      version:
+        minimum: 1
+        type: integer
+    required:
+    - full_name
+    - version
+    type: object
+  pagination.Meta:
+    properties:
+      has_next:
+        type: boolean
+      has_prev:
+        type: boolean
+      limit:
+        type: integer
+      page:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  response.Envelope:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorBody'
+      meta:
+        $ref: '#/definitions/response.Meta'
+      success:
+        type: boolean
+    type: object
+  response.ErrorBody:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+      retryable:
+        type: boolean
+    type: object
+  response.Meta:
+    properties:
+      pagination:
+        $ref: '#/definitions/pagination.Meta'
+      request_id:
+        type: string
+      timestamp:
+        description: ISO-8601 UTC
+        type: string
+      trace_id:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Boilerplate Go Clean Architecture cho ISC.
+  title: docs-hub-api
+  version: "1.0"
+paths:
+  /internal/api/v1/auth/logout:
+    post:
+      description: Xóa token ở client (xóa Cookie) và revoke ở server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Đăng xuất
+      tags:
+      - auth
+  /internal/api/v1/auth/me:
+    get:
+      description: Lấy thông tin user hiện tại qua JWT
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Lấy thông tin cá nhân
+      tags:
+      - auth
+  /internal/api/v1/users:
+    get:
+      parameters:
+      - description: Trang
+        in: query
+        name: page
+        type: integer
+      - description: Số bản ghi/trang
+        in: query
+        name: limit
+        type: integer
+      - description: Từ khóa tìm email/tên
+        in: query
+        name: keyword
+        type: string
+      - description: Lọc trạng thái
+        in: query
+        name: status
+        type: string
+      - description: Cột sắp xếp
+        in: query
+        name: sort_by
+        type: string
+      - description: asc|desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Danh sách người dùng (phân trang)
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Thông tin người dùng
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tạo người dùng mới
+      tags:
+      - users
+  /internal/api/v1/users/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Version
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.DeleteUserRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Xóa mềm người dùng
+      tags:
+      - users
+    get:
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Lấy chi tiết người dùng
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thông tin cập nhật
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Cập nhật hồ sơ người dùng
+      tags:
+      - users
+  /internal/api/v1/users/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Trạng thái mới
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Đổi trạng thái người dùng
+      tags:
+      - users
+  /internal/api/v1/users/check-email:
+    get:
+      parameters:
+      - description: Email cần kiểm tra
+        in: query
+        name: email
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Kiểm tra email còn trống
+      tags:
+      - users
+  /public/api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Xác thực và trả về JWT qua Cookie
+      parameters:
+      - description: Thông tin đăng nhập
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Đăng nhập
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: 'Nhập theo định dạng: Bearer <token> (lấy token qua /public/api/v1/auth/login
+      hoặc /public/api/v1/auth/dev-token ở local)'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

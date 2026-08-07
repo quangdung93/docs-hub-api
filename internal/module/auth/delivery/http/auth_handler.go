@@ -73,6 +73,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Tags     auth
 // @Produce  json
 // @Success  200 {object} response.Envelope
+// @Failure  400 {object} response.Envelope
 // @Security BearerAuth
 // @Router   /internal/api/v1/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
