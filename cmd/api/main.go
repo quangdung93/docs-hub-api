@@ -3,7 +3,6 @@
 // @title        docs-hub-api
 // @version      1.0
 // @description  Boilerplate Go Clean Architecture cho ISC.
-// @host         localhost:8080
 // @BasePath     /
 //
 // @securityDefinitions.apikey  BearerAuth
