@@ -188,6 +188,64 @@ func (_c *MockObjectStore_PresignedGetURL_Call) RunAndReturn(run func(context.Co
 	return _c
 }
 
+// PresignedPutURL provides a mock function with given fields: ctx, key, ttl
+func (_m *MockObjectStore) PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	ret := _m.Called(ctx, key, ttl)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PresignedPutURL")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Duration) (string, error)); ok {
+		return rf(ctx, key, ttl)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Duration) string); ok {
+		r0 = rf(ctx, key, ttl)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, time.Duration) error); ok {
+		r1 = rf(ctx, key, ttl)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockObjectStore_PresignedPutURL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PresignedPutURL'
+type MockObjectStore_PresignedPutURL_Call struct {
+	*mock.Call
+}
+
+// PresignedPutURL is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+//   - ttl time.Duration
+func (_e *MockObjectStore_Expecter) PresignedPutURL(ctx interface{}, key interface{}, ttl interface{}) *MockObjectStore_PresignedPutURL_Call {
+	return &MockObjectStore_PresignedPutURL_Call{Call: _e.mock.On("PresignedPutURL", ctx, key, ttl)}
+}
+
+func (_c *MockObjectStore_PresignedPutURL_Call) Run(run func(ctx context.Context, key string, ttl time.Duration)) *MockObjectStore_PresignedPutURL_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(time.Duration))
+	})
+	return _c
+}
+
+func (_c *MockObjectStore_PresignedPutURL_Call) Return(_a0 string, _a1 error) *MockObjectStore_PresignedPutURL_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockObjectStore_PresignedPutURL_Call) RunAndReturn(run func(context.Context, string, time.Duration) (string, error)) *MockObjectStore_PresignedPutURL_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Put provides a mock function with given fields: ctx, key, data, contentType
 func (_m *MockObjectStore) Put(ctx context.Context, key string, data []byte, contentType string) (port.StoredObject, error) {
 	ret := _m.Called(ctx, key, data, contentType)
@@ -243,6 +301,63 @@ func (_c *MockObjectStore_Put_Call) Return(_a0 port.StoredObject, _a1 error) *Mo
 }
 
 func (_c *MockObjectStore_Put_Call) RunAndReturn(run func(context.Context, string, []byte, string) (port.StoredObject, error)) *MockObjectStore_Put_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Stat provides a mock function with given fields: ctx, key
+func (_m *MockObjectStore) Stat(ctx context.Context, key string) (port.StoredObject, error) {
+	ret := _m.Called(ctx, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Stat")
+	}
+
+	var r0 port.StoredObject
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (port.StoredObject, error)); ok {
+		return rf(ctx, key)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) port.StoredObject); ok {
+		r0 = rf(ctx, key)
+	} else {
+		r0 = ret.Get(0).(port.StoredObject)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockObjectStore_Stat_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stat'
+type MockObjectStore_Stat_Call struct {
+	*mock.Call
+}
+
+// Stat is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+func (_e *MockObjectStore_Expecter) Stat(ctx interface{}, key interface{}) *MockObjectStore_Stat_Call {
+	return &MockObjectStore_Stat_Call{Call: _e.mock.On("Stat", ctx, key)}
+}
+
+func (_c *MockObjectStore_Stat_Call) Run(run func(ctx context.Context, key string)) *MockObjectStore_Stat_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockObjectStore_Stat_Call) Return(_a0 port.StoredObject, _a1 error) *MockObjectStore_Stat_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockObjectStore_Stat_Call) RunAndReturn(run func(context.Context, string) (port.StoredObject, error)) *MockObjectStore_Stat_Call {
 	_c.Call.Return(run)
 	return _c
 }

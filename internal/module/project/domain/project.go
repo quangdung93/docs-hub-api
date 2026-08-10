@@ -94,6 +94,20 @@ func (s *ProjectSettings) Scan(value any) error {
 	return nil
 }
 
+// allowedAvatarFormats là danh sách mime_type CỐ ĐỊNH được phép làm ảnh đại
+// diện dự án.
+var allowedAvatarFormats = map[string]bool{ //nolint:gochecknoglobals // bảng tra cứu bất biến
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/webp": true,
+}
+
+// IsAvatarFormatAllowed kiểm tra mime_type có thuộc danh sách cho phép làm
+// ảnh đại diện dự án không.
+func IsAvatarFormatAllowed(mimeType string) bool {
+	return allowedAvatarFormats[mimeType]
+}
+
 // Project là entity dự án — mô hình nghiệp vụ thuần, KHÔNG có tag gorm.
 type Project struct {
 	ID          uuid.UUID
@@ -102,7 +116,11 @@ type Project struct {
 	Description string
 	Status      string
 	Settings    ProjectSettings
-	CreatedAt   time.Time
+	// AvatarKey là object key trong MinIO chứa ảnh đại diện dự án. Rỗng nghĩa
+	// là chưa có ảnh. Chỉ được set qua SetAvatar SAU KHI usecase xác nhận
+	// object đã thực sự tồn tại trong storage (luồng presigned URL).
+	AvatarKey string
+	CreatedAt time.Time
 }
 
 // NewProject tạo dự án mới ở trạng thái active.
@@ -134,6 +152,13 @@ func (p *Project) ChangeProfile(name, description *string, settings *ProjectSett
 // IsOwner kiểm tra user có phải chủ dự án không.
 func (p *Project) IsOwner(userID uuid.UUID) bool {
 	return p.OwnerID == userID
+}
+
+// SetAvatar gán object key ảnh đại diện. Usecase gọi hàm này SAU KHI đã xác
+// minh (qua port.ObjectStore.Stat) ảnh thực sự tồn tại — domain không tự
+// kiểm tra vì đó là chi tiết hạ tầng.
+func (p *Project) SetAvatar(key string) {
+	p.AvatarKey = key
 }
 
 // ProjectMember là entity thành viên dự án.

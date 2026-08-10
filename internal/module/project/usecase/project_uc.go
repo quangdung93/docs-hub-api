@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -28,31 +29,50 @@ type Service interface {
 	ChangeMemberRole(ctx context.Context, in ChangeMemberRoleInput) (*domain.ProjectMember, error)
 	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
 	AcceptInvite(ctx context.Context, projectID, userID uuid.UUID) (*domain.ProjectMember, error)
+
+	// RequestAvatarUpload validate định dạng/dung lượng ảnh và sinh presigned
+	// PUT URL để client tự upload thẳng lên storage.
+	RequestAvatarUpload(ctx context.Context, in RequestAvatarUploadInput) (*RequestAvatarUploadResult, error)
+	// CompleteAvatarUpload xác nhận ảnh đã thực sự lên storage rồi mới gán
+	// vào dự án. Idempotent: gọi lại sau khi đã gán không lỗi.
+	CompleteAvatarUpload(ctx context.Context, projectID uuid.UUID) (*domain.Project, error)
+	// AvatarURL sinh presigned GET URL cho ảnh đại diện của project (rỗng nếu
+	// project chưa có ảnh). Không có I/O mạng — chỉ ký URL cục bộ.
+	AvatarURL(ctx context.Context, project *domain.Project) (string, error)
 }
 
 // Deps gom phụ thuộc của service (struct thay vì nhiều tham số rời).
 type Deps struct {
-	ProjectRepo domain.ProjectRepository
-	MemberRepo  domain.ProjectMemberRepository
-	Tx          port.TxManager
-	Clock       port.Clock
+	ProjectRepo        domain.ProjectRepository
+	MemberRepo         domain.ProjectMemberRepository
+	Tx                 port.TxManager
+	Clock              port.Clock
+	ObjectStore        port.ObjectStore
+	AvatarMaxBytes     int64
+	AvatarPresignedTTL time.Duration
 }
 
 // service là implementation của Service.
 type service struct {
-	projectRepo domain.ProjectRepository
-	memberRepo  domain.ProjectMemberRepository
-	tx          port.TxManager
-	clock       port.Clock
+	projectRepo        domain.ProjectRepository
+	memberRepo         domain.ProjectMemberRepository
+	tx                 port.TxManager
+	clock              port.Clock
+	objectStore        port.ObjectStore
+	avatarMaxBytes     int64
+	avatarPresignedTTL time.Duration
 }
 
 // NewService dựng service từ Deps.
 func NewService(d Deps) Service {
 	return &service{
-		projectRepo: d.ProjectRepo,
-		memberRepo:  d.MemberRepo,
-		tx:          d.Tx,
-		clock:       d.Clock,
+		projectRepo:        d.ProjectRepo,
+		memberRepo:         d.MemberRepo,
+		tx:                 d.Tx,
+		clock:              d.Clock,
+		objectStore:        d.ObjectStore,
+		avatarMaxBytes:     d.AvatarMaxBytes,
+		avatarPresignedTTL: d.AvatarPresignedTTL,
 	}
 }
 
@@ -86,6 +106,20 @@ type InviteMemberInput struct {
 	ProjectID uuid.UUID
 	UserID    uuid.UUID
 	Role      domain.Role
+}
+
+// RequestAvatarUploadInput là tham số xin phép upload ảnh đại diện dự án.
+type RequestAvatarUploadInput struct {
+	ProjectID uuid.UUID
+	MimeType  string
+	SizeBytes int64
+}
+
+// RequestAvatarUploadResult là kết quả xin phép upload: URL để client tự PUT
+// ảnh lên storage.
+type RequestAvatarUploadResult struct {
+	UploadURL string
+	ExpiresAt time.Time
 }
 
 // ChangeMemberRoleInput là tham số đổi vai trò thành viên.
@@ -157,6 +191,84 @@ func (s *service) Update(ctx context.Context, in UpdateProjectInput) (*domain.Pr
 		return nil, apperr.Database("Lỗi cập nhật dự án").WithCause(updErr)
 	}
 	return project, nil
+}
+
+// avatarStorageKey dựng object key CỐ ĐỊNH cho ảnh đại diện của 1 dự án (1
+// slot duy nhất/project) — upload lại chỉ ghi đè, không để lại object rác.
+func avatarStorageKey(projectID uuid.UUID) string {
+	return fmt.Sprintf("projects/%s/avatar", projectID)
+}
+
+// RequestAvatarUpload validate rồi sinh presigned PUT URL cho ảnh đại diện.
+// Dự án phải đã tồn tại (được tạo trước qua Create) — ảnh đại diện luôn là
+// bước SAU khi có project ID.
+func (s *service) RequestAvatarUpload(
+	ctx context.Context, in RequestAvatarUploadInput,
+) (*RequestAvatarUploadResult, error) {
+	if !domain.IsAvatarFormatAllowed(in.MimeType) {
+		return nil, domain.ErrInvalidAvatarFormat
+	}
+	if in.SizeBytes > s.avatarMaxBytes {
+		return nil, domain.ErrAvatarTooLarge
+	}
+
+	if _, err := s.projectRepo.FindByID(ctx, in.ProjectID); err != nil {
+		if isRepoErr(err, domain.ErrNotFound) {
+			return nil, domain.ErrProjectNotFound()
+		}
+		return nil, apperr.Database("Lỗi truy vấn dự án").WithCause(err)
+	}
+
+	uploadURL, err := s.objectStore.PresignedPutURL(ctx, avatarStorageKey(in.ProjectID), s.avatarPresignedTTL)
+	if err != nil {
+		return nil, apperr.External("Lỗi tạo URL upload ảnh đại diện").WithCause(err)
+	}
+
+	return &RequestAvatarUploadResult{
+		UploadURL: uploadURL,
+		ExpiresAt: s.clock.Now().Add(s.avatarPresignedTTL),
+	}, nil
+}
+
+// CompleteAvatarUpload xác nhận ảnh đã thực sự tồn tại trong storage rồi mới
+// gán vào dự án — không tin tưởng mù quáng lời gọi từ client.
+func (s *service) CompleteAvatarUpload(ctx context.Context, projectID uuid.UUID) (*domain.Project, error) {
+	project, err := s.projectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		if isRepoErr(err, domain.ErrNotFound) {
+			return nil, domain.ErrProjectNotFound()
+		}
+		return nil, apperr.Database("Lỗi truy vấn dự án").WithCause(err)
+	}
+
+	key := avatarStorageKey(projectID)
+	if _, statErr := s.objectStore.Stat(ctx, key); statErr != nil {
+		if errors.Is(statErr, port.ErrObjectNotFound) {
+			return nil, domain.ErrAvatarNotUploaded
+		}
+		return nil, apperr.External("Lỗi kiểm tra ảnh trên storage").WithCause(statErr)
+	}
+
+	project.SetAvatar(key)
+	if updErr := s.projectRepo.Update(ctx, project); updErr != nil {
+		if isRepoErr(updErr, domain.ErrNotFound) {
+			return nil, domain.ErrProjectNotFound()
+		}
+		return nil, apperr.Database("Lỗi cập nhật ảnh đại diện").WithCause(updErr)
+	}
+	return project, nil
+}
+
+// AvatarURL sinh presigned GET URL cho ảnh đại diện (rỗng nếu chưa có ảnh).
+func (s *service) AvatarURL(ctx context.Context, project *domain.Project) (string, error) {
+	if project.AvatarKey == "" {
+		return "", nil
+	}
+	url, err := s.objectStore.PresignedGetURL(ctx, project.AvatarKey, s.avatarPresignedTTL)
+	if err != nil {
+		return "", apperr.External("Lỗi tạo URL ảnh đại diện").WithCause(err)
+	}
+	return url, nil
 }
 
 // Delete xóa CỨNG dự án (DB tự cascade sang project_members). RBAC (chỉ owner)

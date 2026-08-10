@@ -88,6 +88,63 @@ func (_c *MockService_AcceptInvite_Call) RunAndReturn(run func(context.Context, 
 	return _c
 }
 
+// AvatarURL provides a mock function with given fields: ctx, project
+func (_m *MockService) AvatarURL(ctx context.Context, project *domain.Project) (string, error) {
+	ret := _m.Called(ctx, project)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AvatarURL")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *domain.Project) (string, error)); ok {
+		return rf(ctx, project)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *domain.Project) string); ok {
+		r0 = rf(ctx, project)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *domain.Project) error); ok {
+		r1 = rf(ctx, project)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_AvatarURL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AvatarURL'
+type MockService_AvatarURL_Call struct {
+	*mock.Call
+}
+
+// AvatarURL is a helper method to define mock.On call
+//   - ctx context.Context
+//   - project *domain.Project
+func (_e *MockService_Expecter) AvatarURL(ctx interface{}, project interface{}) *MockService_AvatarURL_Call {
+	return &MockService_AvatarURL_Call{Call: _e.mock.On("AvatarURL", ctx, project)}
+}
+
+func (_c *MockService_AvatarURL_Call) Run(run func(ctx context.Context, project *domain.Project)) *MockService_AvatarURL_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*domain.Project))
+	})
+	return _c
+}
+
+func (_c *MockService_AvatarURL_Call) Return(_a0 string, _a1 error) *MockService_AvatarURL_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_AvatarURL_Call) RunAndReturn(run func(context.Context, *domain.Project) (string, error)) *MockService_AvatarURL_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ChangeMemberRole provides a mock function with given fields: ctx, in
 func (_m *MockService) ChangeMemberRole(ctx context.Context, in usecase.ChangeMemberRoleInput) (*domain.ProjectMember, error) {
 	ret := _m.Called(ctx, in)
@@ -143,6 +200,65 @@ func (_c *MockService_ChangeMemberRole_Call) Return(_a0 *domain.ProjectMember, _
 }
 
 func (_c *MockService_ChangeMemberRole_Call) RunAndReturn(run func(context.Context, usecase.ChangeMemberRoleInput) (*domain.ProjectMember, error)) *MockService_ChangeMemberRole_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CompleteAvatarUpload provides a mock function with given fields: ctx, projectID
+func (_m *MockService) CompleteAvatarUpload(ctx context.Context, projectID uuid.UUID) (*domain.Project, error) {
+	ret := _m.Called(ctx, projectID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CompleteAvatarUpload")
+	}
+
+	var r0 *domain.Project
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) (*domain.Project, error)); ok {
+		return rf(ctx, projectID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) *domain.Project); ok {
+		r0 = rf(ctx, projectID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.Project)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = rf(ctx, projectID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_CompleteAvatarUpload_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CompleteAvatarUpload'
+type MockService_CompleteAvatarUpload_Call struct {
+	*mock.Call
+}
+
+// CompleteAvatarUpload is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID uuid.UUID
+func (_e *MockService_Expecter) CompleteAvatarUpload(ctx interface{}, projectID interface{}) *MockService_CompleteAvatarUpload_Call {
+	return &MockService_CompleteAvatarUpload_Call{Call: _e.mock.On("CompleteAvatarUpload", ctx, projectID)}
+}
+
+func (_c *MockService_CompleteAvatarUpload_Call) Run(run func(ctx context.Context, projectID uuid.UUID)) *MockService_CompleteAvatarUpload_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uuid.UUID))
+	})
+	return _c
+}
+
+func (_c *MockService_CompleteAvatarUpload_Call) Return(_a0 *domain.Project, _a1 error) *MockService_CompleteAvatarUpload_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_CompleteAvatarUpload_Call) RunAndReturn(run func(context.Context, uuid.UUID) (*domain.Project, error)) *MockService_CompleteAvatarUpload_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -482,6 +598,65 @@ func (_c *MockService_RemoveMember_Call) Return(_a0 error) *MockService_RemoveMe
 }
 
 func (_c *MockService_RemoveMember_Call) RunAndReturn(run func(context.Context, uuid.UUID, uuid.UUID) error) *MockService_RemoveMember_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RequestAvatarUpload provides a mock function with given fields: ctx, in
+func (_m *MockService) RequestAvatarUpload(ctx context.Context, in usecase.RequestAvatarUploadInput) (*usecase.RequestAvatarUploadResult, error) {
+	ret := _m.Called(ctx, in)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequestAvatarUpload")
+	}
+
+	var r0 *usecase.RequestAvatarUploadResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, usecase.RequestAvatarUploadInput) (*usecase.RequestAvatarUploadResult, error)); ok {
+		return rf(ctx, in)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, usecase.RequestAvatarUploadInput) *usecase.RequestAvatarUploadResult); ok {
+		r0 = rf(ctx, in)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*usecase.RequestAvatarUploadResult)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, usecase.RequestAvatarUploadInput) error); ok {
+		r1 = rf(ctx, in)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_RequestAvatarUpload_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequestAvatarUpload'
+type MockService_RequestAvatarUpload_Call struct {
+	*mock.Call
+}
+
+// RequestAvatarUpload is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in usecase.RequestAvatarUploadInput
+func (_e *MockService_Expecter) RequestAvatarUpload(ctx interface{}, in interface{}) *MockService_RequestAvatarUpload_Call {
+	return &MockService_RequestAvatarUpload_Call{Call: _e.mock.On("RequestAvatarUpload", ctx, in)}
+}
+
+func (_c *MockService_RequestAvatarUpload_Call) Run(run func(ctx context.Context, in usecase.RequestAvatarUploadInput)) *MockService_RequestAvatarUpload_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(usecase.RequestAvatarUploadInput))
+	})
+	return _c
+}
+
+func (_c *MockService_RequestAvatarUpload_Call) Return(_a0 *usecase.RequestAvatarUploadResult, _a1 error) *MockService_RequestAvatarUpload_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_RequestAvatarUpload_Call) RunAndReturn(run func(context.Context, usecase.RequestAvatarUploadInput) (*usecase.RequestAvatarUploadResult, error)) *MockService_RequestAvatarUpload_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -247,6 +247,84 @@
                 }
             }
         },
+        "/internal/api/v1/projects/{id}/avatar/complete": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Xác nhận đã upload xong ảnh đại diện dự án",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/avatar/upload-url": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Xin phép upload ảnh đại diện dự án (trả presigned URL để client tự tải lên)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Thông tin ảnh",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.RequestAvatarUploadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/internal/api/v1/projects/{id}/members": {
             "get": {
                 "security": [
@@ -924,6 +1002,22 @@
                     "type": "string"
                 },
                 "top_k": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "http.RequestAvatarUploadRequest": {
+            "type": "object",
+            "required": [
+                "mime_type",
+                "size_bytes"
+            ],
+            "properties": {
+                "mime_type": {
+                    "type": "string"
+                },
+                "size_bytes": {
                     "type": "integer",
                     "minimum": 1
                 }

@@ -33,9 +33,12 @@ func buildModules(_ *config.Config, infra *Infra) []Module {
 			JWTManager: infra.JWT,
 		}),
 		project.New(project.Deps{
-			DB:    infra.DB,
-			Tx:    infra.Tx,
-			Clock: infra.clock(),
+			DB:                 infra.DB,
+			Tx:                 infra.Tx,
+			Clock:              infra.clock(),
+			ObjectStore:        infra.ObjectStore,
+			AvatarMaxBytes:     cfg.Project.AvatarMaxBytes,
+			AvatarPresignedTTL: cfg.Project.AvatarPresignedTTL,
 		}),
 		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}

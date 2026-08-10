@@ -36,4 +36,7 @@ const (
 	CannotModifyOwner = "CANNOT_MODIFY_OWNER" // Không thể đổi vai trò hoặc gỡ chủ dự án
 	// ConfirmNameMismatch — xóa dự án yêu cầu gửi đúng tên dự án để xác nhận.
 	ConfirmNameMismatch = "CONFIRM_NAME_MISMATCH" // Tên xác nhận không khớp tên dự án
+	// AvatarNotUploaded — xác nhận upload ảnh đại diện dự án nhưng ảnh chưa
+	// thực sự tồn tại trong storage.
+	AvatarNotUploaded = "AVATAR_NOT_UPLOADED" // Ảnh đại diện chưa được tải lên storage
 )

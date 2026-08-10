@@ -13,10 +13,16 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
 	"github.com/quangdung93/docs-hub-api/internal/common/errcode"
 	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
 	portmocks "github.com/quangdung93/docs-hub-api/internal/common/port/mocks"
 	"github.com/quangdung93/docs-hub-api/internal/module/project/domain"
 	domainmocks "github.com/quangdung93/docs-hub-api/internal/module/project/domain/mocks"
 	"github.com/quangdung93/docs-hub-api/internal/module/project/usecase"
+)
+
+const (
+	avatarMaxBytes     = int64(1024)
+	avatarPresignedTTL = 15 * time.Minute
 )
 
 // harness gom service + các mock để test tiện lợi.
@@ -26,6 +32,7 @@ type harness struct {
 	memberRepo  *domainmocks.MockProjectMemberRepository
 	tx          *portmocks.MockTxManager
 	clock       *portmocks.MockClock
+	objectStore *portmocks.MockObjectStore
 }
 
 func newHarness(t *testing.T) *harness {
@@ -33,14 +40,20 @@ func newHarness(t *testing.T) *harness {
 	memberRepo := domainmocks.NewMockProjectMemberRepository(t)
 	tx := portmocks.NewMockTxManager(t)
 	clock := portmocks.NewMockClock(t)
+	objectStore := portmocks.NewMockObjectStore(t)
 
 	svc := usecase.NewService(usecase.Deps{
-		ProjectRepo: projectRepo,
-		MemberRepo:  memberRepo,
-		Tx:          tx,
-		Clock:       clock,
+		ProjectRepo:        projectRepo,
+		MemberRepo:         memberRepo,
+		Tx:                 tx,
+		Clock:              clock,
+		ObjectStore:        objectStore,
+		AvatarMaxBytes:     avatarMaxBytes,
+		AvatarPresignedTTL: avatarPresignedTTL,
 	})
-	return &harness{svc: svc, projectRepo: projectRepo, memberRepo: memberRepo, tx: tx, clock: clock}
+	return &harness{
+		svc: svc, projectRepo: projectRepo, memberRepo: memberRepo, tx: tx, clock: clock, objectStore: objectStore,
+	}
 }
 
 // runTx cấu hình MockTxManager để THỰC SỰ chạy callback (mô phỏng transaction
@@ -397,4 +410,140 @@ func TestAcceptInvite_NotFound_IsTechnical404(t *testing.T) {
 	te, ok := apperr.AsTechnical(err)
 	require.True(t, ok)
 	require.Equal(t, errcode.MemberNotFound, te.Code)
+}
+
+// --- Avatar ---
+
+func TestRequestAvatarUpload_HappyPath(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	existing := domain.NewProject(uuid.New(), "RAG Demo", "", domain.ProjectSettings{})
+	fixedNow := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, existing.ID).Return(existing, nil)
+	h.objectStore.EXPECT().PresignedPutURL(mock.Anything, mock.AnythingOfType("string"), avatarPresignedTTL).
+		Return("https://minio.local/put-url", nil)
+	h.clock.EXPECT().Now().Return(fixedNow)
+
+	result, err := h.svc.RequestAvatarUpload(ctx, usecase.RequestAvatarUploadInput{
+		ProjectID: existing.ID, MimeType: "image/png", SizeBytes: 100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://minio.local/put-url", result.UploadURL)
+	require.Equal(t, fixedNow.Add(avatarPresignedTTL), result.ExpiresAt)
+}
+
+func TestRequestAvatarUpload_InvalidFormat_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+
+	_, err := h.svc.RequestAvatarUpload(ctx, usecase.RequestAvatarUploadInput{
+		ProjectID: uuid.New(), MimeType: "application/pdf", SizeBytes: 10,
+	})
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "định dạng ảnh không hỗ trợ phải là lỗi NGHIỆP VỤ")
+	require.Equal(t, errcode.ImageInvalid, be.Code)
+}
+
+func TestRequestAvatarUpload_TooLarge_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+
+	_, err := h.svc.RequestAvatarUpload(ctx, usecase.RequestAvatarUploadInput{
+		ProjectID: uuid.New(), MimeType: "image/png", SizeBytes: avatarMaxBytes + 1,
+	})
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "vượt giới hạn dung lượng phải là lỗi NGHIỆP VỤ")
+	require.Equal(t, errcode.FileTooLarge, be.Code)
+}
+
+func TestRequestAvatarUpload_ProjectNotFound_IsTechnical404(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := uuid.New()
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, id).Return(nil, domain.ErrNotFound)
+
+	_, err := h.svc.RequestAvatarUpload(ctx, usecase.RequestAvatarUploadInput{
+		ProjectID: id, MimeType: "image/png", SizeBytes: 10,
+	})
+	require.Error(t, err)
+	te, ok := apperr.AsTechnical(err)
+	require.True(t, ok)
+	require.Equal(t, errcode.ProjectNotFound, te.Code)
+}
+
+func TestCompleteAvatarUpload_HappyPath(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	existing := domain.NewProject(uuid.New(), "RAG Demo", "", domain.ProjectSettings{})
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, existing.ID).Return(existing, nil)
+	h.objectStore.EXPECT().Stat(mock.Anything, mock.AnythingOfType("string")).
+		Return(port.StoredObject{}, nil)
+	h.projectRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(p *domain.Project) bool {
+		return p.AvatarKey != ""
+	})).Return(nil)
+
+	got, err := h.svc.CompleteAvatarUpload(ctx, existing.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, got.AvatarKey)
+}
+
+func TestCompleteAvatarUpload_NotUploaded_IsBusinessError(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	existing := domain.NewProject(uuid.New(), "RAG Demo", "", domain.ProjectSettings{})
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, existing.ID).Return(existing, nil)
+	h.objectStore.EXPECT().Stat(mock.Anything, mock.AnythingOfType("string")).
+		Return(port.StoredObject{}, port.ErrObjectNotFound)
+
+	_, err := h.svc.CompleteAvatarUpload(ctx, existing.ID)
+	require.Error(t, err)
+	be, ok := apperr.AsBusiness(err)
+	require.True(t, ok, "ảnh chưa lên storage phải là lỗi NGHIỆP VỤ")
+	require.Equal(t, errcode.AvatarNotUploaded, be.Code)
+	h.projectRepo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+}
+
+func TestCompleteAvatarUpload_NotFound_IsTechnical404(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := uuid.New()
+
+	h.projectRepo.EXPECT().FindByID(mock.Anything, id).Return(nil, domain.ErrNotFound)
+
+	_, err := h.svc.CompleteAvatarUpload(ctx, id)
+	require.Error(t, err)
+	te, ok := apperr.AsTechnical(err)
+	require.True(t, ok)
+	require.Equal(t, errcode.ProjectNotFound, te.Code)
+}
+
+func TestAvatarURL_EmptyKey_ReturnsEmptyNoCall(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	p := domain.NewProject(uuid.New(), "RAG Demo", "", domain.ProjectSettings{})
+
+	url, err := h.svc.AvatarURL(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, url)
+	h.objectStore.AssertNotCalled(t, "PresignedGetURL", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAvatarURL_WithKey_ReturnsPresignedURL(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	p := domain.NewProject(uuid.New(), "RAG Demo", "", domain.ProjectSettings{})
+	p.SetAvatar("projects/x/avatar")
+
+	h.objectStore.EXPECT().PresignedGetURL(mock.Anything, "projects/x/avatar", avatarPresignedTTL).
+		Return("https://minio.local/get-url", nil)
+
+	url, err := h.svc.AvatarURL(ctx, p)
+	require.NoError(t, err)
+	require.Equal(t, "https://minio.local/get-url", url)
 }

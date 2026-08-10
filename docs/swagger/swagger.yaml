@@ -100,6 +100,17 @@ definitions:
     required:
     - allowed_formats
     type: object
+  http.RequestAvatarUploadRequest:
+    properties:
+      mime_type:
+        type: string
+      size_bytes:
+        minimum: 1
+        type: integer
+    required:
+    - mime_type
+    - size_bytes
+    type: object
   http.UpdateProjectRequest:
     properties:
       description:
@@ -339,6 +350,55 @@ paths:
       security:
       - BearerAuth: []
       summary: Cập nhật thông tin/cấu hình dự án
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/avatar/complete:
+    post:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xác nhận đã upload xong ảnh đại diện dự án
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/avatar/upload-url:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thông tin ảnh
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.RequestAvatarUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xin phép upload ảnh đại diện dự án (trả presigned URL để client tự
+        tải lên)
       tags:
       - projects
   /internal/api/v1/projects/{id}/members:

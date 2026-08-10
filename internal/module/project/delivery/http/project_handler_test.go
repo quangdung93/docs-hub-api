@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -86,6 +87,7 @@ func TestCreate_Success_Returns201(t *testing.T) {
 	svc.EXPECT().Create(mock.Anything, mock.MatchedBy(func(in usecase.CreateProjectInput) bool {
 		return in.OwnerID == userID && in.Name == "RAG Demo"
 	})).Return(domain.NewProject(userID, "RAG Demo", "mô tả", domain.ProjectSettings{}), nil)
+	svc.EXPECT().AvatarURL(mock.Anything, mock.Anything).Return("", nil)
 
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
@@ -139,6 +141,7 @@ func TestList_Success_Returns200Paged(t *testing.T) {
 	svc.EXPECT().List(mock.Anything, userID, mock.AnythingOfType("pagination.Query")).
 		Return([]domain.Project{*domain.NewProject(userID, "P1", "", domain.ProjectSettings{})},
 			pagination.Meta{Page: 1, Limit: 20, TotalItems: 1}, nil)
+	svc.EXPECT().AvatarURL(mock.Anything, mock.Anything).Return("", nil)
 
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
@@ -164,6 +167,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 	svc.EXPECT().Update(mock.Anything, mock.MatchedBy(func(in usecase.UpdateProjectInput) bool {
 		return in.ID == projectID && in.Name != nil && *in.Name == "Đã đổi tên"
 	})).Return(updated, nil)
+	svc.EXPECT().AvatarURL(mock.Anything, mock.Anything).Return("", nil)
 
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
@@ -318,6 +322,100 @@ func TestDelete_SystemAdmin_BypassesMembership_Returns204(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	memberRepo.AssertNotCalled(t, "FindByProjectAndUser", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// --- Avatar ---
+
+func TestRequestAvatarUpload_Success_Returns200(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().RequestAvatarUpload(mock.Anything, usecase.RequestAvatarUploadInput{
+		ProjectID: projectID, MimeType: "image/png", SizeBytes: 100,
+	}).Return(&usecase.RequestAvatarUploadResult{
+		UploadURL: "https://minio.local/put-url", ExpiresAt: time.Now(),
+	}, nil)
+
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
+
+	body, _ := json.Marshal(map[string]any{"mime_type": "image/png", "size_bytes": 100})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/upload-url", bytes.NewReader(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	data := env["data"].(map[string]any)
+	require.Equal(t, "https://minio.local/put-url", data["upload_url"])
+}
+
+func TestRequestAvatarUpload_InvalidFormat_Returns200Business(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().RequestAvatarUpload(mock.Anything, mock.Anything).Return(nil, domain.ErrInvalidAvatarFormat)
+
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
+
+	body, _ := json.Marshal(map[string]any{"mime_type": "application/pdf", "size_bytes": 100})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/upload-url", bytes.NewReader(body),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	// Điểm mấu chốt chuẩn ISC: lỗi nghiệp vụ -> HTTP 200.
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	require.Equal(t, false, env["success"])
+	errObj := env["error"].(map[string]any)
+	require.Equal(t, "IMAGE_INVALID", errObj["code"])
+}
+
+func TestCompleteAvatarUpload_Success_Returns200(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	updated := domain.NewProject(userID, "RAG Demo", "", domain.ProjectSettings{})
+	updated.ID = projectID
+	updated.SetAvatar("projects/" + projectID.String() + "/avatar")
+
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().CompleteAvatarUpload(mock.Anything, projectID).Return(updated, nil)
+	svc.EXPECT().AvatarURL(mock.Anything, updated).Return("https://minio.local/get-url", nil)
+
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/complete", nil,
+	)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	data := env["data"].(map[string]any)
+	require.Equal(t, "https://minio.local/get-url", data["avatar_url"])
+}
+
+func TestCompleteAvatarUpload_NotUploaded_Returns200Business(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().CompleteAvatarUpload(mock.Anything, projectID).Return(nil, domain.ErrAvatarNotUploaded)
+
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/complete", nil,
+	)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	require.Equal(t, false, env["success"])
+	errObj := env["error"].(map[string]any)
+	require.Equal(t, "AVATAR_NOT_UPLOADED", errObj["code"])
 }
 
 // --- Members ---

@@ -5,6 +5,8 @@
 package project
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -17,9 +19,12 @@ import (
 
 // Deps là phụ thuộc hạ tầng mà module project cần (bootstrap cung cấp).
 type Deps struct {
-	DB    *gorm.DB
-	Tx    port.TxManager
-	Clock port.Clock
+	DB                 *gorm.DB
+	Tx                 port.TxManager
+	Clock              port.Clock
+	ObjectStore        port.ObjectStore
+	AvatarMaxBytes     int64
+	AvatarPresignedTTL time.Duration
 }
 
 // Module là đơn vị đăng ký route của feature project.
@@ -33,10 +38,13 @@ func New(d Deps) *Module {
 	projectRepo := repository.NewProjectRepository(d.DB)
 	memberRepo := repository.NewProjectMemberRepository(d.DB)
 	svc := usecase.NewService(usecase.Deps{
-		ProjectRepo: projectRepo,
-		MemberRepo:  memberRepo,
-		Tx:          d.Tx,
-		Clock:       d.Clock,
+		ProjectRepo:        projectRepo,
+		MemberRepo:         memberRepo,
+		Tx:                 d.Tx,
+		Clock:              d.Clock,
+		ObjectStore:        d.ObjectStore,
+		AvatarMaxBytes:     d.AvatarMaxBytes,
+		AvatarPresignedTTL: d.AvatarPresignedTTL,
 	})
 	return &Module{
 		handler:    projecthttp.NewHandler(svc),

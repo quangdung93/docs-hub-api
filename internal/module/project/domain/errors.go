@@ -29,6 +29,21 @@ var (
 	// không khớp tên hiện tại của dự án -> chặn, không xóa.
 	ErrConfirmNameMismatch = apperr.NewBusiness(
 		errcode.ConfirmNameMismatch, "Tên xác nhận không khớp tên dự án", true)
+
+	// ErrInvalidAvatarFormat — định dạng ảnh không thuộc danh sách cho phép
+	// (PNG/JPEG/WebP).
+	ErrInvalidAvatarFormat = apperr.NewBusiness(
+		errcode.ImageInvalid, "Định dạng ảnh không được hỗ trợ (chỉ nhận PNG, JPEG, WebP)", false)
+
+	// ErrAvatarTooLarge — dung lượng ảnh khai báo vượt giới hạn cho phép.
+	ErrAvatarTooLarge = apperr.NewBusiness(
+		errcode.FileTooLarge, "Dung lượng ảnh vượt quá giới hạn cho phép", false)
+
+	// ErrAvatarNotUploaded — xác nhận upload ảnh đại diện nhưng ảnh chưa thực
+	// sự tồn tại trong storage. retryable=true vì client có thể upload xong
+	// rồi xác nhận lại.
+	ErrAvatarNotUploaded = apperr.NewBusiness(
+		errcode.AvatarNotUploaded, "Ảnh đại diện chưa được tải lên storage, vui lòng upload trước khi xác nhận", true)
 )
 
 // ErrProjectNotFound trả về lỗi KỸ THUẬT 404 (PRJ_404) — dùng khi không tìm

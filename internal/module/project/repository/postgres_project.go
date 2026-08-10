@@ -31,6 +31,7 @@ type projectModel struct {
 	Description string                 `gorm:"column:description;type:text"`
 	Status      string                 `gorm:"column:status;type:text;not null;default:active"`
 	Settings    domain.ProjectSettings `gorm:"column:settings;type:jsonb;not null"`
+	AvatarKey   string                 `gorm:"column:avatar_key;type:text"`
 	CreatedAt   time.Time              `gorm:"column:created_at;autoCreateTime"`
 }
 
@@ -89,6 +90,7 @@ func projectToDomain(m *projectModel) (domain.Project, error) {
 		Description: m.Description,
 		Status:      m.Status,
 		Settings:    m.Settings,
+		AvatarKey:   m.AvatarKey,
 		CreatedAt:   m.CreatedAt,
 	}, nil
 }
@@ -101,6 +103,7 @@ func projectFromDomain(p *domain.Project) *projectModel {
 		Description: p.Description,
 		Status:      p.Status,
 		Settings:    p.Settings,
+		AvatarKey:   p.AvatarKey,
 		CreatedAt:   p.CreatedAt,
 	}
 }
@@ -195,6 +198,7 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 			"description": p.Description,
 			"status":      p.Status,
 			"settings":    p.Settings,
+			"avatar_key":  p.AvatarKey,
 		})
 	if res.Error != nil {
 		return translate(res.Error)

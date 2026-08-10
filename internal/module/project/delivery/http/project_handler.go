@@ -51,6 +51,9 @@ func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRe
 		// projects.DELETE("/:id", onlyOwner, h.Delete)
 		projects.DELETE("/:id", h.Delete)
 
+		projects.POST("/:id/avatar/upload-url", h.RequestAvatarUpload)
+		projects.POST("/:id/avatar/complete", h.CompleteAvatarUpload)
+
 		// projects.GET("/:id/members", anyActiveMember, h.ListMembers)
 		projects.GET("/:id/members", h.ListMembers)
 		// projects.POST("/:id/members", onlyOwner, h.InviteMember)
@@ -117,6 +120,12 @@ type ListProjectQuery struct {
 	pagination.Query
 }
 
+// RequestAvatarUploadRequest là body xin phép upload ảnh đại diện dự án.
+type RequestAvatarUploadRequest struct {
+	MimeType  string `json:"mime_type"  binding:"required"`
+	SizeBytes int64  `json:"size_bytes" binding:"required,min=1"`
+}
+
 // InviteMemberRequest là body mời thành viên mới.
 type InviteMemberRequest struct {
 	UserID string `json:"user_id" binding:"required,uuid"`
@@ -146,10 +155,14 @@ type ProjectResponse struct {
 	Description string                  `json:"description"`
 	Status      string                  `json:"status"`
 	Settings    ProjectSettingsResponse `json:"settings"`
-	CreatedAt   time.Time               `json:"created_at"`
+	// AvatarURL là presigned GET URL của ảnh đại diện, rỗng nếu dự án chưa có ảnh.
+	AvatarURL string    `json:"avatar_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-func toProjectResponse(p *domain.Project) ProjectResponse {
+// toProjectResponse ánh xạ entity sang DTO. avatarURL do caller tự resolve
+// (qua Service.AvatarURL) — hàm này thuần, không gọi service.
+func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
 	return ProjectResponse{
 		ID:          p.ID.String(),
 		OwnerID:     p.OwnerID.String(),
@@ -162,16 +175,20 @@ func toProjectResponse(p *domain.Project) ProjectResponse {
 			ChunkSize:      p.Settings.ChunkSize,
 			AllowedFormats: p.Settings.AllowedFormats,
 		},
+		AvatarURL: avatarURL,
 		CreatedAt: p.CreatedAt,
 	}
 }
 
-func toProjectResponseList(projects []domain.Project) []ProjectResponse {
-	out := make([]ProjectResponse, 0, len(projects))
-	for i := range projects {
-		out = append(out, toProjectResponse(&projects[i]))
+// resolveAvatarURL gọi Service.AvatarURL và biến lỗi thành c.Error. Trả false
+// nếu có lỗi (caller phải return ngay).
+func (h *Handler) resolveAvatarURL(c *gin.Context, p *domain.Project) (string, bool) {
+	url, err := h.svc.AvatarURL(c.Request.Context(), p)
+	if err != nil {
+		_ = c.Error(err)
+		return "", false
 	}
-	return out
+	return url, true
 }
 
 // ProjectMemberResponse là biểu diễn thành viên dự án trả ra client.
@@ -276,7 +293,11 @@ func (h *Handler) Create(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	response.Created(c, toProjectResponse(project))
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.Created(c, toProjectResponse(project, avatarURL))
 }
 
 // List godoc
@@ -305,7 +326,15 @@ func (h *Handler) List(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	response.OKPaged(c, toProjectResponseList(projects), meta)
+	out := make([]ProjectResponse, 0, len(projects))
+	for i := range projects {
+		avatarURL, ok := h.resolveAvatarURL(c, &projects[i])
+		if !ok {
+			return
+		}
+		out = append(out, toProjectResponse(&projects[i], avatarURL))
+	}
+	response.OKPaged(c, out, meta)
 }
 
 // Update godoc
@@ -342,7 +371,11 @@ func (h *Handler) Update(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	response.OK(c, toProjectResponse(project))
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL))
 }
 
 // Delete godoc
@@ -371,6 +404,62 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	response.NoContent(c)
+}
+
+// RequestAvatarUpload godoc
+// @Summary  Xin phép upload ảnh đại diện dự án (trả presigned URL để client tự tải lên)
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id    path      string                       true  "Project ID"
+// @Param    body  body      RequestAvatarUploadRequest  true  "Thông tin ảnh"
+// @Success  200   {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/avatar/upload-url [post]
+func (h *Handler) RequestAvatarUpload(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req RequestAvatarUploadRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	result, err := h.svc.RequestAvatarUpload(c.Request.Context(), usecase.RequestAvatarUploadInput{
+		ProjectID: id,
+		MimeType:  req.MimeType,
+		SizeBytes: req.SizeBytes,
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"upload_url": result.UploadURL, "expires_at": result.ExpiresAt})
+}
+
+// CompleteAvatarUpload godoc
+// @Summary  Xác nhận đã upload xong ảnh đại diện dự án
+// @Tags     projects
+// @Produce  json
+// @Param    id  path      string  true  "Project ID"
+// @Success  200 {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/avatar/complete [post]
+func (h *Handler) CompleteAvatarUpload(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	project, err := h.svc.CompleteAvatarUpload(c.Request.Context(), id)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL))
 }
 
 // --- Handlers: Project members ---
