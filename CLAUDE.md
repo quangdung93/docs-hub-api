@@ -1,6 +1,7 @@
 # CLAUDE.md — docs-hub-api
 
-Hướng dẫn cho AI/lập trình viên khi làm việc trong repo này.
+- Hướng dẫn cho AI/lập trình viên khi làm việc trong repo này.
+- Luôn sử dụng tiếng Việt
 
 ## Repo là gì
 Dịch vụ Go **đầu tiên** của ISC. Clean Architecture + DDD, feature vertical-slice. Module `user` là bản mẫu tham chiếu; các module khác (`auth`, `file`, `notification`, `tenant`) mới ở dạng scaffold.
