@@ -79,10 +79,39 @@ Từ ngoài (qua nginx + TLS): `https://api.docshub.io.vn`, Swagger ở
 
 ## 5. Cập nhật code
 
+Bình thường **không cần làm tay** — merge vào `main` là `.github/workflows/deploy.yml`
+tự build image, đẩy lên GHCR và deploy (xem mục 6).
+
+Khi cần can thiệp trực tiếp trên máy:
+
 ```bash
 git pull
 make ec2-restart   # build lại api + chạy migration mới, hạ tầng giữ nguyên
 ```
+
+## 6. CI/CD
+
+```
+merge vào main
+   └─ verify      (GitHub runner)  gofmt + vet + unit test
+   └─ build-push  (GitHub runner)  build amd64 → ghcr.io/<owner>/docs-hub-api:<sha> + :latest
+   └─ deploy      (runner trên EC2) compose pull → up -d migrate api → chờ /readyz
+```
+
+Bước deploy chạy trên **self-hosted runner đặt ngay trên EC2**, nên security group
+không phải mở port 22 cho dải IP của GitHub, và máy không phải build gì.
+
+Cài runner (một lần, token sống 1 giờ, lấy ở Settings → Actions → Runners):
+
+```bash
+bash deployments/ec2/setup-runner.sh https://github.com/<owner>/docs-hub-api <TOKEN> api
+```
+
+Deploy tay một tag cũ để rollback: Actions → deploy → **Run workflow** → điền
+`image_tag` bằng SHA muốn quay lại.
+
+Không cần secret nào ngoài `GITHUB_TOKEN` có sẵn: runner nằm trong máy nên
+không cần SSH key, và GHCR đăng nhập bằng chính token của workflow.
 
 ## Lưu ý khác biệt so với local
 

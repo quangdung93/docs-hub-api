@@ -1,0 +1,123 @@
+# Build image -> đẩy lên GHCR -> deploy lên EC2.
+#
+# Vì sao tách hai job:
+#   - build-push chạy trên runner của GitHub (mạnh, amd64 native).
+#   - deploy chạy trên self-hosted runner NGAY TRÊN EC2, nên không phải mở
+#     port 22 cho dải IP của GitHub, và EC2 không phải build gì cả.
+#
+# Cách cài runner: deployments/ec2/setup-runner.sh
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag image muốn deploy (bỏ trống = build từ commit hiện tại)'
+        required: false
+
+# Không cho hai lần deploy chồng nhau lên cùng một máy.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # Chặn deploy code hỏng: lint + unit test phải xanh trước khi build image.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: test -z "$(gofmt -l . | tee /dev/stderr)"
+      - run: go vet ./...
+      - run: go test -race -short ./...
+
+  build-push:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Xác định tag
+        id: meta
+        run: echo "tag=${{ inputs.image_tag || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.tag }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    # Runner cài trên chính EC2 (xem deployments/ec2/setup-runner.sh).
+    runs-on: [self-hosted, docs-hub-ec2]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đăng nhập GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Kéo image mới
+        env:
+          API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}
+        run: |
+          docker compose -f deployments/ec2/docker-compose.yml \
+            --env-file /home/web/docs-hub-api/.env.ec2 pull migrate api
+
+      - name: Chạy migration rồi khởi động API
+        env:
+          API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}
+        run: |
+          docker compose -f deployments/ec2/docker-compose.yml \
+            --env-file /home/web/docs-hub-api/.env.ec2 up -d migrate api
+
+      - name: Kiểm tra service đã sẵn sàng
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS -m 5 localhost:9090/readyz | grep -q '"status":"ready"'; then
+              echo "✅ readyz OK sau ${i} lần thử"
+              curl -s localhost:9090/readyz
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "❌ service không sẵn sàng sau 60s — log 50 dòng cuối:"
+          docker compose -f deployments/ec2/docker-compose.yml \
+            --env-file /home/web/docs-hub-api/.env.ec2 logs --tail 50 api
+          exit 1
+
+      - name: Dọn image cũ
+        if: always()
+        run: docker image prune -f --filter "until=168h"
