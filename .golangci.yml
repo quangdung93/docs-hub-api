@@ -1,125 +1,143 @@
-# golangci-lint config — biến các ràng buộc kiến trúc thành lỗi build.
-# Điểm mấu chốt: depguard chặn domain/usecase import gin/gorm/redis,
-# forbidigo cấm viết JSON trực tiếp ngoài package response.
+version: "2"
 run:
-  timeout: 5m
-  tests: true
   build-tags:
     - integration
-
+  tests: true
 output:
   formats:
-    - format: colored-line-number
-
+    text:
+      path: stdout
 linters:
-  disable-all: true
+  default: none
   enable:
-    - errcheck        # bắt lỗi không được kiểm tra
-    - govet
-    - staticcheck
-    - ineffassign
-    - unused
-    - revive          # style + best practice
-    - gosec           # bảo mật
-    - depguard        # ★ chặn import sai tầng
-    - forbidigo       # ★ chặn c.JSON/c.String ngoài response
-    - gochecknoglobals # ★ không biến global
-    - gochecknoinits   # ★ không init() side-effect
     - bodyclose
     - contextcheck
-    - noctx
-    - rowserrcheck
-    - sqlclosecheck
+    - depguard
+    - errcheck
     - errorlint
-    - wrapcheck
-    - misspell
-    - unconvert
-    - unparam
-    - nakedret
-    - prealloc
+    - forbidigo
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
     - goconst
     - gocyclo
-    - funlen
+    - gosec
+    - govet
+    - ineffassign
     - lll
-    - goimports
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/quangdung93/docs-hub-api
-
-  gocyclo:
-    min-complexity: 15
-
-  funlen:
-    lines: 80
-    statements: 50
-
-  lll:
-    line-length: 140
-    tab-width: 4
-
-  gosec:
-    excludes:
-      - G115 # integer overflow conversion — nhiễu với các cast an toàn có kiểm soát
-
-  depguard:
+    - misspell
+    - nakedret
+    - noctx
+    - prealloc
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - wrapcheck
+  settings:
+    depguard:
+      rules:
+        domain-pure:
+          list-mode: lax
+          files:
+            - '**/internal/module/*/domain/**'
+            - '**/internal/module/*/usecase/**'
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: domain/usecase không được phụ thuộc HTTP framework (Clean Architecture)
+            - pkg: gorm.io/gorm
+              desc: domain/usecase không được phụ thuộc ORM — dùng port repository
+            - pkg: gorm.io/driver/postgres
+              desc: domain/usecase không được biết driver DB
+            - pkg: github.com/redis/go-redis/v9
+              desc: domain/usecase chỉ được dùng port.Cache, không dùng client Redis trực tiếp
+            - pkg: github.com/minio/minio-go/v7
+              desc: domain/usecase chỉ được dùng port.ObjectStore
+            - pkg: github.com/rabbitmq/amqp091-go
+              desc: domain/usecase chỉ được dùng port.Publisher
+    forbidigo:
+      forbid:
+        - pattern: ^c\.JSON$
+          msg: Không ghi JSON trực tiếp — dùng internal/common/response.* để giữ đúng envelope ISC
+        - pattern: ^c\.String$
+          msg: Không ghi response dạng string — dùng internal/common/response.*
+        - pattern: ^c\.XML$
+          msg: Chỉ hỗ trợ JSON theo chuẩn ISC
+      exclude-godoc-examples: true
+      analyze-types: true
+    funlen:
+      lines: 80
+      statements: 50
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      excludes:
+        - G115
+    lll:
+      line-length: 140
+      tab-width: 4
+    wrapcheck:
+      # wrapcheck mặc định coi MỌI package khác package hiện tại là "external",
+      # kể cả package trong repo này — nên nó đòi bọc cả lỗi apperr/domain vốn
+      # đã mang mã lỗi và ngữ nghĩa sẵn. Chỉ giữ yêu cầu cho thư viện thứ ba,
+      # nơi lỗi thật sự cần thêm ngữ cảnh mới đọc được.
+      ignore-package-globs:
+        - github.com/quangdung93/docs-hub-api/*
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - .Wrap(
+        - .Wrapf(
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      # domain + usecase = business logic thuần, KHÔNG được biết framework/hạ tầng.
-      domain-pure:
-        list-mode: lax
-        files:
-          - "**/internal/module/*/domain/**"
-          - "**/internal/module/*/usecase/**"
-        deny:
-          - pkg: github.com/gin-gonic/gin
-            desc: "domain/usecase không được phụ thuộc HTTP framework (Clean Architecture)"
-          - pkg: gorm.io/gorm
-            desc: "domain/usecase không được phụ thuộc ORM — dùng port repository"
-          - pkg: gorm.io/driver/postgres
-            desc: "domain/usecase không được biết driver DB"
-          - pkg: github.com/redis/go-redis/v9
-            desc: "domain/usecase chỉ được dùng port.Cache, không dùng client Redis trực tiếp"
-          - pkg: github.com/minio/minio-go/v7
-            desc: "domain/usecase chỉ được dùng port.ObjectStore"
-          - pkg: github.com/rabbitmq/amqp091-go
-            desc: "domain/usecase chỉ được dùng port.Publisher"
-
-  forbidigo:
-    forbid:
-      - p: ^c\.JSON$
-        msg: "Không ghi JSON trực tiếp — dùng internal/common/response.* để giữ đúng envelope ISC"
-      - p: ^c\.String$
-        msg: "Không ghi response dạng string — dùng internal/common/response.*"
-      - p: ^c\.XML$
-        msg: "Chỉ hỗ trợ JSON theo chuẩn ISC"
-    exclude-godoc-examples: true
-    analyze-types: true
-
-  wrapcheck:
-    ignoreSigs:
-      - .Errorf(
-      - errors.New(
-      - errors.Unwrap(
-      - .Wrap(
-      - .Wrapf(
-
+      - linters:
+          - forbidigo
+        path: internal/common/response/
+      - linters:
+          - funlen
+          - gochecknoglobals
+          - goconst
+          - gocyclo
+          - gosec
+          - wrapcheck
+        path: _test\.go
+      - linters:
+          - funlen
+        path: cmd/
+      # contextcheck đòi truyền ctx khởi động vào closure của middleware (chạy
+      # theo từng request, phải dùng ctx của request) và vào shutdown (chủ đích
+      # dùng context mới có timeout, vì ctx khởi động đã bị cancel). Cả hai chỗ
+      # làm đúng sẽ vi phạm linter, nên loại trừ đúng một file.
+      - linters:
+          - contextcheck
+        path: internal/bootstrap/app\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    # forbidigo chỉ áp dụng ngoài package response (nơi được phép ghi JSON).
-    - path: internal/common/response/
-      linters:
-        - forbidigo
-    # test được nới lỏng vài rule gây nhiễu.
-    - path: _test\.go
-      linters:
-        - funlen
-        - gocyclo
-        - gosec
-        - wrapcheck
-        - gochecknoglobals
-    # main() và bootstrap được phép có cấu trúc dài hơn.
-    - path: cmd/
-      linters:
-        - funlen
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/quangdung93/docs-hub-api
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
