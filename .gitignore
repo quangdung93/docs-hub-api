@@ -12,6 +12,7 @@ coverage.html
 # Local env & secrets — KHÔNG commit secret vào repo
 .env
 .env.local
+.env.ec2
 *.local.env
 
 # Go build/vendor cache

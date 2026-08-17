@@ -119,6 +119,32 @@ logs: ## Xem log hạ tầng
 ps: ## Trạng thái hạ tầng
 	docker compose -f $(COMPOSE_FILE) ps
 
+## ------------------------------------------------------------------ EC2
+# Stack all-in-one chạy trực tiếp trên máy EC2. Secret nằm ở .env.ec2 (không commit).
+EC2_COMPOSE := deployments/ec2/docker-compose.yml
+EC2_ENV     := .env.ec2
+
+.PHONY: ec2-up
+ec2-up: ## Build + chạy toàn bộ stack trên EC2
+	@test -f $(EC2_ENV) || (echo "❌ Thiếu $(EC2_ENV) — cp .env.ec2.example $(EC2_ENV) rồi điền secret"; exit 1)
+	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) up -d --build
+
+.PHONY: ec2-down
+ec2-down: ## Tắt stack EC2 (giữ nguyên volume dữ liệu)
+	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) down
+
+.PHONY: ec2-logs
+ec2-logs: ## Xem log api trên EC2
+	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) logs -f api
+
+.PHONY: ec2-ps
+ec2-ps: ## Trạng thái stack EC2
+	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) ps
+
+.PHONY: ec2-restart
+ec2-restart: ## Build lại api sau khi pull code mới
+	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) up -d --build migrate api
+
 ## ------------------------------------------------------------------ Docker
 .PHONY: docker-build
 docker-build: ## Build Docker image
