@@ -106,7 +106,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8080:8080" # API — cổng duy nhất mở ra internet
+      # Chỉ nghe trên loopback: nginx (cùng máy) proxy 443 -> đây. Không mở
+      # 8080 ra internet để mọi request đều đi qua TLS.
+      - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090" # admin: /healthz, /metrics
     depends_on:
       postgres:

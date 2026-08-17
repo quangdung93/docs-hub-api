@@ -16,10 +16,16 @@ Security group — mở tối thiểu:
 | Port | Nguồn | Dùng cho |
 |---|---|---|
 | 22 | IP của bạn | SSH |
-| 8080 | IP của bạn / ALB | API + Swagger |
+| 80 | Anywhere | ACME HTTP-01 của certbot + redirect sang HTTPS |
+| 443 | Anywhere | nginx → API |
 
-Các cổng còn lại (5432, 6379, 5672, 15672, 9000, 9001, 9090) **cố tình chỉ bind
-`127.0.0.1`** trong compose. Cần xem thì dùng SSH tunnel, ví dụ RabbitMQ UI:
+**Không mở 8080.** API bind `127.0.0.1:8080`, chỉ nginx trên cùng máy gọi được —
+mọi request từ ngoài đều phải đi qua TLS. Cấu hình nginx nằm ở
+`deployments/ec2/nginx/api.docshub.io.vn.conf`, cách cài đặt và cấp cert ghi
+trong đầu file đó.
+
+Các cổng còn lại (5432, 6379, 5672, 15672, 9000, 9001, 9090) cũng chỉ bind
+`127.0.0.1`. Cần xem thì dùng SSH tunnel, ví dụ RabbitMQ UI:
 
 ```bash
 ssh -i key.pem -L 15672:127.0.0.1:15672 ubuntu@<ip>
@@ -68,8 +74,8 @@ curl -s localhost:9090/metrics     # prometheus
 Route nghiệp vụ nằm dưới `/public/api/v1/...` (không cần JWT) và
 `/internal/api/v1/...` (cần JWT) — xem `internal/bootstrap/router.go`.
 
-Từ máy bạn: `http://<ip-ec2>:8080`, Swagger ở
-`http://<ip-ec2>:8080/swagger/index.html`.
+Từ ngoài (qua nginx + TLS): `https://api.docshub.io.vn`, Swagger ở
+`https://api.docshub.io.vn/swagger/index.html`.
 
 ## 5. Cập nhật code
 
