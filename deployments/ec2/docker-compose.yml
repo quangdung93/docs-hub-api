@@ -1,0 +1,122 @@
+# Stack all-in-one chạy trên MỘT máy EC2.
+# Dùng: make ec2-up (bật) / make ec2-down (tắt) / make ec2-logs.
+#
+# Khác compose local ở hai điểm quan trọng:
+#   1. Chỉ cổng 8080 (API) mở ra ngoài. Postgres/Redis/RabbitMQ/MinIO/admin
+#      đều bind 127.0.0.1 — muốn xem thì SSH tunnel, đừng mở security group.
+#   2. Secret lấy từ file .env.ec2 ở gốc repo (không commit), truyền vào bằng
+#      `--env-file`; compose không tự đọc file này.
+name: document-hub-ec2
+
+x-app-env: &app-env
+  APP_ENV: dev
+  APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:?thiếu APP_POSTGRES_PASSWORD trong .env.ec2}
+  APP_REDIS_PASSWORD: ${APP_REDIS_PASSWORD:-}
+  APP_RABBITMQ_PASSWORD: ${APP_RABBITMQ_PASSWORD:?thiếu APP_RABBITMQ_PASSWORD trong .env.ec2}
+  APP_MINIO_SECRET_KEY: ${APP_MINIO_SECRET_KEY:?thiếu APP_MINIO_SECRET_KEY trong .env.ec2}
+  APP_JWT_SECRET: ${APP_JWT_SECRET:?thiếu APP_JWT_SECRET trong .env.ec2}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:?thiếu APP_POSTGRES_PASSWORD trong .env.ec2}
+      POSTGRES_DB: document_hub
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d document_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: ${APP_RABBITMQ_PASSWORD:?thiếu APP_RABBITMQ_PASSWORD trong .env.ec2}
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672" # management UI — xem qua SSH tunnel
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: app
+      MINIO_ROOT_PASSWORD: ${APP_MINIO_SECRET_KEY:?thiếu APP_MINIO_SECRET_KEY trong .env.ec2}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001" # console — xem qua SSH tunnel
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Migration chạy trước, api chỉ khởi động khi bước này thành công.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    image: docs-hub-api:ec2
+    entrypoint: ["/app/migrate", "-config", "/app/configs/config.ec2.yaml", "up"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    image: docs-hub-api:ec2
+    restart: unless-stopped
+    command: ["/app/api", "-config", "/app/configs/config.ec2.yaml"]
+    environment: *app-env
+    # Cho phép gọi dịch vụ chạy trực tiếp trên host EC2 qua host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080" # API — cổng duy nhất mở ra internet
+      - "127.0.0.1:9090:9090" # admin: /healthz, /metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  minio_data:
