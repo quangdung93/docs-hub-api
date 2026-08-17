@@ -35,8 +35,14 @@ func NewProcessor(db *gorm.DB, store port.ObjectStore, embedder Embeddings, cfg 
 }
 
 type work struct {
-	JobID, RevisionID, DocumentID, ProjectID, ObjectKey, MediaType string
-	VersionID, ChangeRequestID                                     *string
+	JobID           string  `gorm:"column:job_id"`
+	RevisionID      string  `gorm:"column:revision_id"`
+	DocumentID      string  `gorm:"column:document_id"`
+	ProjectID       string  `gorm:"column:project_id"`
+	ObjectKey       string  `gorm:"column:object_key"`
+	MediaType       string  `gorm:"column:media_type"`
+	VersionID       *string `gorm:"column:version_id"`
+	ChangeRequestID *string `gorm:"column:change_request_id"`
 }
 
 func (p *Processor) ProcessNext(ctx context.Context) (bool, error) {
@@ -54,28 +60,40 @@ func (p *Processor) ProcessNext(ctx context.Context) (bool, error) {
 	return true, nil
 }
 func (p *Processor) claim(ctx context.Context) (*work, error) { //nolint:lll
-	var w work
+	var claimed struct {
+		JobID              string `gorm:"column:job_id"`
+		DocumentRevisionID string `gorm:"column:document_revision_id"`
+	}
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		const claimSQL = `WITH next AS (
 			SELECT id FROM ingestion_jobs WHERE status='pending' AND available_at<=now()
 			ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
 		) UPDATE ingestion_jobs j SET status='running',attempt=attempt+1,updated_at=now()
 		FROM next WHERE j.id=next.id
-		RETURNING j.id AS job_id,j.document_revision_id AS revision_id`
-		return tx.Raw(claimSQL).Scan(&w).Error
+		RETURNING j.id AS job_id,j.document_revision_id`
+		if scanErr := tx.Raw(claimSQL).Scan(&claimed).Error; scanErr != nil {
+			return scanErr
+		}
+		if claimed.JobID != "" && claimed.DocumentRevisionID == "" {
+			return fmt.Errorf("job %s thiếu document_revision_id", claimed.JobID)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("claim ingestion job: %w", err)
 	}
-	if w.JobID == "" {
+	if claimed.JobID == "" {
 		return nil, nil
 	}
+	var w work
 	const revisionSQL = `SELECT document_id,project_id,object_key,media_type,
 		project_version_id AS version_id,change_request_id
 		FROM document_revisions WHERE id=?`
-	if err := p.db.WithContext(ctx).Raw(revisionSQL, w.RevisionID).Scan(&w).Error; err != nil {
+	if err := p.db.WithContext(ctx).Raw(revisionSQL, claimed.DocumentRevisionID).Scan(&w).Error; err != nil {
 		return nil, fmt.Errorf("đọc revision: %w", err)
 	}
+	w.JobID = claimed.JobID
+	w.RevisionID = claimed.DocumentRevisionID
 	return &w, nil
 }
 func (p *Processor) process(ctx context.Context, w *work) error { //nolint:lll

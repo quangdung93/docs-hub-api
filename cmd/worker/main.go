@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/ai/deterministic"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/ai/localai"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 	objectstorage "github.com/quangdung93/docs-hub-api/internal/infrastructure/storage"
@@ -32,9 +33,6 @@ func run() error { //nolint:lll
 	cfg, err := config.Load(*path)
 	if err != nil {
 		return fmt.Errorf("nạp config: %w", err)
-	}
-	if cfg.LocalAI.EmbeddingModel == "" {
-		return fmt.Errorf("thiếu local_ai.embedding_model")
 	}
 	log, err := logger.New(logger.Options{
 		Level: cfg.Log.Level, Encoding: cfg.Log.Encoding,
@@ -58,11 +56,27 @@ func run() error { //nolint:lll
 	if err != nil {
 		return fmt.Errorf("khởi tạo object storage: %w", err)
 	}
-	embed := localai.New(cfg.LocalAI.BaseURL, cfg.LocalAI.EmbeddingModel, cfg.LocalAI.EmbeddingDimension, cfg.LocalAI.Timeout)
+	embeddingModel := cfg.LocalAI.EmbeddingModel
+	embeddingDimension := cfg.LocalAI.EmbeddingDimension
+	var embed ingestion.Embeddings
+	if embeddingModel == "" && cfg.App.IsLocal() {
+		embeddingModel = "local-deterministic"
+		if embeddingDimension < 1 {
+			embeddingDimension = deterministic.DefaultDimension
+		}
+		embed = deterministic.New(embeddingDimension)
+		log.Warn("local_ai.embedding_model đang trống; dùng embedding deterministic chỉ dành cho local",
+			zap.Int("dimension", embeddingDimension))
+	} else {
+		if embeddingModel == "" {
+			return fmt.Errorf("thiếu local_ai.embedding_model")
+		}
+		embed = localai.New(cfg.LocalAI.BaseURL, embeddingModel, embeddingDimension, cfg.LocalAI.Timeout)
+	}
 	processor := ingestion.NewProcessor(db, store, embed, ingestion.Config{
 		ChunkLines: cfg.Ingestion.ChunkLines, OverlapLines: cfg.Ingestion.OverlapLines,
-		BatchSize: cfg.Ingestion.BatchSize, EmbeddingModel: cfg.LocalAI.EmbeddingModel,
-		EmbeddingDimension: cfg.LocalAI.EmbeddingDimension,
+		BatchSize: cfg.Ingestion.BatchSize, EmbeddingModel: embeddingModel,
+		EmbeddingDimension: embeddingDimension,
 	})
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
