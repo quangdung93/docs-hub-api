@@ -43,6 +43,15 @@ func Auth(verifier TokenVerifier) gin.HandlerFunc {
 	}
 }
 
+// LocalActor bỏ qua JWT và gắn actor cố định đã được bootstrap đọc từ DB.
+// Chỉ bootstrap local được phép dùng middleware này.
+func LocalActor(actor contextx.Actor) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(contextx.WithActor(c.Request.Context(), actor))
+		c.Next()
+	}
+}
+
 // bearerToken tách token khỏi header "Authorization: Bearer <token>".
 func bearerToken(header string) (string, error) {
 	const prefix = "Bearer "

@@ -4,6 +4,10 @@
 // @version      1.0
 // @description  Boilerplate Go Clean Architecture cho ISC.
 // @BasePath     /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Nhập: Bearer {access_token}
 package main
 
 import (

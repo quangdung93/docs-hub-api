@@ -14,7 +14,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/mq"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/mq/rabbitmq"
-	miniostore "github.com/quangdung93/docs-hub-api/internal/infrastructure/storage/minio"
+	objectstorage "github.com/quangdung93/docs-hub-api/internal/infrastructure/storage"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/telemetry"
 	"github.com/quangdung93/docs-hub-api/pkg/hashing"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
@@ -33,7 +33,7 @@ type Infra struct {
 	Tx          port.TxManager
 	Cache       port.Cache
 	Publisher   port.Publisher
-	ObjectStore port.ObjectStore // nil nếu MinIO tắt
+	ObjectStore port.ObjectStore
 	Hasher      *hashing.Hasher
 	JWT         *jwt.Manager
 
@@ -54,7 +54,7 @@ func NewInfra(ctx context.Context, cfg *config.Config, log *zap.Logger, metrics 
 	if err := infra.initRabbitMQ(cfg); err != nil {
 		return nil, err
 	}
-	if err := infra.initMinIO(ctx, cfg); err != nil {
+	if err := infra.initObjectStore(ctx, cfg); err != nil {
 		return nil, err
 	}
 	if err := infra.initSecurity(cfg); err != nil {
@@ -112,24 +112,14 @@ func (i *Infra) initRabbitMQ(cfg *config.Config) error {
 	return nil
 }
 
-func (i *Infra) initMinIO(ctx context.Context, cfg *config.Config) error {
-	if !cfg.MinIO.Enabled {
-		i.Log.Warn("MinIO đang TẮT")
-		return nil
-	}
-	client, err := miniostore.New(ctx, miniostore.Config{
-		Endpoint:  cfg.MinIO.Endpoint,
-		AccessKey: cfg.MinIO.AccessKey,
-		SecretKey: cfg.MinIO.SecretKey,
-		Bucket:    cfg.MinIO.Bucket,
-		UseSSL:    cfg.MinIO.UseSSL,
-		Region:    cfg.MinIO.Region,
-	})
+func (i *Infra) initObjectStore(ctx context.Context, cfg *config.Config) error {
+	store, checker, err := objectstorage.New(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("khởi tạo MinIO: %w", err)
+		return err
 	}
-	i.ObjectStore = miniostore.NewStore(client, cfg.MinIO.Bucket)
-	i.Checkers = append(i.Checkers, miniostore.NewHealthChecker(client, cfg.MinIO.Bucket))
+	i.ObjectStore = store
+	i.Checkers = append(i.Checkers, checker)
+	i.Log.Info("đã khởi tạo object storage", zap.String("driver", cfg.Storage.Driver))
 	return nil
 }
 

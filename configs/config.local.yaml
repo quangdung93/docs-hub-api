@@ -8,7 +8,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576 # 1 MiB
+  max_body_bytes: 57671680 # 55 MiB, gồm multipart overhead cho giới hạn file 50 MiB
   shutdown_timeout: 15s
   enable_pprof: true
   enable_swagger: true
@@ -19,9 +19,9 @@ log:
 
 postgres:
   host: 127.0.0.1
-  port: 5432
+  port: 5433
   user: app
-  password: app_password # local only
+  password: 123456 # local only
   database: document_hub
   ssl_mode: disable
   max_open_conns: 25
@@ -45,8 +45,13 @@ rabbitmq:
   vhost: /
   exchange: document_hub.events
 
+storage:
+  driver: filesystem
+  filesystem:
+    root: ./var/storage
+
 minio:
-  enabled: true
+  enabled: false
   endpoint: 127.0.0.1:9000
   access_key: minioadmin
   secret_key: minioadmin
@@ -88,3 +93,15 @@ timeout:
   redis: 2s
   mq: 3s
   external: 5s
+
+local_ai:
+  base_url: http://127.0.0.1:8081
+  embedding_model: ""
+  embedding_dimension: 0
+  timeout: 30s
+
+ingestion:
+  poll_interval: 2s
+  chunk_lines: 80
+  overlap_lines: 10
+  batch_size: 16

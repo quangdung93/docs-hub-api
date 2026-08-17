@@ -37,11 +37,14 @@ delivery ──→ usecase ──→ domain ←── repository
 ```bash
 # 0) Cần Go 1.25 (brew install go) + Docker.
 make tidy                 # go mod tidy + verify (GATE kiểm tra version thư viện)
-make up                   # bật PostgreSQL/Redis/RabbitMQ/MinIO/Jaeger/Prometheus
+make up-local             # bật PostgreSQL/Redis/RabbitMQ; file ở ./var/storage
 make migrate-up           # tạo schema
 make seed                 # tạo admin@local / Admin@12345
 make run                  # chạy API :8080, admin :9090
 ```
+
+Local dùng `storage.driver: filesystem`, không cần MinIO. `make up` vẫn dành
+cho full Docker stack/dev environment sử dụng MinIO.
 
 Kiểm tra:
 ```bash

@@ -9,7 +9,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576
+  max_body_bytes: 57671680
   shutdown_timeout: 15s
   enable_pprof: true
   enable_swagger: true
@@ -45,6 +45,11 @@ rabbitmq:
   password: "" # <- APP_RABBITMQ_PASSWORD
   vhost: /
   exchange: document_hub.events
+
+storage:
+  driver: minio
+  filesystem:
+    root: ./var/storage
 
 minio:
   enabled: true

@@ -24,6 +24,8 @@ func TestLoad_LocalConfig(t *testing.T) {
 	require.True(t, cfg.App.IsLocal())
 	require.Equal(t, 8080, cfg.HTTP.APIPort)
 	require.Equal(t, 9090, cfg.HTTP.AdminPort)
+	require.Equal(t, "filesystem", cfg.Storage.Driver)
+	require.Equal(t, "./var/storage", cfg.Storage.Filesystem.Root)
 }
 
 // TestLoad_EnvOverridesYAML là bằng chứng ENV override được YAML.

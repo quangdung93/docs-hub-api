@@ -17,5 +17,19 @@ func registerSwagger(engine *gin.Engine, cfg *config.Config) {
 	if !cfg.HTTP.EnableSwagger {
 		return
 	}
-	engine.GET("/swagger/*any", ginswagger.WrapHandler(swaggerfiles.Handler))
+	engine.GET("/swagger/*any", swaggerHeaders(), ginswagger.WrapHandler(swaggerfiles.Handler))
+}
+
+// swaggerHeaders nới CSP đúng phạm vi Swagger UI. Trang này dùng script/style
+// inline của gin-swagger; các API còn lại vẫn giữ default-src 'none'.
+func swaggerHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.Writer.Header()
+		header.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
+				"font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+		header.Set("Cache-Control", "no-store")
+		c.Next()
+	}
 }

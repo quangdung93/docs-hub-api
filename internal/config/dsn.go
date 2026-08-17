@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+)
 
 // DSN dựng chuỗi kết nối PostgreSQL cho GORM driver (dạng key-value).
 func (p PostgresConfig) DSN() string {
@@ -10,8 +14,16 @@ func (p PostgresConfig) DSN() string {
 
 // MigrationDSN dựng URL cho golang-migrate (scheme postgres://).
 func (p PostgresConfig) MigrationDSN() string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		p.User, p.Password, p.Host, p.Port, p.Database, p.SSLMode)
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(p.User, p.Password),
+		Host:   p.Host + ":" + strconv.Itoa(p.Port),
+		Path:   p.Database,
+	}
+	query := u.Query()
+	query.Set("sslmode", p.SSLMode)
+	u.RawQuery = query.Encode()
+	return u.String()
 }
 
 // Addr trả về host:port của Redis.

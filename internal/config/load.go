@@ -78,6 +78,12 @@ func checkSafety(cfg *Config) error {
 	if cfg.JWT.Algorithm == "HS256" && cfg.JWT.Secret == "" {
 		return fmt.Errorf("thiếu jwt.secret (đặt qua ENV %s_JWT_SECRET)", envPrefix)
 	}
+	if cfg.Storage.Driver == "filesystem" && strings.TrimSpace(cfg.Storage.Filesystem.Root) == "" {
+		return fmt.Errorf("thiếu storage.filesystem.root")
+	}
+	if cfg.Storage.Driver == "minio" && !cfg.MinIO.Enabled {
+		return fmt.Errorf("storage.driver=minio yêu cầu minio.enabled=true")
+	}
 
 	return nil
 }
@@ -98,6 +104,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("postgres.conn_max_idle_time", "10m")
 
 	v.SetDefault("redis.pool_size", 10)
+	v.SetDefault("storage.driver", "minio")
+	v.SetDefault("storage.filesystem.root", "./var/storage")
 
 	v.SetDefault("jwt.algorithm", "HS256")
 	v.SetDefault("jwt.access_ttl", "15m")
@@ -108,6 +116,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.window", "1m")
 
 	v.SetDefault("telemetry.sample_ratio", 1.0)
+	v.SetDefault("local_ai.base_url", "http://127.0.0.1:8081")
+	v.SetDefault("local_ai.embedding_model", "")
+	v.SetDefault("local_ai.embedding_dimension", 0)
+	v.SetDefault("local_ai.timeout", "30s")
+	v.SetDefault("ingestion.poll_interval", "2s")
+	v.SetDefault("ingestion.chunk_lines", 80)
+	v.SetDefault("ingestion.overlap_lines", 10)
+	v.SetDefault("ingestion.batch_size", 16)
 
 	v.SetDefault("timeout.read_header", "5s")
 	v.SetDefault("timeout.read", "15s")

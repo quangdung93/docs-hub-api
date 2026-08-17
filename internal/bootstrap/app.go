@@ -44,14 +44,16 @@ func Run(ctx context.Context, cfg *config.Config, log *zap.Logger) error {
 	}
 
 	// 3) Module nghiệp vụ.
-	modules := buildModules(infra)
+	modules := buildModules(cfg, infra)
 
 	// 4) Engine + route.
 	extra := buildGlobalInfraMiddleware(cfg, infra)
 	engine := httpserver.NewAPIEngine(httpserver.EngineDeps{
 		Config: cfg, Logger: log, Metrics: metrics, Extra: extra,
 	})
-	registerRoutes(engine, cfg, infra, modules)
+	if err = registerRoutes(engine, cfg, infra, modules); err != nil {
+		return fmt.Errorf("đăng ký route: %w", err)
+	}
 	registerSwagger(engine, cfg)
 
 	// 5) Hai server: API và Admin.

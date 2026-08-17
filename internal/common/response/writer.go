@@ -30,6 +30,11 @@ func Created(c *gin.Context, data any) {
 	c.JSON(http.StatusCreated, newSuccess(data, buildMeta(c)))
 }
 
+// Accepted ghi phản hồi thao tác bất đồng bộ đã được tiếp nhận (HTTP 202).
+func Accepted(c *gin.Context, data any) {
+	c.JSON(http.StatusAccepted, newSuccess(data, buildMeta(c)))
+}
+
 // NoContent ghi phản hồi 204 (không có body theo chuẩn HTTP).
 func NoContent(c *gin.Context) {
 	c.Status(http.StatusNoContent)
