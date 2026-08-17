@@ -30,12 +30,18 @@ jobs:
         run: go vet ./...
 
       # Pin version để CI và máy dev báo lỗi giống nhau. Bản v1.61 KHÔNG chạy
-      # được với Go 1.25 (lỗi khi nạp package), nên dùng nhánh v2.
+      # được với Go 1.25, nên dùng nhánh v2 (kéo theo .golangci.yml schema v2).
+      # golangci-lint v2 cần action v7 trở lên.
+      #
+      # only-new-issues: code sẵn có trên main còn 18 issue (errorlint, goconst,
+      # noctx, revive, wrapcheck, lll). Bắt PR này dọn hết là trộn hai việc khác
+      # nhau, nên lint chỉ chặn lỗi MỚI do PR thêm vào; nợ cũ dọn ở PR riêng.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
           args: --timeout 5m
+          only-new-issues: true
 
   test:
     runs-on: ubuntu-latest

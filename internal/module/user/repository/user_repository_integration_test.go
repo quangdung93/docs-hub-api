@@ -34,6 +34,15 @@ func paginationQuery(page, limit int) pagination.Query {
 
 // createUsersTable dựng schema tối thiểu cho test (khớp migration Postgres):
 // dùng UNIQUE partial index thay vì composite (email, deleted_at).
+//
+// Mỗi phần tử phải là MỘT câu lệnh: pgx chạy qua extended protocol (prepared
+// statement) nên Postgres từ chối chuỗi nhiều lệnh —
+// "cannot insert multiple commands into a prepared statement" (SQLSTATE 42601).
+var schemaStatements = []string{
+	createUsersTable,
+	createUsersEmailIndex,
+}
+
 const createUsersTable = `
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY,
@@ -46,8 +55,10 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     deleted_at    TIMESTAMPTZ
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uk_users_email_active ON users (email) WHERE deleted_at IS NULL;`
+)`
+
+const createUsersEmailIndex = `
+CREATE UNIQUE INDEX IF NOT EXISTS uk_users_email_active ON users (email) WHERE deleted_at IS NULL`
 
 func setupDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -57,7 +68,12 @@ func setupDB(t *testing.T) *gorm.DB {
 	}
 	db, err := postgres.New(postgres.Config{DSN: dsn, MaxOpenConns: 5, MaxIdleConns: 2}, zap.NewNop())
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(createUsersTable).Error)
+	for _, stmt := range schemaStatements {
+		require.NoError(t, db.Exec(stmt).Error)
+	}
+	// Dọn bảng để test chạy lại được trên cùng một Postgres (CI dựng DB mới mỗi
+	// lần, nhưng `make test-integration` ở máy dev thì không).
+	require.NoError(t, db.Exec(`TRUNCATE TABLE users`).Error)
 	return db
 }
 
