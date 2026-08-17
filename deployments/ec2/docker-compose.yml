@@ -97,7 +97,10 @@ services:
       dockerfile: deployments/docker/Dockerfile
     image: docs-hub-api:ec2
     restart: unless-stopped
-    command: ["/app/api", "-config", "/app/configs/config.ec2.yaml"]
+    # Chỉ truyền ĐỐI SỐ: Dockerfile đã có ENTRYPOINT ["/app/api"]. Lặp lại
+    # "/app/api" ở đây sẽ khiến flag.Parse() dừng ngay ở đối số không phải cờ
+    # và bỏ qua -config (service âm thầm chạy config.<APP_ENV>.yaml).
+    command: ["-config", "/app/configs/config.ec2.yaml"]
     environment: *app-env
     # Cho phép gọi dịch vụ chạy trực tiếp trên host EC2 qua host.docker.internal.
     extra_hosts:

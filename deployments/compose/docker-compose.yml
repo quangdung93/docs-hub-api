@@ -107,7 +107,9 @@ services:
     build:
       context: ../..
       dockerfile: deployments/docker/Dockerfile
-    command: ["/app/api", "-config", "/app/configs/config.dev.yaml"]
+    # Chỉ truyền đối số — ENTRYPOINT đã là /app/api. Lặp lại binary ở đây khiến
+    # flag.Parse() bỏ qua -config.
+    command: ["-config", "/app/configs/config.dev.yaml"]
     environment:
       APP_ENV: dev
       APP_POSTGRES_PASSWORD: app_password
