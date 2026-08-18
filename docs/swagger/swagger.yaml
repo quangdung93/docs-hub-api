@@ -1,5 +1,29 @@
 basePath: /
 definitions:
+  http.ChangeMemberRoleRequest:
+    properties:
+      role:
+        enum:
+        - editor
+        - viewer
+        type: string
+    required:
+    - role
+    type: object
+  http.CreateProjectRequest:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      settings:
+        $ref: '#/definitions/http.ProjectSettingsRequest'
+    required:
+    - name
+    type: object
   http.CreateUserRequest:
     properties:
       email:
@@ -21,6 +45,13 @@ definitions:
     - full_name
     - password
     type: object
+  http.DeleteProjectRequest:
+    properties:
+      confirm_name:
+        type: string
+    required:
+    - confirm_name
+    type: object
   http.DeleteUserRequest:
     properties:
       version:
@@ -28,6 +59,19 @@ definitions:
         type: integer
     required:
     - version
+    type: object
+  http.InviteMemberRequest:
+    properties:
+      role:
+        enum:
+        - editor
+        - viewer
+        type: string
+      user_id:
+        type: string
+    required:
+    - role
+    - user_id
     type: object
   http.LoginRequest:
     properties:
@@ -38,6 +82,46 @@ definitions:
     required:
     - password
     - username
+    type: object
+  http.ProjectSettingsRequest:
+    properties:
+      allowed_formats:
+        items:
+          type: string
+        type: array
+      chunk_size:
+        minimum: 1
+        type: integer
+      model:
+        type: string
+      top_k:
+        minimum: 1
+        type: integer
+    required:
+    - allowed_formats
+    type: object
+  http.RequestAvatarUploadRequest:
+    properties:
+      mime_type:
+        type: string
+      size_bytes:
+        minimum: 1
+        type: integer
+    required:
+    - mime_type
+    - size_bytes
+    type: object
+  http.UpdateProjectRequest:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      settings:
+        $ref: '#/definitions/http.ProjectSettingsRequest'
     type: object
   http.UpdateStatusRequest:
     properties:
@@ -162,6 +246,283 @@ paths:
       summary: Lấy thông tin cá nhân
       tags:
       - auth
+  /internal/api/v1/projects:
+    get:
+      parameters:
+      - description: Trang
+        in: query
+        name: page
+        type: integer
+      - description: Số bản ghi/trang
+        in: query
+        name: limit
+        type: integer
+      - description: Cột sắp xếp
+        in: query
+        name: sort_by
+        type: string
+      - description: asc|desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Danh sách dự án của người dùng hiện tại
+      tags:
+      - projects
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Thông tin dự án
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tạo dự án mới
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Xác nhận tên dự án
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.DeleteProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
+      tags:
+      - projects
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thông tin cập nhật
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Cập nhật thông tin/cấu hình dự án
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/avatar/complete:
+    post:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xác nhận đã upload xong ảnh đại diện dự án
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/avatar/upload-url:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thông tin ảnh
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.RequestAvatarUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xin phép upload ảnh đại diện dự án (trả presigned URL để client tự
+        tải lên)
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/members:
+    get:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Danh sách thành viên dự án
+      tags:
+      - projects
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thông tin mời
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.InviteMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Mời thành viên mới vào dự án
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/members/{userId}:
+    delete:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Gỡ thành viên khỏi dự án
+      tags:
+      - projects
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Vai trò mới
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.ChangeMemberRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Đổi vai trò của thành viên
+      tags:
+      - projects
+  /internal/api/v1/projects/{id}/members/me/accept:
+    post:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xác nhận lời mời tham gia dự án
+      tags:
+      - projects
   /internal/api/v1/users:
     get:
       parameters:

@@ -23,6 +23,7 @@ type Config struct {
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 	Telemetry TelemetryConfig `mapstructure:"telemetry"`
 	Timeout   TimeoutConfig   `mapstructure:"timeout"   validate:"required"`
+	Project   ProjectConfig   `mapstructure:"project"   validate:"required"`
 }
 
 // Environment là các môi trường được hỗ trợ.
@@ -113,6 +114,13 @@ type MinIOConfig struct {
 	Bucket    string `mapstructure:"bucket"`
 	UseSSL    bool   `mapstructure:"use_ssl"`
 	Region    string `mapstructure:"region"`
+}
+
+// ProjectConfig cấu hình nghiệp vụ ảnh đại diện dự án (module project).
+// AvatarMaxBytes là giá trị TẠM THỜI (5 MiB), chờ team chốt lại chính thức.
+type ProjectConfig struct {
+	AvatarMaxBytes     int64         `mapstructure:"avatar_max_bytes"     validate:"required,min=1"`
+	AvatarPresignedTTL time.Duration `mapstructure:"avatar_presigned_ttl" validate:"required"`
 }
 
 // JWTConfig cấu hình ký/verify token.

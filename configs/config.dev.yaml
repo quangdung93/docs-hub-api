@@ -55,6 +55,10 @@ minio:
   use_ssl: false
   region: us-east-1
 
+project:
+  avatar_max_bytes: 5242880 # 5 MiB — TẠM THỜI, chờ team chốt lại
+  avatar_presigned_ttl: 15m
+
 jwt:
   algorithm: HS256
   secret: "" # <- APP_JWT_SECRET

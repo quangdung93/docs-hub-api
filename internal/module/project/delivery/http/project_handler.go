@@ -1,0 +1,611 @@
+// Package http là tầng delivery của module project: bind/validate request,
+// gọi service, trả envelope. Handler phải MỎNG — không chứa business logic.
+// RBAC theo vai trò trong dự án được gắn ở route.go qua middleware.RequireProjectRole
+// (không ở trong handler).
+package http
+
+import (
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/common/response"
+	"github.com/quangdung93/docs-hub-api/internal/common/validatorx"
+
+	// "github.com/quangdung93/docs-hub-api/internal/middleware" // TODO: bật lại khi kích hoạt RBAC (xem Register)
+	"github.com/quangdung93/docs-hub-api/internal/module/project/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/project/usecase"
+)
+
+// Register gắn các route của module project vào router group nội bộ.
+// memberRepo dùng để middleware.RequireProjectRole tự tra cứu vai trò của actor
+// trong dự án (path param "id") — xem internal/middleware/project_auth.go.
+//
+// Quy ước phân quyền (theo BR trong URD/SRS: Owner toàn quyền, Editor chỉ
+// upload+query, Viewer chỉ query — sửa cấu hình/thông tin dự án là hành vi
+// quản trị, thuộc về Owner, không phải Editor).
+//
+// LƯU Ý: "chỉ owner" bên dưới nghĩa là owner trong project_members — admin hệ
+// thống (role "admin" toàn cục từ JWT) LUÔN bypass toàn bộ allowedRoles, xử lý
+// ở đầu middleware.RequireProjectRole, áp dụng chung cho mọi route dùng nó,
+// không cần liệt kê riêng ở đây.
+//   - GET/POST /projects              : chỉ cần đã xác thực (không gắn với 1 dự án cụ thể).
+//   - PATCH    /projects/:id          : chỉ owner.
+//   - DELETE   /projects/:id          : chỉ owner, yêu cầu xác nhận đúng tên dự án (xem Delete godoc).
+//   - GET      /projects/:id/members  : owner, editor, viewer (mọi thành viên active).
+//   - POST|PATCH|DELETE .../members.. : chỉ owner (quản lý thành viên).
+//   - POST .../members/me/accept      : chỉ cần đã xác thực (tự accept lời mời của mình).
+//
+//nolint:unparam,revive // memberRepo giữ lại cho lúc bật lại RBAC
+func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) {
+	// onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
+	// anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
+
+	projects := rg.Group("/projects")
+	{
+		projects.GET("", h.List)
+		projects.POST("", h.Create)
+		// projects.PATCH("/:id", onlyOwner, h.Update)
+		projects.PATCH("/:id", h.Update)
+		// projects.DELETE("/:id", onlyOwner, h.Delete)
+		projects.DELETE("/:id", h.Delete)
+
+		projects.POST("/:id/avatar/upload-url", h.RequestAvatarUpload)
+		projects.POST("/:id/avatar/complete", h.CompleteAvatarUpload)
+
+		// projects.GET("/:id/members", anyActiveMember, h.ListMembers)
+		projects.GET("/:id/members", h.ListMembers)
+		// projects.POST("/:id/members", onlyOwner, h.InviteMember)
+		projects.POST("/:id/members", h.InviteMember)
+		projects.POST("/:id/members/me/accept", h.AcceptInvite)
+		// projects.PATCH("/:id/members/:userId", onlyOwner, h.ChangeMemberRole)
+		projects.PATCH("/:id/members/:userId", h.ChangeMemberRole)
+		// projects.DELETE("/:id/members/:userId", onlyOwner, h.RemoveMember)
+		projects.DELETE("/:id/members/:userId", h.RemoveMember)
+	}
+}
+
+// Handler xử lý HTTP cho module project. Chỉ giữ tham chiếu service — không state khác.
+type Handler struct {
+	svc usecase.Service
+}
+
+// NewHandler tạo Handler.
+func NewHandler(svc usecase.Service) *Handler {
+	return &Handler{svc: svc}
+}
+
+// --- DTO request ---
+
+// ProjectSettingsRequest là body cấu hình RAG của dự án.
+type ProjectSettingsRequest struct {
+	Model          string   `json:"model"           binding:"omitempty"`
+	TopK           int      `json:"top_k"           binding:"omitempty,min=1"`
+	ChunkSize      int      `json:"chunk_size"      binding:"omitempty,min=1"`
+	AllowedFormats []string `json:"allowed_formats" binding:"omitempty,dive,required"`
+}
+
+func (r ProjectSettingsRequest) toDomain() domain.ProjectSettings {
+	return domain.ProjectSettings{
+		Model:          r.Model,
+		TopK:           r.TopK,
+		ChunkSize:      r.ChunkSize,
+		AllowedFormats: r.AllowedFormats,
+	}
+}
+
+// CreateProjectRequest là body tạo dự án.
+type CreateProjectRequest struct {
+	Name        string                  `json:"name"        binding:"required,min=1,max=255"`
+	Description string                  `json:"description" binding:"omitempty,max=2000"`
+	Settings    *ProjectSettingsRequest `json:"settings"    binding:"omitempty"`
+}
+
+// UpdateProjectRequest là body cập nhật dự án. Field nil = giữ nguyên (PATCH).
+type UpdateProjectRequest struct {
+	Name        *string                 `json:"name"        binding:"omitempty,min=1,max=255"`
+	Description *string                 `json:"description" binding:"omitempty,max=2000"`
+	Settings    *ProjectSettingsRequest `json:"settings"    binding:"omitempty"`
+}
+
+// DeleteProjectRequest là body xóa dự án. ConfirmName phải khớp CHÍNH XÁC tên
+// hiện tại của dự án (BR SRS: xóa dự án không thể hoàn tác, cần xác nhận).
+type DeleteProjectRequest struct {
+	ConfirmName string `json:"confirm_name" binding:"required"`
+}
+
+// ListProjectQuery là query string liệt kê dự án (nhúng pagination.Query).
+type ListProjectQuery struct {
+	pagination.Query
+}
+
+// RequestAvatarUploadRequest là body xin phép upload ảnh đại diện dự án.
+type RequestAvatarUploadRequest struct {
+	MimeType  string `json:"mime_type"  binding:"required"`
+	SizeBytes int64  `json:"size_bytes" binding:"required,min=1"`
+}
+
+// InviteMemberRequest là body mời thành viên mới.
+type InviteMemberRequest struct {
+	UserID string `json:"user_id" binding:"required,uuid"`
+	Role   string `json:"role"    binding:"required,oneof=editor viewer"`
+}
+
+// ChangeMemberRoleRequest là body đổi vai trò thành viên.
+type ChangeMemberRoleRequest struct {
+	Role string `json:"role" binding:"required,oneof=editor viewer"`
+}
+
+// --- DTO response ---
+
+// ProjectSettingsResponse là cấu hình RAG trả về client.
+type ProjectSettingsResponse struct {
+	Model          string   `json:"model"`
+	TopK           int      `json:"top_k"`
+	ChunkSize      int      `json:"chunk_size"`
+	AllowedFormats []string `json:"allowed_formats"`
+}
+
+// ProjectResponse là biểu diễn dự án trả ra client.
+type ProjectResponse struct {
+	ID          string                  `json:"id"`
+	OwnerID     string                  `json:"owner_id"`
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Status      string                  `json:"status"`
+	Settings    ProjectSettingsResponse `json:"settings"`
+	// AvatarURL là presigned GET URL của ảnh đại diện, rỗng nếu dự án chưa có ảnh.
+	AvatarURL string    `json:"avatar_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// toProjectResponse ánh xạ entity sang DTO. avatarURL do caller tự resolve
+// (qua Service.AvatarURL) — hàm này thuần, không gọi service.
+func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
+	return ProjectResponse{
+		ID:          p.ID.String(),
+		OwnerID:     p.OwnerID.String(),
+		Name:        p.Name,
+		Description: p.Description,
+		Status:      p.Status,
+		Settings: ProjectSettingsResponse{
+			Model:          p.Settings.Model,
+			TopK:           p.Settings.TopK,
+			ChunkSize:      p.Settings.ChunkSize,
+			AllowedFormats: p.Settings.AllowedFormats,
+		},
+		AvatarURL: avatarURL,
+		CreatedAt: p.CreatedAt,
+	}
+}
+
+// resolveAvatarURL gọi Service.AvatarURL và biến lỗi thành c.Error. Trả false
+// nếu có lỗi (caller phải return ngay).
+func (h *Handler) resolveAvatarURL(c *gin.Context, p *domain.Project) (string, bool) {
+	url, err := h.svc.AvatarURL(c.Request.Context(), p)
+	if err != nil {
+		_ = c.Error(err)
+		return "", false
+	}
+	return url, true
+}
+
+// ProjectMemberResponse là biểu diễn thành viên dự án trả ra client.
+type ProjectMemberResponse struct {
+	ID        string     `json:"id"`
+	ProjectID string     `json:"project_id"`
+	UserID    string     `json:"user_id"`
+	Role      string     `json:"role"`
+	Status    string     `json:"status"`
+	InvitedAt time.Time  `json:"invited_at"`
+	JoinedAt  *time.Time `json:"joined_at,omitempty"`
+}
+
+func toMemberResponse(m *domain.ProjectMember) ProjectMemberResponse {
+	return ProjectMemberResponse{
+		ID:        m.ID.String(),
+		ProjectID: m.ProjectID.String(),
+		UserID:    m.UserID.String(),
+		Role:      string(m.Role),
+		Status:    string(m.Status),
+		InvitedAt: m.InvitedAt,
+		JoinedAt:  m.JoinedAt,
+	}
+}
+
+func toMemberResponseList(members []domain.ProjectMember) []ProjectMemberResponse {
+	out := make([]ProjectMemberResponse, 0, len(members))
+	for i := range members {
+		out = append(out, toMemberResponse(&members[i]))
+	}
+	return out
+}
+
+// --- Helpers ---
+
+// bindBody bind JSON body; lỗi -> REQ_400 kèm details. Trả false nếu lỗi.
+func bindBody(c *gin.Context, req any) bool {
+	if err := c.ShouldBindJSON(req); err != nil {
+		_ = c.Error(apperr.BadRequest("Dữ liệu không hợp lệ").WithDetails(validatorx.ToDetails(err)))
+		return false
+	}
+	return true
+}
+
+// parseUUIDParam đọc và parse UUID từ path param. Lỗi -> REQ_400.
+func parseUUIDParam(c *gin.Context, name string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(name))
+	if err != nil {
+		_ = c.Error(apperr.BadRequest("ID không hợp lệ").
+			WithDetails(map[string]string{name: "phải là UUID hợp lệ"}))
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+// currentUserID lấy user_id của actor đã xác thực (đặt bởi middleware.Auth).
+func currentUserID(c *gin.Context) (uuid.UUID, bool) {
+	actor, ok := contextx.ActorFrom(c.Request.Context())
+	if !ok {
+		_ = c.Error(apperr.Unauthorized("Chưa xác thực"))
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(actor.UserID)
+	if err != nil {
+		_ = c.Error(apperr.Unauthorized("Định danh người dùng không hợp lệ"))
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+// --- Handlers: Project ---
+
+// Create godoc
+// @Summary  Tạo dự án mới
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    body  body      CreateProjectRequest  true  "Thông tin dự án"
+// @Success  201   {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects [post]
+func (h *Handler) Create(c *gin.Context) {
+	ownerID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	var req CreateProjectRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	settings := domain.ProjectSettings{}
+	if req.Settings != nil {
+		settings = req.Settings.toDomain()
+	}
+	project, err := h.svc.Create(c.Request.Context(), usecase.CreateProjectInput{
+		OwnerID:     ownerID,
+		Name:        req.Name,
+		Description: req.Description,
+		Settings:    settings,
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.Created(c, toProjectResponse(project, avatarURL))
+}
+
+// List godoc
+// @Summary  Danh sách dự án của người dùng hiện tại
+// @Tags     projects
+// @Produce  json
+// @Param    page     query     int     false  "Trang"
+// @Param    limit    query     int     false  "Số bản ghi/trang"
+// @Param    sort_by  query     string  false  "Cột sắp xếp"
+// @Param    order    query     string  false  "asc|desc"
+// @Success  200      {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects [get]
+func (h *Handler) List(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	var q ListProjectQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		_ = c.Error(apperr.BadRequest("Tham số truy vấn không hợp lệ").WithDetails(validatorx.ToDetails(err)))
+		return
+	}
+	projects, meta, err := h.svc.List(c.Request.Context(), userID, q.Query)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	out := make([]ProjectResponse, 0, len(projects))
+	for i := range projects {
+		avatarURL, ok := h.resolveAvatarURL(c, &projects[i])
+		if !ok {
+			return
+		}
+		out = append(out, toProjectResponse(&projects[i], avatarURL))
+	}
+	response.OKPaged(c, out, meta)
+}
+
+// Update godoc
+// @Summary  Cập nhật thông tin/cấu hình dự án
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id    path      string                 true  "Project ID"
+// @Param    body  body      UpdateProjectRequest   true  "Thông tin cập nhật"
+// @Success  200   {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id} [patch]
+func (h *Handler) Update(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req UpdateProjectRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	var settings *domain.ProjectSettings
+	if req.Settings != nil {
+		s := req.Settings.toDomain()
+		settings = &s
+	}
+	project, err := h.svc.Update(c.Request.Context(), usecase.UpdateProjectInput{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Settings:    settings,
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL))
+}
+
+// Delete godoc
+// @Summary  Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id    path      string                true  "Project ID"
+// @Param    body  body      DeleteProjectRequest  true  "Xác nhận tên dự án"
+// @Success  204
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id} [delete]
+func (h *Handler) Delete(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req DeleteProjectRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	if err := h.svc.Delete(c.Request.Context(), usecase.DeleteProjectInput{
+		ID: id, ConfirmName: req.ConfirmName,
+	}); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.NoContent(c)
+}
+
+// RequestAvatarUpload godoc
+// @Summary  Xin phép upload ảnh đại diện dự án (trả presigned URL để client tự tải lên)
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id    path      string                       true  "Project ID"
+// @Param    body  body      RequestAvatarUploadRequest  true  "Thông tin ảnh"
+// @Success  200   {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/avatar/upload-url [post]
+func (h *Handler) RequestAvatarUpload(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req RequestAvatarUploadRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	result, err := h.svc.RequestAvatarUpload(c.Request.Context(), usecase.RequestAvatarUploadInput{
+		ProjectID: id,
+		MimeType:  req.MimeType,
+		SizeBytes: req.SizeBytes,
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.OK(c, gin.H{"upload_url": result.UploadURL, "expires_at": result.ExpiresAt})
+}
+
+// CompleteAvatarUpload godoc
+// @Summary  Xác nhận đã upload xong ảnh đại diện dự án
+// @Tags     projects
+// @Produce  json
+// @Param    id  path      string  true  "Project ID"
+// @Success  200 {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/avatar/complete [post]
+func (h *Handler) CompleteAvatarUpload(c *gin.Context) {
+	id, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	project, err := h.svc.CompleteAvatarUpload(c.Request.Context(), id)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL))
+}
+
+// --- Handlers: Project members ---
+
+// ListMembers godoc
+// @Summary  Danh sách thành viên dự án
+// @Tags     projects
+// @Produce  json
+// @Param    id  path      string  true  "Project ID"
+// @Success  200 {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/members [get]
+func (h *Handler) ListMembers(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	members, err := h.svc.ListMembers(c.Request.Context(), projectID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.OK(c, toMemberResponseList(members))
+}
+
+// InviteMember godoc
+// @Summary  Mời thành viên mới vào dự án
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id    path      string                true  "Project ID"
+// @Param    body  body      InviteMemberRequest   true  "Thông tin mời"
+// @Success  201   {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/members [post]
+func (h *Handler) InviteMember(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req InviteMemberRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		_ = c.Error(apperr.BadRequest("user_id không hợp lệ"))
+		return
+	}
+	member, err := h.svc.InviteMember(c.Request.Context(), usecase.InviteMemberInput{
+		ProjectID: projectID,
+		UserID:    userID,
+		Role:      domain.Role(req.Role),
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.Created(c, toMemberResponse(member))
+}
+
+// ChangeMemberRole godoc
+// @Summary  Đổi vai trò của thành viên
+// @Tags     projects
+// @Accept   json
+// @Produce  json
+// @Param    id      path      string                    true  "Project ID"
+// @Param    userId  path      string                    true  "User ID"
+// @Param    body    body      ChangeMemberRoleRequest  true  "Vai trò mới"
+// @Success  200     {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/members/{userId} [patch]
+func (h *Handler) ChangeMemberRole(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	userID, ok := parseUUIDParam(c, "userId")
+	if !ok {
+		return
+	}
+	var req ChangeMemberRoleRequest
+	if !bindBody(c, &req) {
+		return
+	}
+	member, err := h.svc.ChangeMemberRole(c.Request.Context(), usecase.ChangeMemberRoleInput{
+		ProjectID: projectID,
+		UserID:    userID,
+		Role:      domain.Role(req.Role),
+	})
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.OK(c, toMemberResponse(member))
+}
+
+// RemoveMember godoc
+// @Summary  Gỡ thành viên khỏi dự án
+// @Tags     projects
+// @Produce  json
+// @Param    id      path  string  true  "Project ID"
+// @Param    userId  path  string  true  "User ID"
+// @Success  204
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/members/{userId} [delete]
+func (h *Handler) RemoveMember(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	userID, ok := parseUUIDParam(c, "userId")
+	if !ok {
+		return
+	}
+	if err := h.svc.RemoveMember(c.Request.Context(), projectID, userID); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.NoContent(c)
+}
+
+// AcceptInvite godoc
+// @Summary  Xác nhận lời mời tham gia dự án
+// @Tags     projects
+// @Produce  json
+// @Param    id  path      string  true  "Project ID"
+// @Success  200 {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id}/members/me/accept [post]
+func (h *Handler) AcceptInvite(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	member, err := h.svc.AcceptInvite(c.Request.Context(), projectID, userID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	response.OK(c, toMemberResponse(member))
+}

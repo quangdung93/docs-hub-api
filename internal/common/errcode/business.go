@@ -26,4 +26,17 @@ const (
 	// dùng cho optimistic lock. Cần TL duyệt (xem ADR-0003). Nhóm BUSINESS_RULE_*.
 	// Fallback nếu bị từ chối: dùng SessionConflict.
 	ConflictVersion = "CONFLICT_VERSION" // Dữ liệu đã bị thay đổi bởi request khác
+
+	// AlreadyMember — mã nghiệp vụ BỔ SUNG cho module project: user đã là thành
+	// viên (hoặc đang có lời mời chờ xác nhận) của dự án.
+	AlreadyMember = "ALREADY_MEMBER" // Người dùng đã là thành viên hoặc đang chờ xác nhận
+	// InviteNotPending — lời mời không ở trạng thái 'pending' nên không thể accept.
+	InviteNotPending = "INVITE_NOT_PENDING" // Lời mời không ở trạng thái chờ xác nhận
+	// CannotModifyOwner — không được đổi role/gỡ chủ dự án qua API quản lý thành viên.
+	CannotModifyOwner = "CANNOT_MODIFY_OWNER" // Không thể đổi vai trò hoặc gỡ chủ dự án
+	// ConfirmNameMismatch — xóa dự án yêu cầu gửi đúng tên dự án để xác nhận.
+	ConfirmNameMismatch = "CONFIRM_NAME_MISMATCH" // Tên xác nhận không khớp tên dự án
+	// AvatarNotUploaded — xác nhận upload ảnh đại diện dự án nhưng ảnh chưa
+	// thực sự tồn tại trong storage.
+	AvatarNotUploaded = "AVATAR_NOT_UPLOADED" // Ảnh đại diện chưa được tải lên storage
 )

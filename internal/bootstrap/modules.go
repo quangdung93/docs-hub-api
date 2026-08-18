@@ -5,6 +5,7 @@ import (
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth"
+	"github.com/quangdung93/docs-hub-api/internal/module/project"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -17,7 +18,7 @@ type Module interface {
 
 // buildModules dựng danh sách module từ hạ tầng. Đây là nơi DUY NHẤT bootstrap
 // biết về từng feature cụ thể.
-func buildModules(_ *config.Config, infra *Infra) []Module {
+func buildModules(cfg *config.Config, infra *Infra) []Module {
 	return []Module{
 		user.New(user.Deps{
 			DB:        infra.DB,
@@ -30,6 +31,14 @@ func buildModules(_ *config.Config, infra *Infra) []Module {
 		auth.New(auth.Deps{
 			DB:         infra.DB,
 			JWTManager: infra.JWT,
+		}),
+		project.New(project.Deps{
+			DB:                 infra.DB,
+			Tx:                 infra.Tx,
+			Clock:              infra.clock(),
+			ObjectStore:        infra.ObjectStore,
+			AvatarMaxBytes:     cfg.Project.AvatarMaxBytes,
+			AvatarPresignedTTL: cfg.Project.AvatarPresignedTTL,
 		}),
 		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}

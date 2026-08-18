@@ -88,13 +88,36 @@ func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	return data, nil
 }
 
-// PresignedGetURL tạo URL tải object có thời hạn.
+// PresignedGetURL tạo URL tải object XUỐNG có thời hạn.
 func (s *Store) PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
 	if err != nil {
-		return "", fmt.Errorf("presign %q thất bại: %w", key, err)
+		return "", fmt.Errorf("presign get %q thất bại: %w", key, err)
 	}
 	return u.String(), nil
+}
+
+// PresignedPutURL tạo URL tải object LÊN có thời hạn — dùng cho luồng client
+// tự upload thẳng lên storage, backend không đụng vào bytes file.
+func (s *Store) PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, ttl)
+	if err != nil {
+		return "", fmt.Errorf("presign put %q thất bại: %w", key, err)
+	}
+	return u.String(), nil
+}
+
+// Stat kiểm tra object đã thực sự tồn tại trong bucket chưa — dùng để xác
+// nhận client đã upload xong qua presigned URL. Không tồn tại -> port.ErrObjectNotFound.
+func (s *Store) Stat(ctx context.Context, key string) (port.StoredObject, error) {
+	info, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		if errResp := minio.ToErrorResponse(err); errResp.Code == "NoSuchKey" {
+			return port.StoredObject{}, port.ErrObjectNotFound
+		}
+		return port.StoredObject{}, fmt.Errorf("stat object %q thất bại: %w", key, err)
+	}
+	return port.StoredObject{Key: key, Size: info.Size, ContentType: info.ContentType}, nil
 }
 
 // Delete xóa object.
