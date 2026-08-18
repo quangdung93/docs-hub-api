@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"golang.org/x/crypto/bcrypt"
 
-	"time"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
+	"time"
 )
 
 func setupTest(t *testing.T) (*mocks.MockUserRepository, *mocks.MockSessionRepository, AuthUseCase) {

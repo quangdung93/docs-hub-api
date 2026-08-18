@@ -61,7 +61,7 @@ func (u *authUseCase) Login(ctx context.Context, username, password string) (*do
 	if err != nil {
 		return nil, "", ErrInternalError
 	}
-	
+
 	expirationTime := now.Add(24 * time.Hour) // fallback nếu cần lưu vào DB Session
 
 	// Lưu session vào database
