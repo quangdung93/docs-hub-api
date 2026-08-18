@@ -17,7 +17,7 @@ type Module interface {
 
 // buildModules dựng danh sách module từ hạ tầng. Đây là nơi DUY NHẤT bootstrap
 // biết về từng feature cụ thể.
-func buildModules(cfg *config.Config, infra *Infra) []Module {
+func buildModules(_ *config.Config, infra *Infra) []Module {
 	return []Module{
 		user.New(user.Deps{
 			DB:        infra.DB,

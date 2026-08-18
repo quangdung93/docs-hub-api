@@ -57,7 +57,7 @@ func TestAuthUseCase_Login(t *testing.T) {
 			name:     "Fail_UserNotFound",
 			username: "wronguser",
 			password: "correct_password",
-			mockSetup: func(ur *mocks.MockUserRepository, sr *mocks.MockSessionRepository) {
+			mockSetup: func(ur *mocks.MockUserRepository, _ *mocks.MockSessionRepository) {
 				ur.On("FindByUsername", mock.Anything, "wronguser").Return(nil, errors.New("not found")).Once()
 			},
 			expectedError: ErrInvalidCredentials,
@@ -66,7 +66,7 @@ func TestAuthUseCase_Login(t *testing.T) {
 			name:     "Fail_WrongPassword",
 			username: "testuser",
 			password: "wrong_password",
-			mockSetup: func(ur *mocks.MockUserRepository, sr *mocks.MockSessionRepository) {
+			mockSetup: func(ur *mocks.MockUserRepository, _ *mocks.MockSessionRepository) {
 				ur.On("FindByUsername", mock.Anything, "testuser").Return(validUser, nil).Once()
 			},
 			expectedError: ErrInvalidCredentials,
