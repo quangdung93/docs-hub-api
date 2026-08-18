@@ -44,7 +44,7 @@ func Run(ctx context.Context, cfg *config.Config, log *zap.Logger) error {
 	}
 
 	// 3) Module nghiệp vụ.
-	modules := buildModules(infra)
+	modules := buildModules(cfg, infra)
 
 	// 4) Engine + route.
 	extra := buildGlobalInfraMiddleware(cfg, infra)
