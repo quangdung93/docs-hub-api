@@ -123,6 +123,10 @@ jobs:
       # lần deploy. 24h đủ để rollback nhanh bằng image còn nằm sẵn trên máy;
       # xa hơn thì compose pull lại từ GHCR.
       # Image của container đang chạy không bị đụng tới.
-      - name: Dọn image cũ
+      # `image prune` KHÔNG đụng tới build cache — trên máy này cache từng phình
+      # tới 5.6GB (lớn hơn toàn bộ image cộng lại) từ thời còn build tại chỗ.
+      - name: Dọn image + build cache cũ
         if: always()
-        run: docker image prune -af --filter "until=24h"
+        run: |
+          docker image prune -af --filter "until=24h"
+          docker builder prune -af --filter "until=24h"
