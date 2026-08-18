@@ -124,3 +124,19 @@ không cần SSH key, và GHCR đăng nhập bằng chính token của workflow.
   domain vào `cors.allowed_origins` rồi `make ec2-restart`.
 - Muốn HTTPS/domain: đặt ALB hoặc nginx + certbot trước cổng 8080, rồi đóng 8080
   khỏi internet và chỉ cho ALB/nginx truy cập.
+
+## Khi không SSH được vào EC2
+
+Security group khoá port 22 theo IP cố định, mà IP nhà thường là IP động — nên
+việc mất SSH là chuyện bình thường, không phải máy chết. Cách phân biệt nhanh:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://api.docshub.io.vn/swagger/index.html
+```
+
+Trả `200` mà SSH vẫn timeout thì máy đang khoẻ, vấn đề nằm ở rule port 22 (sửa
+Source thành `My IP` trong security group).
+
+Quan trọng: **deploy không phụ thuộc SSH**. Runner nằm ngay trên EC2 nên pipeline
+vẫn chạy bình thường kể cả khi bạn không vào được máy — muốn deploy lại chỉ cần
+vào Actions → deploy → Run workflow.
