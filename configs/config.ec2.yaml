@@ -70,7 +70,7 @@ jwt:
 # Thêm domain/IP thật của bạn vào đây khi có frontend gọi tới.
 # Không dùng "*" chung với allow_credentials=true — trình duyệt sẽ từ chối.
 cors:
-  allowed_origins: ["http://localhost:3000"]
+  allowed_origins: ["https://docshub.io.vn"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
   allow_credentials: true
