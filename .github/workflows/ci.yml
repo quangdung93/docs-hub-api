@@ -1,11 +1,15 @@
-# Kiểm tra chất lượng — chạy cho mọi PR và mọi push lên nhánh làm việc.
+# Kiểm tra chất lượng — chạy cho mọi pull request.
 # Không đụng tới môi trường thật; việc deploy nằm ở deploy.yml.
 name: ci
 
+# CHỈ chạy trên pull_request, không chạy trên push:
+#   - tránh mỗi commit kích hoạt hai lần chạy trùng nhau (tốn phút build);
+#   - `only-new-issues` của golangci-lint chỉ có tác dụng ở event pull_request
+#     (nó so với nhánh base). Ở event push, lint quét toàn bộ repo và fail vì
+#     18 issue tồn đọng sẵn trên main.
+# Push lên main đã có deploy.yml chạy verify trước khi build.
 on:
   pull_request:
-  push:
-    branches-ignore: [main] # push lên main đã có deploy.yml chạy lint/test trước
 
 # Push liên tiếp vào cùng một nhánh thì chỉ giữ lần chạy mới nhất.
 concurrency:
