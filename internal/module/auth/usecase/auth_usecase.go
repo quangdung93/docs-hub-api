@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var (

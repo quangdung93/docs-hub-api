@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"gorm.io/gorm"
+
+	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 )
 
 type userRepository struct {

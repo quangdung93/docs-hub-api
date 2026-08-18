@@ -61,7 +61,7 @@ func TestLogin_Success_Returns200(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"username": "test", "password": "123"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -81,7 +81,7 @@ func TestLogin_ValidationError_Returns400(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"username": "test"}) // thiếu password
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -99,7 +99,7 @@ func TestLogin_InvalidCredentials_Returns401(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"username": "test", "password": "wrong"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/public/api/v1/auth/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -115,7 +115,7 @@ func TestLogout_Success_Returns200(t *testing.T) {
 	uc.On("Logout", mock.Anything, "valid_token").Return(nil).Once()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/internal/api/v1/auth/logout", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer valid_token")
 	r.ServeHTTP(w, req)
 
@@ -133,7 +133,7 @@ func TestGetMe_Success_Returns200(t *testing.T) {
 	uc.On("GetMe", mock.Anything, userID.String()).Return(mockUser, nil).Once()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/auth/me", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/api/v1/auth/me", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -145,7 +145,7 @@ func TestGetMe_Unauthenticated_Returns401(t *testing.T) {
 	_, r := setupRouter(t, "") // không gắn actor -> mô phỏng chưa qua Auth
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/auth/me", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/api/v1/auth/me", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -160,7 +160,7 @@ func TestGetMe_NotFound_Returns404(t *testing.T) {
 	uc.On("GetMe", mock.Anything, userID.String()).Return(nil, errors.New("không tìm thấy user")).Once()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/auth/me", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/api/v1/auth/me", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code)

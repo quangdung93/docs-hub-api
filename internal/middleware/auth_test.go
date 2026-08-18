@@ -40,7 +40,7 @@ func TestRequireAuth(t *testing.T) {
 		userID := "123e4567-e89b-12d3-a456-426614174000"
 		validToken := generateTestJWT("test-secret", userID, false)
 
-		c.Request = httptest.NewRequest("GET", "/", nil)
+		c.Request = httptest.NewRequestWithContext(t.Context(), "GET", "/", nil)
 		c.Request.AddCookie(&http.Cookie{Name: "access_token", Value: validToken})
 
 		RequireAuth()(c)
@@ -55,7 +55,7 @@ func TestRequireAuth(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 
-		c.Request = httptest.NewRequest("GET", "/", nil)
+		c.Request = httptest.NewRequestWithContext(t.Context(), "GET", "/", nil)
 
 		RequireAuth()(c)
 
@@ -69,7 +69,7 @@ func TestRequireAuth(t *testing.T) {
 
 		expiredToken := generateTestJWT("test-secret", "123", true)
 
-		c.Request = httptest.NewRequest("GET", "/", nil)
+		c.Request = httptest.NewRequestWithContext(t.Context(), "GET", "/", nil)
 		c.Request.AddCookie(&http.Cookie{Name: "access_token", Value: expiredToken})
 
 		RequireAuth()(c)
@@ -84,7 +84,7 @@ func TestRequireAuth(t *testing.T) {
 
 		invalidToken := generateTestJWT("wrong-secret", "123", false)
 
-		c.Request = httptest.NewRequest("GET", "/", nil)
+		c.Request = httptest.NewRequestWithContext(t.Context(), "GET", "/", nil)
 		c.Request.AddCookie(&http.Cookie{Name: "access_token", Value: invalidToken})
 
 		RequireAuth()(c)

@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
-	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain/mocks"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
-	"time"
 )
 
 func setupTest(t *testing.T) (*mocks.MockUserRepository, *mocks.MockSessionRepository, AuthUseCase) {

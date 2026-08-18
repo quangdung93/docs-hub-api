@@ -8,7 +8,8 @@
 // @securityDefinitions.apikey  BearerAuth
 // @in                          header
 // @name                        Authorization
-// @description                 Nhập theo định dạng: Bearer <token> (lấy token qua /public/api/v1/auth/login hoặc /public/api/v1/auth/dev-token ở local)
+// @description                 Nhập theo định dạng: Bearer <token>
+// @description                 (lấy token qua /public/api/v1/auth/login hoặc /public/api/v1/auth/dev-token ở local)
 package main
 
 import (
