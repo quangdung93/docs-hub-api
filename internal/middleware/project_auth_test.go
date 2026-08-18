@@ -24,7 +24,7 @@ func newProjectAuthContext(t *testing.T, actor *contextx.Actor, projectID uuid.U
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), nil)
 	if actor != nil {
 		req = req.WithContext(contextx.WithActor(req.Context(), *actor))
 	}

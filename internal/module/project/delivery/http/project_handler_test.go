@@ -173,7 +173,12 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "Đã đổi tên"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPatch,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -190,7 +195,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"name": "X"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -206,7 +211,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"name": "X"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -222,7 +227,12 @@ func TestUpdate_ProjectNotFound_Returns404(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "X"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPatch,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -245,7 +255,12 @@ func TestDelete_Owner_Returns204(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodDelete,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -261,7 +276,12 @@ func TestDelete_ConfirmNameMismatch_Returns200Business(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Sai Ten"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodDelete,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -278,7 +298,12 @@ func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 		domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader([]byte("{}")))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodDelete,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader([]byte("{}")),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -295,7 +320,7 @@ func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"confirm_name": "bất kỳ"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -316,7 +341,12 @@ func TestDelete_SystemAdmin_BypassesMembership_Returns204(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodDelete,
+		"/internal/api/v1/projects/"+projectID.String(),
+		bytes.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 

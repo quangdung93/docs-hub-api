@@ -39,7 +39,9 @@ import (
 //   - GET      /projects/:id/members  : owner, editor, viewer (mọi thành viên active).
 //   - POST|PATCH|DELETE .../members.. : chỉ owner (quản lý thành viên).
 //   - POST .../members/me/accept      : chỉ cần đã xác thực (tự accept lời mời của mình).
-func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) { //nolint:unparam,revive // memberRepo giữ lại cho lúc bật lại RBAC
+//
+//nolint:unparam,revive // memberRepo giữ lại cho lúc bật lại RBAC
+func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) {
 	// onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
 	// anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
 
