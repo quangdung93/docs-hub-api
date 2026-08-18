@@ -118,6 +118,11 @@ jobs:
             --env-file /home/web/docs-hub-api/.env.ec2 logs --tail 50 api
           exit 1
 
+      # -a (không chỉ dangling): image tag cũ ghcr.io/...:<sha> vẫn có tag nên
+      # `prune` không -a sẽ KHÔNG bao giờ xoá chúng — đĩa cứ thế phình theo mỗi
+      # lần deploy. 24h đủ để rollback nhanh bằng image còn nằm sẵn trên máy;
+      # xa hơn thì compose pull lại từ GHCR.
+      # Image của container đang chạy không bị đụng tới.
       - name: Dọn image cũ
         if: always()
-        run: docker image prune -f --filter "until=168h"
+        run: docker image prune -af --filter "until=24h"
