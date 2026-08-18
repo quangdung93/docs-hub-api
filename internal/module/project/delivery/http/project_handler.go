@@ -15,6 +15,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 	"github.com/quangdung93/docs-hub-api/internal/common/response"
 	"github.com/quangdung93/docs-hub-api/internal/common/validatorx"
+
 	// "github.com/quangdung93/docs-hub-api/internal/middleware" // TODO: bật lại khi kích hoạt RBAC (xem Register)
 	"github.com/quangdung93/docs-hub-api/internal/module/project/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/project/usecase"
@@ -38,7 +39,7 @@ import (
 //   - GET      /projects/:id/members  : owner, editor, viewer (mọi thành viên active).
 //   - POST|PATCH|DELETE .../members.. : chỉ owner (quản lý thành viên).
 //   - POST .../members/me/accept      : chỉ cần đã xác thực (tự accept lời mời của mình).
-func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) { //nolint:unparam // memberRepo giữ lại cho lúc bật lại RBAC
+func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRepository) { //nolint:unparam,revive // memberRepo giữ lại cho lúc bật lại RBAC
 	// onlyOwner := middleware.RequireProjectRole(memberRepo, domain.RoleOwner)
 	// anyActiveMember := middleware.RequireProjectRole(memberRepo, domain.RoleOwner, domain.RoleEditor, domain.RoleViewer)
 

@@ -50,20 +50,27 @@ type projectMemberModel struct {
 
 func (projectMemberModel) TableName() string { return "project_members" }
 
+// Tên cột lặp lại ở nhiều truy vấn — gom thành hằng để tránh gõ sai.
+const (
+	colCreatedAt = "created_at"
+	colName      = "name"
+	colStatus    = "status"
+)
+
 // sortableProjectColumns là WHITELIST cột được phép sort cho ListForUser — hàng
 // rào chống SQL injection qua tham số sort_by (chỉ giá trị có trong map mới được
 // ghép vào ORDER BY).
 var sortableProjectColumns = map[string]string{ //nolint:gochecknoglobals // bảng tra cứu bất biến
-	"created_at": "created_at",
-	"name":       "name",
-	"status":     "status",
+	"created_at": colCreatedAt,
+	"name":       colName,
+	"status":     colStatus,
 }
 
 // orderClause dựng ORDER BY an toàn (cột từ whitelist, order chỉ asc/desc).
 func orderClause(p pagination.Query) string {
 	col, ok := sortableProjectColumns[p.SortBy]
 	if !ok {
-		col = "created_at" // mặc định an toàn
+		col = colCreatedAt // mặc định an toàn
 	}
 	order := "DESC"
 	if p.Order == "asc" {
@@ -194,9 +201,9 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 	res := postgres.DBFrom(ctx, r.db).Model(&projectModel{}).
 		Where("id = ?", p.ID.String()).
 		Updates(map[string]any{
-			"name":        p.Name,
+			colName:       p.Name,
 			"description": p.Description,
-			"status":      p.Status,
+			colStatus:     p.Status,
 			"settings":    p.Settings,
 			"avatar_key":  p.AvatarKey,
 		})
@@ -336,7 +343,7 @@ func (r *projectMemberRepository) UpdateStatus(ctx context.Context, m *domain.Pr
 	res := postgres.DBFrom(ctx, r.db).Model(&projectMemberModel{}).
 		Where("project_id = ? AND user_id = ?", m.ProjectID.String(), m.UserID.String()).
 		Updates(map[string]any{
-			"status":    string(m.Status),
+			colStatus:   string(m.Status),
 			"joined_at": m.JoinedAt,
 		})
 	if res.Error != nil {

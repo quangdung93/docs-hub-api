@@ -93,7 +93,7 @@ func TestCreate_Success_Returns201(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "RAG Demo", "description": "mô tả"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -110,7 +110,7 @@ func TestCreate_ValidationError_Returns400(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"description": "thiếu name"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -126,7 +126,7 @@ func TestCreate_Unauthenticated_Returns401(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "X"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/projects", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -146,7 +146,7 @@ func TestList_Success_Returns200Paged(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/projects", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/api/v1/projects", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -173,7 +173,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "Đã đổi tên"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -190,7 +190,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"name": "X"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -206,7 +206,7 @@ func TestUpdate_OwnerAllowed_Returns200(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"name": "X"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -222,7 +222,7 @@ func TestUpdate_ProjectNotFound_Returns404(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"name": "X"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -245,7 +245,7 @@ func TestDelete_Owner_Returns204(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -261,7 +261,7 @@ func TestDelete_ConfirmNameMismatch_Returns200Business(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Sai Ten"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -278,7 +278,7 @@ func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 		domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader([]byte("{}")))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader([]byte("{}")))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -295,7 +295,7 @@ func TestDelete_MissingConfirmName_Returns400(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"confirm_name": "bất kỳ"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+// 	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 // 	req.Header.Set("Content-Type", "application/json")
 // 	r.ServeHTTP(w, req)
 //
@@ -316,7 +316,7 @@ func TestDelete_SystemAdmin_BypassesMembership_Returns204(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"confirm_name": "Core Banking"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/internal/api/v1/projects/"+projectID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -339,7 +339,7 @@ func TestRequestAvatarUpload_Success_Returns200(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"mime_type": "image/png", "size_bytes": 100})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/upload-url", bytes.NewReader(body),
 	)
 	req.Header.Set("Content-Type", "application/json")
@@ -360,7 +360,7 @@ func TestRequestAvatarUpload_InvalidFormat_Returns200Business(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"mime_type": "application/pdf", "size_bytes": 100})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/upload-url", bytes.NewReader(body),
 	)
 	req.Header.Set("Content-Type", "application/json")
@@ -387,7 +387,7 @@ func TestCompleteAvatarUpload_Success_Returns200(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/complete", nil,
 	)
 	r.ServeHTTP(w, req)
@@ -406,7 +406,7 @@ func TestCompleteAvatarUpload_NotUploaded_Returns200Business(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/avatar/complete", nil,
 	)
 	r.ServeHTTP(w, req)
@@ -429,7 +429,7 @@ func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/internal/api/v1/projects/"+projectID.String()+"/members", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/api/v1/projects/"+projectID.String()+"/members", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -446,7 +446,7 @@ func TestInviteMember_Owner_Returns201(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members", bytes.NewReader(body),
 	)
 	req.Header.Set("Content-Type", "application/json")
@@ -465,7 +465,7 @@ func TestInviteMember_Owner_Returns201(t *testing.T) {
 //
 // 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
 // 	w := httptest.NewRecorder()
-// 	req := httptest.NewRequest(
+// 	req := httptest.NewRequestWithContext(t.Context(),
 // 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members", bytes.NewReader(body),
 // 	)
 // 	req.Header.Set("Content-Type", "application/json")
@@ -483,7 +483,7 @@ func TestInviteMember_AlreadyMember_Returns200Business(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"user_id": inviteeID.String(), "role": "editor"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members", bytes.NewReader(body),
 	)
 	req.Header.Set("Content-Type", "application/json")
@@ -511,7 +511,7 @@ func TestChangeMemberRole_Owner_Returns200(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{"role": "viewer"})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch,
 		"/internal/api/v1/projects/"+projectID.String()+"/members/"+targetID.String(),
 		bytes.NewReader(body),
@@ -530,7 +530,7 @@ func TestRemoveMember_Owner_Returns204(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete, "/internal/api/v1/projects/"+projectID.String()+"/members/"+targetID.String(), nil,
 	)
 	r.ServeHTTP(w, req)
@@ -550,7 +550,7 @@ func TestAcceptInvite_Success_Returns200(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members/me/accept", nil,
 	)
 	r.ServeHTTP(w, req)
@@ -566,7 +566,7 @@ func TestAcceptInvite_NotPending_Returns200Business(t *testing.T) {
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/internal/api/v1/projects/"+projectID.String()+"/members/me/accept", nil,
 	)
 	r.ServeHTTP(w, req)
