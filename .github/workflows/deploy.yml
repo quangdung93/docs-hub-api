@@ -103,6 +103,18 @@ jobs:
           docker compose -f deployments/ec2/docker-compose.yml \
             --env-file /home/web/docs-hub-api/.env.ec2 up -d migrate api
 
+      # Khi migrate hỏng, `compose up -d` chỉ báo "exit 1" mà nuốt mất stderr
+      # của container — không có bước này thì không biết hỏng vì lý do gì.
+      - name: In log khi deploy lỗi
+        if: failure()
+        run: |
+          echo "=== log migrate ==="
+          docker compose -f deployments/ec2/docker-compose.yml \
+            --env-file /home/web/docs-hub-api/.env.ec2 logs --tail 100 migrate
+          echo "=== trạng thái schema_migrations ==="
+          docker exec document-hub-ec2-postgres-1 \
+            psql -U app -d document_hub -c "SELECT * FROM schema_migrations;" || true
+
       - name: Kiểm tra service đã sẵn sàng
         run: |
           for i in $(seq 1 30); do
