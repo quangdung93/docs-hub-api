@@ -130,6 +130,18 @@ jobs:
             --env-file /home/web/docs-hub-api/.env.ec2 logs --tail 50 api
           exit 1
 
+      # Tạo tài khoản admin đầu tiên. Bắt buộc vì API tạo user nằm sau lớp xác
+      # thực — không thể tạo user đầu tiên qua HTTP. seedAdmin idempotent nên
+      # chạy lại mỗi lần deploy là vô hại ("admin đã tồn tại, bỏ qua").
+      - name: Tạo tài khoản admin mặc định
+        env:
+          API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}
+        run: |
+          docker compose -f deployments/ec2/docker-compose.yml \
+            --env-file /home/web/docs-hub-api/.env.ec2 \
+            run --rm --entrypoint /app/seed migrate \
+            -config /app/configs/config.ec2.yaml
+
       - name: Dọn image cũ
         if: always()
         run: docker image prune -f --filter "until=168h"
