@@ -27,6 +27,11 @@ type Config struct {
 	Bucket    string
 	UseSSL    bool
 	Region    string
+
+	// PublicEndpoint/PublicUseSSL: host công khai dùng để KÝ presigned URL.
+	// Xem config.MinIOConfig để biết vì sao không thể ký bằng host nội bộ.
+	PublicEndpoint string
+	PublicUseSSL   bool
 }
 
 // New tạo client và đảm bảo bucket tồn tại.
@@ -52,17 +57,51 @@ func New(ctx context.Context, cfg Config) (*minio.Client, error) {
 	return client, nil
 }
 
+// NewPresign tạo client CHỈ dùng để ký presigned URL, trỏ vào PublicEndpoint.
+//
+// Hàm này không mở kết nối mạng nào — minio.New chỉ dựng struct — nên gọi được
+// kể cả khi host công khai chưa có DNS. Trả về nil khi không cấu hình public
+// endpoint (hoặc trùng endpoint nội bộ): khi đó Store ký bằng client chính.
+func NewPresign(cfg Config) (*minio.Client, error) {
+	if cfg.PublicEndpoint == "" || cfg.PublicEndpoint == cfg.Endpoint {
+		return nil, nil
+	}
+	client, err := minio.New(cfg.PublicEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: cfg.PublicUseSSL,
+		Region: cfg.Region,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("khởi tạo client ký presigned URL thất bại: %w", err)
+	}
+	return client, nil
+}
+
 // Store implement port.ObjectStore.
 type Store struct {
 	client *minio.Client
-	bucket string
+	// presign ký các URL mà client bên ngoài sẽ gọi. Thường trỏ host công khai;
+	// bằng client khi không cấu hình PublicEndpoint.
+	presign *minio.Client
+	bucket  string
 }
 
 var _ port.ObjectStore = (*Store)(nil)
 
-// NewStore bọc client thành port.ObjectStore.
+// NewStore bọc client thành port.ObjectStore. Presigned URL ký bằng chính
+// client này — chỉ dùng được khi endpoint đã là host mà client ngoài gọi tới.
 func NewStore(client *minio.Client, bucket string) *Store {
-	return &Store{client: client, bucket: bucket}
+	return &Store{client: client, presign: client, bucket: bucket}
+}
+
+// NewStoreWithPresign tách đường ký presigned URL khỏi đường kết nối nội bộ:
+// thao tác put/get/stat đi qua client, còn URL trả cho client ngoài được ký
+// bằng presign. Truyền presign nil thì rơi về hành vi của NewStore.
+func NewStoreWithPresign(client, presign *minio.Client, bucket string) *Store {
+	if presign == nil {
+		presign = client
+	}
+	return &Store{client: client, presign: presign, bucket: bucket}
 }
 
 // Put tải object lên bucket.
@@ -112,7 +151,7 @@ func (s *Store) GetReader(ctx context.Context, key string) (io.ReadCloser, error
 
 // PresignedGetURL tạo URL tải object có thời hạn.
 func (s *Store) PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
+	u, err := s.presign.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
 	if err != nil {
 		return "", fmt.Errorf("presign get %q thất bại: %w", key, err)
 	}
@@ -122,7 +161,7 @@ func (s *Store) PresignedGetURL(ctx context.Context, key string, ttl time.Durati
 // PresignedPutURL tạo URL tải object LÊN có thời hạn — dùng cho luồng client
 // tự upload thẳng lên storage, backend không đụng vào bytes file.
 func (s *Store) PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, ttl)
+	u, err := s.presign.PresignedPutObject(ctx, s.bucket, key, ttl)
 	if err != nil {
 		return "", fmt.Errorf("presign put %q thất bại: %w", key, err)
 	}

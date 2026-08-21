@@ -59,6 +59,12 @@ minio:
   bucket: document-hub
   use_ssl: false
   region: us-east-1
+  # Host mà trình duyệt gọi tới khi upload/tải bằng presigned URL. nginx trên
+  # máy nhận HTTPS ở đây rồi proxy về 127.0.0.1:9000 — MinIO vẫn không mở cổng
+  # ra internet. Bỏ trống thì URL bị ký theo "minio:9000" và client ngoài không
+  # dùng được.
+  public_endpoint: storage.docshub.io.vn
+  public_use_ssl: true
 
 project:
   avatar_max_bytes: 5242880 # 5 MiB — TẠM THỜI, chờ team chốt lại

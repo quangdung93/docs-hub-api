@@ -158,6 +158,17 @@ type MinIOConfig struct {
 	Bucket    string `mapstructure:"bucket"`
 	UseSSL    bool   `mapstructure:"use_ssl"`
 	Region    string `mapstructure:"region"`
+
+	// PublicEndpoint là host mà TRÌNH DUYỆT gọi tới, ví dụ storage.docshub.io.vn.
+	//
+	// Chữ ký SigV4 của presigned URL bao gồm cả host, nên URL ký bằng endpoint
+	// nội bộ ("minio:9000") không dùng được từ ngoài — và sửa host trong URL
+	// bằng tay sẽ nhận SignatureDoesNotMatch. Đặt biến này để presigned URL
+	// được ký sẵn theo host công khai; mọi thao tác khác vẫn đi đường nội bộ.
+	//
+	// Để trống ở local: khi đó presign dùng luôn Endpoint.
+	PublicEndpoint string `mapstructure:"public_endpoint"`
+	PublicUseSSL   bool   `mapstructure:"public_use_ssl"`
 }
 
 // ProjectConfig cấu hình nghiệp vụ ảnh đại diện dự án (module project).
