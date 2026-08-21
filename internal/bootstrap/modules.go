@@ -33,6 +33,11 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 		auth.New(auth.Deps{
 			DB:         infra.DB,
 			JWTManager: infra.JWT,
+			AccessTTL:  cfg.JWT.AccessTTL,
+			RefreshTTL: cfg.JWT.RefreshTTL,
+			// Cookie Secure chỉ bật khi KHÔNG phải local — local chạy HTTP nên
+			// bật Secure sẽ khiến trình duyệt bỏ qua cookie.
+			SecureCookie: !cfg.App.IsLocal(),
 		}),
 		project.New(project.Deps{
 			DB:                 infra.DB,

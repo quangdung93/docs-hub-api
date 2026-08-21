@@ -4,9 +4,9 @@ package http
 
 import (
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
 	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
@@ -16,14 +16,23 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/usecase"
 )
 
+// Tên cookie dùng chung cho cả lúc đặt và lúc xóa.
+const (
+	accessCookie  = "access_token"
+	refreshCookie = "refresh_token"
+)
+
 // AuthHandler xử lý HTTP cho module auth. Chỉ giữ tham chiếu usecase — không state khác.
 type AuthHandler struct {
 	authUC usecase.AuthUseCase
+	// secureCookie bật cờ Secure của cookie. Lấy từ config (env production/staging)
+	// thay vì đọc biến môi trường trực tiếp trong handler.
+	secureCookie bool
 }
 
 // NewAuthHandler tạo AuthHandler.
-func NewAuthHandler(authUC usecase.AuthUseCase) *AuthHandler {
-	return &AuthHandler{authUC: authUC}
+func NewAuthHandler(authUC usecase.AuthUseCase, secureCookie bool) *AuthHandler {
+	return &AuthHandler{authUC: authUC, secureCookie: secureCookie}
 }
 
 // LoginRequest là body đăng nhập.
@@ -32,9 +41,25 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// RefreshRequest là body gia hạn token.
+//
+// Bỏ trống thì handler đọc refresh token từ cookie — hỗ trợ cả client dùng
+// header lẫn client dùng cookie.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// LogoutRequest là body đăng xuất (không bắt buộc).
+//
+// Có refresh_token thì chỉ thu hồi đúng phiên đó; bỏ trống thì thu hồi MỌI
+// phiên của user (đăng xuất khỏi mọi thiết bị).
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 // Login godoc
 // @Summary  Đăng nhập
-// @Description Xác thực và trả về JWT qua Cookie
+// @Description Xác thực và trả về access token + refresh token (kèm cookie)
 // @Tags     auth
 // @Accept   json
 // @Produce  json
@@ -50,42 +75,90 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
+	user, pair, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
 		_ = c.Error(apperr.Unauthorized("Tên đăng nhập hoặc mật khẩu không đúng"))
 		return
 	}
 
-	// Xác định cờ secure cho cookie dựa trên môi trường.
-	secure := os.Getenv("ENV") == "production"
+	h.setAuthCookies(c, pair)
+	// Giữ nguyên khóa "token" để client cũ không vỡ; bổ sung refresh_token.
+	response.OK(c, gin.H{
+		"user":          user,
+		"token":         pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"expires_in":    pair.ExpiresIn,
+	})
+}
 
-	// Thiết lập SameSite Lax và lưu JWT vào Cookie.
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", token, 24*3600, "/", "", secure, true) // name, value, maxAge, path, domain, secure, httpOnly
+// Refresh godoc
+// @Summary  Gia hạn access token
+// @Description Đổi refresh token còn hiệu lực lấy cặp token mới. Refresh token cũ bị thu hồi ngay.
+// @Tags     auth
+// @Accept   json
+// @Produce  json
+// @Param    body  body      RefreshRequest  false  "Refresh token (bỏ trống thì đọc từ cookie)"
+// @Success  200   {object}  response.Envelope
+// @Failure  401   {object}  response.Envelope
+// @Router   /public/api/v1/auth/refresh [post]
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req RefreshRequest
+	// Body rỗng là hợp lệ (client dùng cookie) nên bỏ qua lỗi bind.
+	_ = c.ShouldBindJSON(&req)
 
-	// Trả về cả user và token để client có thể dùng làm Bearer header.
-	response.OK(c, gin.H{"user": user, "token": token})
+	token := req.RefreshToken
+	if token == "" {
+		token, _ = c.Cookie(refreshCookie)
+	}
+
+	user, pair, err := h.authUC.Refresh(c.Request.Context(), token)
+	if err != nil {
+		h.clearAuthCookies(c)
+		_ = c.Error(apperr.Unauthorized("Refresh token không hợp lệ hoặc đã hết hạn"))
+		return
+	}
+
+	h.setAuthCookies(c, pair)
+	response.OK(c, gin.H{
+		"user":          user,
+		"token":         pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"expires_in":    pair.ExpiresIn,
+	})
 }
 
 // Logout godoc
 // @Summary  Đăng xuất
-// @Description Xóa token ở client (xóa Cookie) và revoke ở server
+// @Description Thu hồi session ở server và xóa cookie. Không kèm refresh_token thì thu hồi mọi phiên của user.
 // @Tags     auth
+// @Accept   json
 // @Produce  json
+// @Param    body  body      LogoutRequest  false  "Refresh token cần thu hồi (bỏ trống = mọi phiên)"
 // @Success  200 {object} response.Envelope
-// @Failure  400 {object} response.Envelope
+// @Failure  401 {object} response.Envelope
 // @Security BearerAuth
 // @Router   /internal/api/v1/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Lấy token từ header Bearer (theo chuẩn của Auth middleware).
-	authHeader := c.GetHeader("Authorization")
-	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-		token := authHeader[7:]
-		_ = h.authUC.Logout(c.Request.Context(), token)
+	actor, ok := contextx.ActorFrom(c.Request.Context())
+	if !ok {
+		_ = c.Error(apperr.Unauthorized("Chưa xác thực"))
+		return
+	}
+	userID, err := uuid.Parse(actor.UserID)
+	if err != nil {
+		_ = c.Error(apperr.Unauthorized("Chưa xác thực"))
+		return
 	}
 
-	// Xóa cookie ở client.
-	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	var req LogoutRequest
+	_ = c.ShouldBindJSON(&req)
+	if req.RefreshToken == "" {
+		req.RefreshToken, _ = c.Cookie(refreshCookie)
+	}
+
+	_ = h.authUC.Logout(c.Request.Context(), userID, req.RefreshToken)
+
+	h.clearAuthCookies(c)
 	response.OK(c, gin.H{"message": "Đăng xuất thành công"})
 }
 
@@ -115,12 +188,30 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 	response.OK(c, user)
 }
 
+// setAuthCookies đặt cookie cho cả hai token. Thời hạn cookie lấy ĐÚNG theo TTL
+// của token bên trong — trước đây cookie sống 24h trong khi token chỉ 15 phút,
+// khiến client tưởng còn đăng nhập nhưng mọi request đều 401.
+func (h *AuthHandler) setAuthCookies(c *gin.Context, pair usecase.TokenPair) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(accessCookie, pair.AccessToken, pair.ExpiresIn, "/", "", h.secureCookie, true)
+	// Refresh token chỉ cần gửi tới endpoint refresh/logout, nhưng để path "/"
+	// cho đơn giản; httpOnly để JavaScript không đọc được.
+	c.SetCookie(refreshCookie, pair.RefreshToken, pair.RefreshExpiresIn, "/", "", h.secureCookie, true)
+}
+
+func (h *AuthHandler) clearAuthCookies(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(accessCookie, "", -1, "/", "", h.secureCookie, true)
+	c.SetCookie(refreshCookie, "", -1, "/", "", h.secureCookie, true)
+}
+
 // Register gắn các endpoint của Auth vào Gin Router.
 // Lưu ý: "Register" ở đây là thuật ngữ đăng ký route (đường dẫn API),
 // KHÔNG PHẢI là chức năng Đăng ký tài khoản (User Registration).
 func Register(internal, public *gin.RouterGroup, h *AuthHandler) {
-	// public route (không cần token)
+	// public route (không cần token) — refresh phải public vì access token đã hết hạn.
 	public.POST("/auth/login", h.Login)
+	public.POST("/auth/refresh", h.Refresh)
 
 	// internal route (cần token)
 	authGroup := internal.Group("/auth")
