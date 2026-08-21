@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,11 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at"`
 }
 
+// ErrSessionNotFound cho phép usecase phân biệt "không tìm thấy" với lỗi hạ tầng.
+var ErrSessionNotFound = errors.New("không tìm thấy session")
+
+// Session lưu MỘT refresh token còn hiệu lực. Access token không được lưu ở
+// đây: nó ngắn hạn và xác thực bằng chữ ký, không cần tra database.
 type Session struct {
 	ID        uuid.UUID `json:"id"`
 	UserID    uuid.UUID `json:"user_id"`
@@ -32,4 +38,6 @@ type SessionRepository interface {
 	Create(ctx context.Context, session *Session) error
 	FindByToken(ctx context.Context, token string) (*Session, error)
 	Delete(ctx context.Context, token string) error
+	// DeleteByUserID thu hồi MỌI session của user — dùng cho "đăng xuất khỏi mọi thiết bị".
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 }

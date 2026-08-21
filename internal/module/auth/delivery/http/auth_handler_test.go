@@ -17,6 +17,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/middleware"
 	authhttp "github.com/quangdung93/docs-hub-api/internal/module/auth/delivery/http"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
+	"github.com/quangdung93/docs-hub-api/internal/module/auth/usecase"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/usecase/mocks"
 )
 
@@ -36,7 +37,7 @@ func setupRouter(t *testing.T, actorUserID string) (*mocks.MockAuthUseCase, *gin
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	uc := mocks.NewMockAuthUseCase(t)
-	h := authhttp.NewAuthHandler(uc)
+	h := authhttp.NewAuthHandler(uc, false)
 
 	r := gin.New()
 	r.Use(middleware.RequestID(), middleware.ErrorHandler())
@@ -57,7 +58,10 @@ func decodeEnvelope(t *testing.T, body []byte) map[string]any {
 func TestLogin_Success_Returns200(t *testing.T) {
 	uc, r := setupRouter(t, "")
 	mockUser := &domain.User{ID: uuid.New(), Username: "test"}
-	uc.On("Login", mock.Anything, "test", "123").Return(mockUser, "test_token", nil).Once()
+	uc.On("Login", mock.Anything, "test", "123").
+		Return(mockUser, usecase.TokenPair{
+			AccessToken: "test_token", RefreshToken: "test_refresh", ExpiresIn: 900, RefreshExpiresIn: 604800,
+		}, nil).Once()
 
 	body, _ := json.Marshal(map[string]any{"username": "test", "password": "123"})
 	w := httptest.NewRecorder()
@@ -95,7 +99,8 @@ func TestLogin_ValidationError_Returns400(t *testing.T) {
 
 func TestLogin_InvalidCredentials_Returns401(t *testing.T) {
 	uc, r := setupRouter(t, "")
-	uc.On("Login", mock.Anything, "test", "wrong").Return(nil, "", errors.New("sai mật khẩu")).Once()
+	uc.On("Login", mock.Anything, "test", "wrong").
+		Return(nil, usecase.TokenPair{}, errors.New("sai mật khẩu")).Once()
 
 	body, _ := json.Marshal(map[string]any{"username": "test", "password": "wrong"})
 	w := httptest.NewRecorder()
@@ -110,9 +115,72 @@ func TestLogin_InvalidCredentials_Returns401(t *testing.T) {
 	require.Equal(t, "AUTH_401", errObj["code"])
 }
 
-func TestLogout_Success_Returns200(t *testing.T) {
+// --- Refresh ---
+
+func TestRefresh_Success_Returns200(t *testing.T) {
 	uc, r := setupRouter(t, "")
-	uc.On("Logout", mock.Anything, "valid_token").Return(nil).Once()
+	mockUser := &domain.User{ID: uuid.New(), Username: "test"}
+	uc.On("Refresh", mock.Anything, "old_refresh").
+		Return(mockUser, usecase.TokenPair{
+			AccessToken: "new_access", RefreshToken: "new_refresh", ExpiresIn: 900, RefreshExpiresIn: 604800,
+		}, nil).Once()
+
+	body, _ := json.Marshal(map[string]any{"refresh_token": "old_refresh"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(),
+		http.MethodPost, "/public/api/v1/auth/refresh", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	require.Equal(t, true, env["success"])
+	data := env["data"].(map[string]any)
+	require.Equal(t, "new_access", data["token"])
+	require.Equal(t, "new_refresh", data["refresh_token"], "phải trả refresh token MỚI (xoay vòng)")
+}
+
+// TestRefresh_DocTokenTuCookie: client dùng cookie thì body để trống vẫn phải chạy.
+func TestRefresh_DocTokenTuCookie(t *testing.T) {
+	uc, r := setupRouter(t, "")
+	mockUser := &domain.User{ID: uuid.New(), Username: "test"}
+	uc.On("Refresh", mock.Anything, "cookie_refresh").
+		Return(mockUser, usecase.TokenPair{AccessToken: "a", RefreshToken: "b", ExpiresIn: 900}, nil).Once()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/public/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie_refresh"})
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestRefresh_TokenSai_Returns401_VaXoaCookie(t *testing.T) {
+	uc, r := setupRouter(t, "")
+	uc.On("Refresh", mock.Anything, "bad").
+		Return(nil, usecase.TokenPair{}, errors.New("hết hạn")).Once()
+
+	body, _ := json.Marshal(map[string]any{"refresh_token": "bad"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(),
+		http.MethodPost, "/public/api/v1/auth/refresh", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	env := decodeEnvelope(t, w.Body.Bytes())
+	errObj := env["error"].(map[string]any)
+	require.Equal(t, "AUTH_401", errObj["code"])
+	// Token hỏng thì phải dọn cookie để client không kẹt vòng lặp 401.
+	require.Contains(t, w.Header().Get("Set-Cookie"), "Max-Age=0")
+}
+
+// --- Logout ---
+
+func TestLogout_Success_Returns200(t *testing.T) {
+	userID := uuid.New()
+	uc, r := setupRouter(t, userID.String())
+	uc.On("Logout", mock.Anything, userID, "").Return(nil).Once()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/auth/logout", nil)
