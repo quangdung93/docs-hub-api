@@ -25,14 +25,20 @@ import (
 
 // projectModel ánh xạ bảng `projects`.
 type projectModel struct {
-	ID          string                 `gorm:"column:id;type:uuid;primaryKey"`
-	OwnerID     string                 `gorm:"column:owner_id;type:uuid"`
-	Name        string                 `gorm:"column:name;type:text;not null"`
-	Description string                 `gorm:"column:description;type:text"`
-	Status      string                 `gorm:"column:status;type:text;not null;default:active"`
-	Settings    domain.ProjectSettings `gorm:"column:settings;type:jsonb;not null"`
-	AvatarKey   string                 `gorm:"column:avatar_key;type:text"`
-	CreatedAt   time.Time              `gorm:"column:created_at;autoCreateTime"`
+	ID                string                 `gorm:"column:id;type:uuid;primaryKey"`
+	OwnerID           string                 `gorm:"column:owner_id;type:uuid"`
+	Code              string                 `gorm:"column:code;type:varchar(64);not null"`
+	Name              string                 `gorm:"column:name;type:text;not null"`
+	Description       string                 `gorm:"column:description;type:text"`
+	Status            string                 `gorm:"column:status;type:text;not null;default:active"`
+	Settings          domain.ProjectSettings `gorm:"column:settings;type:jsonb;not null"`
+	AvatarKey         string                 `gorm:"column:avatar_key;type:text"`
+	Version           int                    `gorm:"column:version;not null;default:1"`
+	RAGFlowDatasetID  string                 `gorm:"column:ragflow_dataset_id"`
+	RAGFlowSyncStatus string                 `gorm:"column:ragflow_sync_status"`
+	RAGFlowLastError  string                 `gorm:"column:ragflow_last_error"`
+	CreatedAt         time.Time              `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt         time.Time              `gorm:"column:updated_at;autoUpdateTime"`
 }
 
 func (projectModel) TableName() string { return "projects" }
@@ -91,27 +97,39 @@ func projectToDomain(m *projectModel) (domain.Project, error) {
 		return domain.Project{}, fmt.Errorf("parse owner id: %w", err)
 	}
 	return domain.Project{
-		ID:          id,
-		OwnerID:     ownerID,
-		Name:        m.Name,
-		Description: m.Description,
-		Status:      m.Status,
-		Settings:    m.Settings,
-		AvatarKey:   m.AvatarKey,
-		CreatedAt:   m.CreatedAt,
+		ID:                id,
+		OwnerID:           ownerID,
+		Code:              m.Code,
+		Name:              m.Name,
+		Description:       m.Description,
+		Status:            m.Status,
+		Settings:          m.Settings,
+		AvatarKey:         m.AvatarKey,
+		Version:           m.Version,
+		RAGFlowDatasetID:  m.RAGFlowDatasetID,
+		RAGFlowSyncStatus: m.RAGFlowSyncStatus,
+		RAGFlowLastError:  m.RAGFlowLastError,
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
 	}, nil
 }
 
 func projectFromDomain(p *domain.Project) *projectModel {
 	return &projectModel{
-		ID:          p.ID.String(),
-		OwnerID:     p.OwnerID.String(),
-		Name:        p.Name,
-		Description: p.Description,
-		Status:      p.Status,
-		Settings:    p.Settings,
-		AvatarKey:   p.AvatarKey,
-		CreatedAt:   p.CreatedAt,
+		ID:                p.ID.String(),
+		OwnerID:           p.OwnerID.String(),
+		Code:              p.Code,
+		Name:              p.Name,
+		Description:       p.Description,
+		Status:            p.Status,
+		Settings:          p.Settings,
+		AvatarKey:         p.AvatarKey,
+		Version:           p.Version,
+		RAGFlowDatasetID:  p.RAGFlowDatasetID,
+		RAGFlowSyncStatus: p.RAGFlowSyncStatus,
+		RAGFlowLastError:  p.RAGFlowLastError,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
@@ -194,6 +212,7 @@ func (r *projectRepository) Create(ctx context.Context, p *domain.Project) error
 	// GORM tự điền CreatedAt (autoCreateTime) vào model sau khi insert — đồng bộ
 	// lại vào entity domain để caller (usecase) nhận giá trị thật, không phải zero value.
 	p.CreatedAt = model.CreatedAt
+	p.UpdatedAt = model.UpdatedAt
 	return nil
 }
 
@@ -201,11 +220,15 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 	res := postgres.DBFrom(ctx, r.db).Model(&projectModel{}).
 		Where("id = ?", p.ID.String()).
 		Updates(map[string]any{
-			colName:       p.Name,
-			"description": p.Description,
-			colStatus:     p.Status,
-			"settings":    p.Settings,
-			"avatar_key":  p.AvatarKey,
+			colName:               p.Name,
+			"description":         p.Description,
+			colStatus:             p.Status,
+			"settings":            p.Settings,
+			"avatar_key":          p.AvatarKey,
+			"ragflow_dataset_id":  p.RAGFlowDatasetID,
+			"ragflow_sync_status": p.RAGFlowSyncStatus,
+			"ragflow_last_error":  p.RAGFlowLastError,
+			"updated_at":          gorm.Expr("now()"),
 		})
 	if res.Error != nil {
 		return translate(res.Error)

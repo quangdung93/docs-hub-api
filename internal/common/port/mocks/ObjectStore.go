@@ -4,6 +4,7 @@ package mocks
 
 import (
 	context "context"
+	io "io"
 
 	port "github.com/quangdung93/docs-hub-api/internal/common/port"
 	mock "github.com/stretchr/testify/mock"
@@ -22,6 +23,26 @@ type MockObjectStore_Expecter struct {
 
 func (_m *MockObjectStore) EXPECT() *MockObjectStore_Expecter {
 	return &MockObjectStore_Expecter{mock: &_m.Mock}
+}
+
+func (_m *MockObjectStore) GetReader(ctx context.Context, key string) (io.ReadCloser, error) {
+	ret := _m.Called(ctx, key)
+	var reader io.ReadCloser
+	if ret.Get(0) != nil {
+		reader = ret.Get(0).(io.ReadCloser)
+	}
+	return reader, ret.Error(1)
+}
+
+func (_m *MockObjectStore) PutReader(
+	ctx context.Context, key string, reader io.Reader, size int64, contentType string,
+) (port.StoredObject, error) {
+	ret := _m.Called(ctx, key, reader, size, contentType)
+	var object port.StoredObject
+	if ret.Get(0) != nil {
+		object = ret.Get(0).(port.StoredObject)
+	}
+	return object, ret.Error(1)
 }
 
 // Delete provides a mock function with given fields: ctx, key

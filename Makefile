@@ -6,6 +6,7 @@ BIN_DIR        := bin
 MAIN_API       := ./cmd/api
 MAIN_MIGRATE   := ./cmd/migrate
 MAIN_SEED      := ./cmd/seed
+MAIN_WORKER    := ./cmd/worker
 CONFIG         ?= configs/config.local.yaml
 COMPOSE_FILE   := deployments/compose/docker-compose.yml
 GIT_SHA        := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
@@ -31,6 +32,11 @@ build: ## Build cả 3 binary vào bin/
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/api $(MAIN_API)
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/migrate $(MAIN_MIGRATE)
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/seed $(MAIN_SEED)
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/worker $(MAIN_WORKER)
+
+.PHONY: run-worker
+run-worker: ## Chạy ingestion worker local
+	APP_ENV=local go run $(MAIN_WORKER) -config $(CONFIG)
 
 .PHONY: run
 run: ## Chạy API ở môi trường local
@@ -106,6 +112,14 @@ seed: ## Nạp dữ liệu mẫu
 .PHONY: up
 up: ## Bật toàn bộ hạ tầng local (docker compose)
 	docker compose -f $(COMPOSE_FILE) up -d
+
+.PHONY: up-local
+up-local: ## Bật dependency tối thiểu cho API local dùng filesystem storage
+	docker compose -f $(COMPOSE_FILE) up -d postgres redis rabbitmq
+
+.PHONY: up-ragflow
+up-ragflow: ## Bật stack kèm ingestion worker RAGFlow (cần APP_RAGFLOW_* trong .env)
+	docker compose -f $(COMPOSE_FILE) --profile ragflow up -d
 
 .PHONY: down
 down: ## Tắt hạ tầng local

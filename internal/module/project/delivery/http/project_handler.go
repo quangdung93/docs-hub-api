@@ -53,6 +53,8 @@ func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRe
 		projects.PATCH("/:id", h.Update)
 		// projects.DELETE("/:id", onlyOwner, h.Delete)
 		projects.DELETE("/:id", h.Delete)
+		projects.POST("/:id/versions", h.CreateVersion)
+		projects.GET("/:id/versions", h.ListVersions)
 
 		projects.POST("/:id/avatar/upload-url", h.RequestAvatarUpload)
 		projects.POST("/:id/avatar/complete", h.CompleteAvatarUpload)
@@ -100,6 +102,7 @@ func (r ProjectSettingsRequest) toDomain() domain.ProjectSettings {
 
 // CreateProjectRequest là body tạo dự án.
 type CreateProjectRequest struct {
+	Code        string                  `json:"code"        binding:"omitempty,min=2,max=64"`
 	Name        string                  `json:"name"        binding:"required,min=1,max=255"`
 	Description string                  `json:"description" binding:"omitempty,max=2000"`
 	Settings    *ProjectSettingsRequest `json:"settings"    binding:"omitempty"`
@@ -154,13 +157,17 @@ type ProjectSettingsResponse struct {
 type ProjectResponse struct {
 	ID          string                  `json:"id"`
 	OwnerID     string                  `json:"owner_id"`
+	Code        string                  `json:"code"`
 	Name        string                  `json:"name"`
 	Description string                  `json:"description"`
 	Status      string                  `json:"status"`
 	Settings    ProjectSettingsResponse `json:"settings"`
 	// AvatarURL là presigned GET URL của ảnh đại diện, rỗng nếu dự án chưa có ảnh.
-	AvatarURL string    `json:"avatar_url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	AvatarURL         string    `json:"avatar_url,omitempty"`
+	RAGFlowSyncStatus string    `json:"ragflow_sync_status"`
+	RAGFlowLastError  string    `json:"ragflow_last_error,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // toProjectResponse ánh xạ entity sang DTO. avatarURL do caller tự resolve
@@ -169,6 +176,7 @@ func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
 	return ProjectResponse{
 		ID:          p.ID.String(),
 		OwnerID:     p.OwnerID.String(),
+		Code:        p.Code,
 		Name:        p.Name,
 		Description: p.Description,
 		Status:      p.Status,
@@ -178,8 +186,11 @@ func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
 			ChunkSize:      p.Settings.ChunkSize,
 			AllowedFormats: p.Settings.AllowedFormats,
 		},
-		AvatarURL: avatarURL,
-		CreatedAt: p.CreatedAt,
+		AvatarURL:         avatarURL,
+		RAGFlowSyncStatus: p.RAGFlowSyncStatus,
+		RAGFlowLastError:  p.RAGFlowLastError,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
@@ -288,6 +299,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	project, err := h.svc.Create(c.Request.Context(), usecase.CreateProjectInput{
 		OwnerID:     ownerID,
+		Code:        req.Code,
 		Name:        req.Name,
 		Description: req.Description,
 		Settings:    settings,

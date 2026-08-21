@@ -7,11 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/quangdung93/docs-hub-api/internal/common/apperr"
+	"github.com/quangdung93/docs-hub-api/internal/common/errcode"
 	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
 	"github.com/quangdung93/docs-hub-api/internal/module/project/domain"
@@ -23,6 +26,8 @@ type Service interface {
 	List(ctx context.Context, userID uuid.UUID, page pagination.Query) ([]domain.Project, pagination.Meta, error)
 	Update(ctx context.Context, in UpdateProjectInput) (*domain.Project, error)
 	Delete(ctx context.Context, in DeleteProjectInput) error
+	CreateVersion(ctx context.Context, in CreateVersionInput) (*domain.ProjectVersion, error)
+	ListVersions(ctx context.Context, projectID uuid.UUID, page pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error)
 
 	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error)
 	InviteMember(ctx context.Context, in InviteMemberInput) (*domain.ProjectMember, error)
@@ -45,8 +50,11 @@ type Service interface {
 type Deps struct {
 	ProjectRepo        domain.ProjectRepository
 	MemberRepo         domain.ProjectMemberRepository
+	VersionRepo        domain.ProjectVersionRepository
 	Tx                 port.TxManager
 	Clock              port.Clock
+	RAG                port.RAGClient
+	DatasetPrefix      string
 	ObjectStore        port.ObjectStore
 	AvatarMaxBytes     int64
 	AvatarPresignedTTL time.Duration
@@ -56,8 +64,11 @@ type Deps struct {
 type service struct {
 	projectRepo        domain.ProjectRepository
 	memberRepo         domain.ProjectMemberRepository
+	versionRepo        domain.ProjectVersionRepository
 	tx                 port.TxManager
 	clock              port.Clock
+	rag                port.RAGClient
+	datasetPrefix      string
 	objectStore        port.ObjectStore
 	avatarMaxBytes     int64
 	avatarPresignedTTL time.Duration
@@ -68,8 +79,11 @@ func NewService(d Deps) Service {
 	return &service{
 		projectRepo:        d.ProjectRepo,
 		memberRepo:         d.MemberRepo,
+		versionRepo:        d.VersionRepo,
 		tx:                 d.Tx,
 		clock:              d.Clock,
+		rag:                d.RAG,
+		datasetPrefix:      d.DatasetPrefix,
 		objectStore:        d.ObjectStore,
 		avatarMaxBytes:     d.AvatarMaxBytes,
 		avatarPresignedTTL: d.AvatarPresignedTTL,
@@ -81,10 +95,16 @@ func NewService(d Deps) Service {
 // CreateProjectInput là tham số tạo dự án.
 type CreateProjectInput struct {
 	OwnerID     uuid.UUID
+	Code        string
 	Name        string
 	Description string
 	Settings    domain.ProjectSettings
 }
+
+var (
+	projectCodePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$`) //nolint:gochecknoglobals
+	datasetPartPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)                  //nolint:gochecknoglobals
+)
 
 // UpdateProjectInput là tham số cập nhật dự án. Con trỏ nil = giữ nguyên (PATCH).
 type UpdateProjectInput struct {
@@ -139,8 +159,25 @@ func isRepoErr(err, target error) bool {
 // trong cùng một transaction.
 func (s *service) Create(ctx context.Context, in CreateProjectInput) (*domain.Project, error) {
 	project := domain.NewProject(in.OwnerID, in.Name, in.Description, in.Settings)
+	if code := strings.TrimSpace(in.Code); code != "" {
+		if !projectCodePattern.MatchString(code) {
+			return nil, apperr.BadRequest("Code phải dài 2-64 ký tự và chỉ gồm chữ, số, _ hoặc -")
+		}
+		project.Code = code
+	}
+	project.RAGFlowSyncStatus = "disabled"
+	if s.rag != nil {
+		dataset, ragErr := s.rag.CreateDataset(ctx, s.datasetName(project.ID), s.datasetDescription(project))
+		if ragErr != nil {
+			return nil, apperr.External("Không thể tạo dataset cho project trên RAGFlow").WithCause(ragErr)
+		}
+		project.RAGFlowDatasetID = dataset.ID
+		project.RAGFlowSyncStatus = "ready"
+	}
 	owner := domain.NewInvite(project.ID, in.OwnerID, domain.RoleOwner)
 	now := s.clock.Now()
+	project.CreatedAt = now
+	project.UpdatedAt = now
 	owner.Status = domain.MemberStatusActive
 	owner.JoinedAt = &now
 
@@ -154,9 +191,31 @@ func (s *service) Create(ctx context.Context, in CreateProjectInput) (*domain.Pr
 		return nil
 	})
 	if err != nil {
+		if s.rag != nil && project.RAGFlowDatasetID != "" {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			cleanupErr := s.rag.DeleteDatasets(cleanupCtx, []string{project.RAGFlowDatasetID})
+			err = errors.Join(err, cleanupErr)
+		}
+		if errors.Is(err, domain.ErrDuplicate) {
+			return nil, apperr.NewBusiness(errcode.ProjectCodeExists, "Mã project đã tồn tại", false).
+				WithDetails(map[string]string{"field": "code", "value": project.Code}).WithCause(err)
+		}
 		return nil, apperr.Database("Lỗi tạo dự án").WithCause(err)
 	}
 	return project, nil
+}
+
+func (s *service) datasetName(projectID uuid.UUID) string {
+	prefix := strings.Trim(datasetPartPattern.ReplaceAllString(strings.TrimSpace(s.datasetPrefix), "_"), "_-")
+	if prefix == "" {
+		prefix = "docs_hub"
+	}
+	return prefix + "_" + strings.ReplaceAll(projectID.String(), "-", "")
+}
+
+func (*service) datasetDescription(project *domain.Project) string {
+	return fmt.Sprintf("Docs Hub project %s (%s), local_project_id=%s", project.Name, project.Code, project.ID)
 }
 
 // List liệt kê dự án mà user là owner hoặc thành viên active.

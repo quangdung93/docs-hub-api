@@ -29,6 +29,8 @@ const (
 	RoleViewer Role = "viewer" // chỉ truy vấn
 )
 
+const StatusDraft = "draft"
+
 // Valid kiểm tra role có nằm trong tập hợp lệ không.
 func (r Role) Valid() bool {
 	switch r {
@@ -110,29 +112,52 @@ func IsAvatarFormatAllowed(mimeType string) bool {
 
 // Project là entity dự án — mô hình nghiệp vụ thuần, KHÔNG có tag gorm.
 type Project struct {
-	ID          uuid.UUID
-	OwnerID     uuid.UUID
-	Name        string
-	Description string
-	Status      string
-	Settings    ProjectSettings
+	ID                uuid.UUID
+	OwnerID           uuid.UUID
+	Code              string
+	Name              string
+	Description       string
+	Status            string
+	Settings          ProjectSettings
+	Version           int
+	RAGFlowDatasetID  string
+	RAGFlowSyncStatus string
+	RAGFlowLastError  string
 	// AvatarKey là object key trong MinIO chứa ảnh đại diện dự án. Rỗng nghĩa
 	// là chưa có ảnh. Chỉ được set qua SetAvatar SAU KHI usecase xác nhận
 	// object đã thực sự tồn tại trong storage (luồng presigned URL).
 	AvatarKey string
 	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewProject tạo dự án mới ở trạng thái active.
 func NewProject(ownerID uuid.UUID, name, description string, settings ProjectSettings) *Project {
-	return &Project{
+	p := &Project{
 		ID:          uuid.New(),
 		OwnerID:     ownerID,
 		Name:        name,
 		Description: description,
 		Status:      DefaultProjectStatus,
 		Settings:    settings,
+		Version:     1,
 	}
+	p.Code = "project_" + p.ID.String()[:12]
+	return p
+}
+
+// ProjectVersion là một mốc tài liệu trong timeline của project. Version mới
+// luôn bắt đầu ở draft và dùng chung dataset RAGFlow của project.
+type ProjectVersion struct {
+	ID         uuid.UUID  `json:"id"`
+	ProjectID  uuid.UUID  `json:"project_id"`
+	Label      string     `json:"label"`
+	SequenceNo int64      `json:"sequence_no"`
+	Status     string     `json:"status"`
+	ReleasedAt *time.Time `json:"released_at,omitempty"`
+	CreatedBy  uuid.UUID  `json:"created_by"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // ChangeProfile cập nhật thông tin chung/cấu hình. Con trỏ nil = giữ nguyên
@@ -223,11 +248,18 @@ type ProjectMemberRepository interface {
 	Delete(ctx context.Context, projectID, userID uuid.UUID) error
 }
 
+// ProjectVersionRepository quản lý timeline version và audit tương ứng.
+type ProjectVersionRepository interface {
+	Create(ctx context.Context, version *ProjectVersion, requestID string) error
+	List(ctx context.Context, projectID uuid.UUID, page pagination.Query) ([]ProjectVersion, int64, error)
+}
+
 // Lỗi hợp đồng của repository (độc lập với chi tiết driver/ORM).
 var (
-	ErrNotFound       = newRepoError("không tìm thấy bản ghi")
-	ErrDuplicate      = newRepoError("vi phạm ràng buộc duy nhất")
-	ErrNoRowsAffected = newRepoError("không có dòng nào bị tác động")
+	ErrNotFound              = newRepoError("không tìm thấy bản ghi")
+	ErrDuplicate             = newRepoError("vi phạm ràng buộc duy nhất")
+	ErrNoRowsAffected        = newRepoError("không có dòng nào bị tác động")
+	ErrDuplicateVersionLabel = newRepoError("label version đã tồn tại")
 )
 
 type repoError struct{ msg string }

@@ -8,7 +8,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576
+  max_body_bytes: 57671680
   shutdown_timeout: 20s
   enable_pprof: false
   enable_swagger: true
@@ -44,6 +44,11 @@ rabbitmq:
   password: ""
   vhost: /
   exchange: document_hub.events
+
+storage:
+  driver: minio
+  filesystem:
+    root: ./var/storage
 
 minio:
   enabled: true
@@ -92,3 +97,11 @@ timeout:
   redis: 2s
   mq: 3s
   external: 5s
+ragflow:
+  enabled: false
+  base_url: https://ragflow.example.internal
+  dataset_prefix: docs_hub_staging
+  timeout: 30s
+  upload_timeout: 2m
+  poll_interval: 3s
+  max_poll_duration: 15m

@@ -22,6 +22,8 @@ type Deps struct {
 	DB                 *gorm.DB
 	Tx                 port.TxManager
 	Clock              port.Clock
+	RAG                port.RAGClient
+	DatasetPrefix      string
 	ObjectStore        port.ObjectStore
 	AvatarMaxBytes     int64
 	AvatarPresignedTTL time.Duration
@@ -37,11 +39,15 @@ type Module struct {
 func New(d Deps) *Module {
 	projectRepo := repository.NewProjectRepository(d.DB)
 	memberRepo := repository.NewProjectMemberRepository(d.DB)
+	versionRepo := repository.NewProjectVersionRepository(d.DB)
 	svc := usecase.NewService(usecase.Deps{
 		ProjectRepo:        projectRepo,
 		MemberRepo:         memberRepo,
+		VersionRepo:        versionRepo,
 		Tx:                 d.Tx,
 		Clock:              d.Clock,
+		RAG:                d.RAG,
+		DatasetPrefix:      d.DatasetPrefix,
 		ObjectStore:        d.ObjectStore,
 		AvatarMaxBytes:     d.AvatarMaxBytes,
 		AvatarPresignedTTL: d.AvatarPresignedTTL,

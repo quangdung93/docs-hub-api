@@ -28,6 +28,29 @@ func (_m *MockService) EXPECT() *MockService_Expecter {
 	return &MockService_Expecter{mock: &_m.Mock}
 }
 
+// CreateVersion provides a mock function with given fields.
+func (_m *MockService) CreateVersion(ctx context.Context, in usecase.CreateVersionInput) (*domain.ProjectVersion, error) {
+	ret := _m.Called(ctx, in)
+	var version *domain.ProjectVersion
+	if ret.Get(0) != nil {
+		version = ret.Get(0).(*domain.ProjectVersion)
+	}
+	return version, ret.Error(1)
+}
+
+// ListVersions provides a mock function with given fields.
+func (_m *MockService) ListVersions(
+	ctx context.Context, projectID uuid.UUID, page pagination.Query,
+) ([]domain.ProjectVersion, pagination.Meta, error) {
+	ret := _m.Called(ctx, projectID, page)
+	var versions []domain.ProjectVersion
+	if ret.Get(0) != nil {
+		versions = ret.Get(0).([]domain.ProjectVersion)
+	}
+	meta, _ := ret.Get(1).(pagination.Meta)
+	return versions, meta, ret.Error(2)
+}
+
 // AcceptInvite provides a mock function with given fields: ctx, projectID, userID
 func (_m *MockService) AcceptInvite(ctx context.Context, projectID uuid.UUID, userID uuid.UUID) (*domain.ProjectMember, error) {
 	ret := _m.Called(ctx, projectID, userID)

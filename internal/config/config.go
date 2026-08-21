@@ -17,13 +17,57 @@ type Config struct {
 	Postgres  PostgresConfig  `mapstructure:"postgres"  validate:"required"`
 	Redis     RedisConfig     `mapstructure:"redis"     validate:"required"`
 	RabbitMQ  RabbitMQConfig  `mapstructure:"rabbitmq"`
+	Storage   StorageConfig   `mapstructure:"storage" validate:"required"`
 	MinIO     MinIOConfig     `mapstructure:"minio"`
 	JWT       JWTConfig       `mapstructure:"jwt"       validate:"required"`
 	CORS      CORSConfig      `mapstructure:"cors"`
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 	Telemetry TelemetryConfig `mapstructure:"telemetry"`
 	Timeout   TimeoutConfig   `mapstructure:"timeout"   validate:"required"`
-	Project   ProjectConfig   `mapstructure:"project"   validate:"required"`
+	LocalAI   LocalAIConfig   `mapstructure:"local_ai"`
+	RAGFlow   RAGFlowConfig   `mapstructure:"ragflow"`
+	Ingestion IngestionConfig `mapstructure:"ingestion"`
+	Project   ProjectConfig   `mapstructure:"project" validate:"required"`
+}
+
+// StorageConfig chọn backend lưu tài liệu gốc.
+type StorageConfig struct {
+	Driver     string           `mapstructure:"driver" validate:"required,oneof=filesystem minio"`
+	Filesystem FilesystemConfig `mapstructure:"filesystem"`
+}
+
+// FilesystemConfig cấu hình lưu file trong một thư mục local.
+type FilesystemConfig struct {
+	Root string `mapstructure:"root"`
+}
+
+// LocalAIConfig cấu hình OpenAI-compatible embedding endpoint.
+type LocalAIConfig struct {
+	BaseURL            string        `mapstructure:"base_url"`
+	EmbeddingModel     string        `mapstructure:"embedding_model"`
+	EmbeddingDimension int           `mapstructure:"embedding_dimension"`
+	Timeout            time.Duration `mapstructure:"timeout"`
+}
+
+// RAGFlowConfig cấu hình RAGFlow HTTP API. APIKey luôn đến từ
+// APP_RAGFLOW_API_KEY hoặc secret manager, không đặt trong YAML.
+type RAGFlowConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	BaseURL         string        `mapstructure:"base_url"`
+	APIKey          string        `mapstructure:"api_key"`
+	DatasetPrefix   string        `mapstructure:"dataset_prefix"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	UploadTimeout   time.Duration `mapstructure:"upload_timeout"`
+	PollInterval    time.Duration `mapstructure:"poll_interval"`
+	MaxPollDuration time.Duration `mapstructure:"max_poll_duration"`
+}
+
+// IngestionConfig cấu hình worker polling và deterministic chunking.
+type IngestionConfig struct {
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+	ChunkLines   int           `mapstructure:"chunk_lines"`
+	OverlapLines int           `mapstructure:"overlap_lines"`
+	BatchSize    int           `mapstructure:"batch_size"`
 }
 
 // Environment là các môi trường được hỗ trợ.

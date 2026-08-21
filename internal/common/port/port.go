@@ -8,6 +8,8 @@ package port
 
 import (
 	"context"
+	"errors"
+	"io"
 	"time"
 )
 
@@ -57,18 +59,24 @@ type StoredObject struct {
 	ContentType string
 }
 
-// ObjectStore là interface lưu trữ file (implement bằng MinIO/S3).
+// ErrPresignUnsupported báo storage backend không hỗ trợ presigned URL.
+// Filesystem local dùng upload/download qua API đã xác thực thay vì URL S3.
+var ErrPresignUnsupported = errors.New("object store không hỗ trợ presigned URL")
+
+// ObjectStore là interface lưu trữ file (implement bằng filesystem hoặc MinIO/S3).
 type ObjectStore interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) (StoredObject, error)
+	// PutReader tải dữ liệu theo luồng để không giữ toàn bộ file lớn trong RAM.
+	PutReader(ctx context.Context, key string, reader io.Reader, size int64, contentType string) (StoredObject, error)
 	Get(ctx context.Context, key string) ([]byte, error)
-	// PresignedGetURL tạo URL tải file XUỐNG có thời hạn.
-	PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
-	// PresignedPutURL tạo URL tải file LÊN có thời hạn — dùng cho luồng client
-	// (FE) tự upload thẳng lên storage, không đẩy file qua backend.
-	PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error)
-	// Stat kiểm tra object đã thực sự tồn tại chưa (dùng để xác nhận client đã
-	// upload xong qua presigned URL). Không tồn tại -> ErrObjectNotFound.
+	// GetReader đọc object theo luồng để kiểm tra hash hoặc phục vụ parser.
+	GetReader(ctx context.Context, key string) (io.ReadCloser, error)
+	// Stat trả metadata hiện tại để xác minh upload trực tiếp trước khi tạo revision.
 	Stat(ctx context.Context, key string) (StoredObject, error)
+	// PresignedPutURL tạo URL upload trực tiếp có thời hạn.
+	PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error)
+	// PresignedGetURL tạo URL tải file có thời hạn.
+	PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	Delete(ctx context.Context, key string) error
 }
 

@@ -19,6 +19,9 @@ coverage.html
 /vendor/
 .cache/
 
+# Tài liệu/object lưu local khi storage.driver=filesystem
+/var/storage/
+
 # IDE
 .idea/
 .vscode/

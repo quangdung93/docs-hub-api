@@ -5,7 +5,9 @@ import (
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth"
+	"github.com/quangdung93/docs-hub-api/internal/module/document"
 	"github.com/quangdung93/docs-hub-api/internal/module/project"
+	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -19,7 +21,7 @@ type Module interface {
 // buildModules dựng danh sách module từ hạ tầng. Đây là nơi DUY NHẤT bootstrap
 // biết về từng feature cụ thể.
 func buildModules(cfg *config.Config, infra *Infra) []Module {
-	return []Module{
+	modules := []Module{
 		user.New(user.Deps{
 			DB:        infra.DB,
 			Tx:        infra.Tx,
@@ -36,10 +38,24 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 			DB:                 infra.DB,
 			Tx:                 infra.Tx,
 			Clock:              infra.clock(),
+			RAG:                infra.RAG,
+			DatasetPrefix:      cfg.RAGFlow.DatasetPrefix,
 			ObjectStore:        infra.ObjectStore,
 			AvatarMaxBytes:     cfg.Project.AvatarMaxBytes,
 			AvatarPresignedTTL: cfg.Project.AvatarPresignedTTL,
 		}),
 		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}
+	if infra.ObjectStore != nil {
+		modules = append(modules, document.New(document.Deps{
+			DB: infra.DB, Tx: infra.Tx, Store: infra.ObjectStore, Clock: infra.clock(),
+			BypassProjectACL: cfg.App.IsLocal(),
+		}))
+	}
+	if infra.RAG != nil {
+		modules = append(modules, retrieval.New(retrieval.Deps{
+			DB: infra.DB, RAG: infra.RAG, BypassACL: cfg.App.IsLocal(),
+		}))
+	}
+	return modules
 }
