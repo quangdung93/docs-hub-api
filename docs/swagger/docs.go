@@ -22,7 +22,10 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Xóa token ở client (xóa Cookie) và revoke ở server",
+                "description": "Thu hồi session ở server và xóa cookie. Không kèm refresh_token thì thu hồi mọi phiên của user.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -30,6 +33,16 @@ const docTemplate = `{
                     "auth"
                 ],
                 "summary": "Đăng xuất",
+                "parameters": [
+                    {
+                        "description": "Refresh token cần thu hồi (bỏ trống = mọi phiên)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/http.LogoutRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -37,8 +50,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Envelope"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -2088,7 +2101,7 @@ const docTemplate = `{
         },
         "/public/api/v1/auth/login": {
             "post": {
-                "description": "Xác thực và trả về JWT qua Cookie",
+                "description": "Xác thực và trả về access token + refresh token (kèm cookie)",
                 "consumes": [
                     "application/json"
                 ],
@@ -2119,6 +2132,45 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/public/api/v1/auth/refresh": {
+            "post": {
+                "description": "Đổi refresh token còn hiệu lực lấy cặp token mới. Refresh token cũ bị thu hồi ngay.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Gia hạn access token",
+                "parameters": [
+                    {
+                        "description": "Refresh token (bỏ trống thì đọc từ cookie)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/http.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -2406,6 +2458,14 @@ const docTemplate = `{
                 }
             }
         },
+        "http.LogoutRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
         "http.PresignRequest": {
             "type": "object",
             "required": [
@@ -2499,6 +2559,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "http.RefreshRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
                     "type": "string"
                 }
             }
