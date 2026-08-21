@@ -23,6 +23,8 @@ const (
 	MFARequired          = "MFA_REQUIRED"           // Cần xác thực đa yếu tố (MFA)
 	UploadInvalid        = "UPLOAD_INVALID"         // Phiên upload không hợp lệ hoặc hết hạn
 	DocumentRetryInvalid = "DOCUMENT_RETRY_INVALID" // Revision không thể retry
+	ProjectCodeExists    = "PROJECT_CODE_EXISTS"    // Mã project đã tồn tại
+	VersionLabelExists   = "VERSION_LABEL_EXISTS"   // Label version đã tồn tại trong project
 
 	// ConflictVersion — mã nghiệp vụ BỔ SUNG (không có trong templates/04 gốc),
 	// dùng cho optimistic lock. Cần TL duyệt (xem ADR-0003). Nhóm BUSINESS_RULE_*.

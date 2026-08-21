@@ -93,3 +93,44 @@ go build ./...
 - **RabbitMQ/MinIO**: đã nối client + health check + port; module `user` chỉ dùng MQ để phát `user.created`. MinIO là điểm nối cho module `file`.
 - **CI**: `.gitlab-ci.yml` tự chứa (không phụ thuộc template `isc/cicd-config` — chưa có bản Go). Cần xác nhận với đội nền tảng về template Go dài hạn.
 - **Việc còn mở**: xem ADR-0003 (mã CONFLICT_VERSION chờ duyệt), ADR-0005 (Outbox cho publish sự kiện).
+
+## RAGFlow (tùy chọn)
+
+RAGFlow được bật bằng `.env`; API key không đặt trong YAML hoặc commit vào Git:
+
+```dotenv
+APP_RAGFLOW_ENABLED=true
+APP_RAGFLOW_BASE_URL=http://127.0.0.1:9380
+APP_RAGFLOW_API_KEY=ragflow-your-key
+```
+
+Khi bật, ingestion worker upload file gốc từ ObjectStore sang RAGFlow, chờ parse/index hoàn tất và lưu `ragflow_dataset_id`/`ragflow_document_id` trong PostgreSQL. Chạy migration trước:
+
+```bash
+make migrate-up
+make run-worker
+make run
+```
+
+Nếu chạy bằng Docker Compose, đặt các biến trên trong `.env` rồi dùng:
+
+```bash
+make up-ragflow
+```
+
+Retrieval theo version hoặc change request:
+
+```http
+POST /internal/api/v1/projects/{project_id}/retrieval
+Content-Type: application/json
+Authorization: Bearer <application-jwt>
+
+{
+  "question": "Quy trình phê duyệt là gì?",
+  "project_version_id": "<uuid>",
+  "page_size": 10,
+  "keyword": true
+}
+```
+
+PostgreSQL và ObjectStore local vẫn là source of truth. RAGFlow API key chỉ được backend/worker sử dụng; không gửi key này cho frontend.

@@ -36,7 +36,11 @@ type revisionModel struct {
 	FileName, MediaType               string
 	SizeBytes                         int64
 	SHA256, ObjectKey, Status         string
-	ErrorCode, ErrorDetail            string `gorm:"column:error_detail_sanitized"`
+	ErrorCode, ErrorDetail            string     `gorm:"column:error_detail_sanitized"`
+	RAGFlowDocumentID                 string     `gorm:"column:ragflow_document_id"`
+	RAGFlowSyncStatus                 string     `gorm:"column:ragflow_sync_status"`
+	RAGFlowLastError                  string     `gorm:"column:ragflow_last_error"`
+	RAGFlowSyncedAt                   *time.Time `gorm:"column:ragflow_synced_at"`
 	CreatedBy                         string
 	CreatedAt, UpdatedAt              time.Time
 }
@@ -300,6 +304,8 @@ func toRevision(m revisionModel) *domain.Revision {
 		RevisionNo: m.RevisionNo, FileName: m.FileName, MediaType: m.MediaType,
 		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey, Status: m.Status,
 		ErrorCode: m.ErrorCode, ErrorDetail: m.ErrorDetail, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		RAGFlowDocumentID: m.RAGFlowDocumentID, RAGFlowSyncStatus: m.RAGFlowSyncStatus,
+		RAGFlowLastError: m.RAGFlowLastError, RAGFlowSyncedAt: m.RAGFlowSyncedAt,
 	}
 }
 func fromUpload(u *domain.Upload) *uploadModel {

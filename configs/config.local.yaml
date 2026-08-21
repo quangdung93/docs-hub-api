@@ -100,6 +100,15 @@ local_ai:
   embedding_dimension: 0
   timeout: 30s
 
+ragflow:
+  enabled: false # bật bằng APP_RAGFLOW_ENABLED=true trong .env
+  base_url: https://ragflow.io.vn
+  dataset_prefix: docs_hub_local
+  timeout: 30s
+  upload_timeout: 2m
+  poll_interval: 3s
+  max_poll_duration: 15m
+
 ingestion:
   poll_interval: 2s
   chunk_lines: 80

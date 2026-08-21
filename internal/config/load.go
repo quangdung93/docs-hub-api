@@ -2,10 +2,13 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+	"github.com/subosito/gotenv"
 )
 
 // envPrefix là tiền tố cho biến môi trường override. Ví dụ:
@@ -23,6 +26,12 @@ const envPrefix = "APP"
 // Sau khi unmarshal, cấu hình được validate và kiểm tra ràng buộc an toàn
 // (ví dụ: dev-token không được bật ngoài local).
 func Load(configPath string) (*Config, error) {
+	// .env chỉ là nguồn tiện lợi khi chạy local. Biến môi trường đã có sẵn luôn
+	// được giữ nguyên vì gotenv.Load không override process environment.
+	if err := gotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("đọc file .env thất bại: %w", err)
+	}
+
 	v := viper.New()
 
 	setDefaults(v)
@@ -84,6 +93,28 @@ func checkSafety(cfg *Config) error {
 	if cfg.Storage.Driver == "minio" && !cfg.MinIO.Enabled {
 		return fmt.Errorf("storage.driver=minio yêu cầu minio.enabled=true")
 	}
+	if cfg.RAGFlow.Enabled {
+		if strings.TrimSpace(cfg.RAGFlow.BaseURL) == "" {
+			return fmt.Errorf("ragflow.enabled=true yêu cầu ragflow.base_url")
+		}
+		if strings.TrimSpace(cfg.RAGFlow.APIKey) == "" {
+			return fmt.Errorf("ragflow.enabled=true yêu cầu API key qua ENV %s_RAGFLOW_API_KEY", envPrefix)
+		}
+		if strings.TrimSpace(cfg.RAGFlow.DatasetPrefix) == "" {
+			return fmt.Errorf("ragflow.enabled=true yêu cầu ragflow.dataset_prefix")
+		}
+		validPrefix, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`, cfg.RAGFlow.DatasetPrefix)
+		if !validPrefix {
+			return fmt.Errorf("ragflow.dataset_prefix chỉ gồm chữ, số, _ hoặc - và dài tối đa 32 ký tự")
+		}
+		if cfg.RAGFlow.Timeout <= 0 || cfg.RAGFlow.UploadTimeout <= 0 ||
+			cfg.RAGFlow.PollInterval <= 0 || cfg.RAGFlow.MaxPollDuration <= 0 {
+			return fmt.Errorf("timeout/poll interval của ragflow phải lớn hơn 0")
+		}
+		if cfg.App.IsProduction() && !strings.HasPrefix(strings.ToLower(cfg.RAGFlow.BaseURL), "https://") {
+			return fmt.Errorf("production yêu cầu ragflow.base_url dùng HTTPS")
+		}
+	}
 
 	return nil
 }
@@ -120,6 +151,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("local_ai.embedding_model", "")
 	v.SetDefault("local_ai.embedding_dimension", 0)
 	v.SetDefault("local_ai.timeout", "30s")
+	v.SetDefault("ragflow.enabled", false)
+	v.SetDefault("ragflow.base_url", "http://127.0.0.1:9380")
+	v.SetDefault("ragflow.api_key", "")
+	v.SetDefault("ragflow.dataset_prefix", "docs_hub")
+	v.SetDefault("ragflow.timeout", "30s")
+	v.SetDefault("ragflow.upload_timeout", "2m")
+	v.SetDefault("ragflow.poll_interval", "3s")
+	v.SetDefault("ragflow.max_poll_duration", "15m")
 	v.SetDefault("ingestion.poll_interval", "2s")
 	v.SetDefault("ingestion.chunk_lines", 80)
 	v.SetDefault("ingestion.overlap_lines", 10)

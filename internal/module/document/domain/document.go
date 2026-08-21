@@ -36,22 +36,26 @@ type Document struct {
 }
 
 type Revision struct {
-	ID          uuid.UUID `json:"id"`
-	DocumentID  uuid.UUID `json:"document_id"`
-	ProjectID   uuid.UUID `json:"project_id"`
-	CreatedBy   uuid.UUID `json:"created_by"`
-	Scope       Scope     `json:"scope"`
-	RevisionNo  int       `json:"revision_no"`
-	FileName    string    `json:"file_name"`
-	MediaType   string    `json:"media_type"`
-	SHA256      string    `json:"sha256"`
-	ObjectKey   string    `json:"-"`
-	Status      string    `json:"status"`
-	SizeBytes   int64     `json:"size_bytes"`
-	ErrorCode   string    `json:"error_code,omitempty"`
-	ErrorDetail string    `json:"error_detail,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID                uuid.UUID  `json:"id"`
+	DocumentID        uuid.UUID  `json:"document_id"`
+	ProjectID         uuid.UUID  `json:"project_id"`
+	CreatedBy         uuid.UUID  `json:"created_by"`
+	Scope             Scope      `json:"scope"`
+	RevisionNo        int        `json:"revision_no"`
+	FileName          string     `json:"file_name"`
+	MediaType         string     `json:"media_type"`
+	SHA256            string     `json:"sha256"`
+	ObjectKey         string     `json:"-"`
+	Status            string     `json:"status"`
+	SizeBytes         int64      `json:"size_bytes"`
+	ErrorCode         string     `json:"error_code,omitempty"`
+	ErrorDetail       string     `json:"error_detail,omitempty"`
+	RAGFlowDocumentID string     `json:"-"`
+	RAGFlowSyncStatus string     `json:"ragflow_sync_status,omitempty"`
+	RAGFlowLastError  string     `json:"ragflow_last_error,omitempty"`
+	RAGFlowSyncedAt   *time.Time `json:"ragflow_synced_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 type Upload struct {

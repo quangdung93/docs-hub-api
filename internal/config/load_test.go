@@ -54,6 +54,28 @@ func TestLoad_RejectsDevTokenOutsideLocal(t *testing.T) {
 	require.Contains(t, err.Error(), "enable_dev_token")
 }
 
+func TestLoad_RAGFlowRequiresAPIKeyWhenEnabled(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://127.0.0.1:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "")
+
+	_, err := config.Load(localConfigPath(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "APP_RAGFLOW_API_KEY")
+}
+
+func TestLoad_RAGFlowFromEnvironment(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "ragflow-secret")
+
+	cfg, err := config.Load(localConfigPath(t))
+	require.NoError(t, err)
+	require.True(t, cfg.RAGFlow.Enabled)
+	require.Equal(t, "http://ragflow.test:9380", cfg.RAGFlow.BaseURL)
+	require.Equal(t, "ragflow-secret", cfg.RAGFlow.APIKey)
+}
+
 func TestPostgresConfig_DSN(t *testing.T) {
 	p := config.PostgresConfig{
 		Host: "127.0.0.1", Port: 5432, User: "app", Password: "p",

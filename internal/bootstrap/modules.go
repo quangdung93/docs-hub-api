@@ -5,6 +5,8 @@ import (
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/document"
+	"github.com/quangdung93/docs-hub-api/internal/module/project"
+	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -27,11 +29,20 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 			Hasher:    infra.Hasher,
 			Clock:     infra.clock(),
 		}),
+		project.New(project.Deps{
+			DB: infra.DB, Tx: infra.Tx, RAG: infra.RAG, Clock: infra.clock(),
+			DatasetPrefix: cfg.RAGFlow.DatasetPrefix,
+		}),
 	}
 	if infra.ObjectStore != nil {
 		modules = append(modules, document.New(document.Deps{
 			DB: infra.DB, Tx: infra.Tx, Store: infra.ObjectStore, Clock: infra.clock(),
 			BypassProjectACL: cfg.App.IsLocal(),
+		}))
+	}
+	if infra.RAG != nil {
+		modules = append(modules, retrieval.New(retrieval.Deps{
+			DB: infra.DB, RAG: infra.RAG, BypassACL: cfg.App.IsLocal(),
 		}))
 	}
 	return modules

@@ -156,8 +156,9 @@ Tạo migration tuần tự sau `000002`; số migration thực tế phải lấ
   - `id UUID PK`, `user_id UUID FK users`, `refresh_token_hash VARCHAR`, `expires_at`, `revoked_at`, `created_at`, `last_used_at`, `user_agent`, `ip_hash`.
   - Chỉ lưu hash refresh token; rotate token sau mỗi lần refresh; unique active token hash.
 - `projects`
-  - `id`, `code`, `name`, `description`, `status(active|archived)`, `owner_id`, `version` optimistic lock, timestamps, `deleted_at`.
+  - `id`, `code`, `name`, `description`, `status(active|archived)`, `owner_id`, `version` optimistic lock, `ragflow_dataset_id NULL`, `ragflow_sync_status`, `ragflow_last_error`, timestamps, `deleted_at`.
   - Partial unique index trên `lower(code)` khi chưa xóa.
+  - Unique index trên `ragflow_dataset_id` khi khác NULL; remote ID chỉ là internal reference và không được expose cho frontend.
 - `project_members`
   - `(project_id,user_id)` unique, `role(owner|editor|viewer)`, timestamps.
   - Owner cũng phải có một row membership để query thống nhất.
@@ -231,6 +232,11 @@ Mọi response REST dùng ISC envelope. DTO dùng `snake_case`; timestamp UTC RF
 | DELETE | `/internal/api/v1/projects/{project_id}/members/{user_id}` | owner gỡ member; không được gỡ owner cuối |
 
 - Tạo project và owner membership trong một transaction.
+- Khi RAGFlow được bật, `POST /projects` phải tạo ngay một dataset riêng trên RAGFlow và lưu reference vào `projects.ragflow_dataset_id`; không dùng một dataset chung cho nhiều project.
+- Tên dataset kỹ thuật có dạng `{APP_RAGFLOW_DATASET_PREFIX}_{project_uuid_without_hyphens}` để tránh đụng tên giữa local/dev/staging/prod hoặc giữa nhiều installation. Tên hiển thị của project vẫn nằm trong PostgreSQL.
+- Luồng đồng bộ v1: kiểm tra code local → tạo dataset RAGFlow → transaction tạo project + owner membership + audit. Nếu transaction local thất bại, service gọi xóa dataset vừa tạo để bù trừ; API chỉ trả `201` khi mapping hai phía đã sẵn sàng.
+- Response không lộ `ragflow_dataset_id` hoặc API key; chỉ trả `ragflow_sync_status=ready`. PostgreSQL vẫn là source of truth cho project, version, membership và ACL; RAGFlow chỉ giữ knowledge dataset/document/chunk.
+- Nếu RAGFlow tắt, timeout, sai API key hoặc không có quyền tạo dataset, request tạo project thất bại bằng technical error; không tự tạo project local ở trạng thái thành công giả.
 - Không tự tạo version “latest” rỗng; client hoặc seed tạo version draft rõ ràng.
 
 ### III. Danh sách dự án
@@ -247,6 +253,9 @@ Mọi response REST dùng ISC envelope. DTO dùng `snake_case`; timestamp UTC RF
 
 - List dùng shared pagination và stable sort `(updated_at,id)` hoặc `(created_at,id)`.
 - Version timeline trả `sequence_no`; không suy ra thứ tự từ label.
+- Trạng thái triển khai 2026-08-20: `POST/GET .../versions` đã có; version mới luôn là `draft`, owner/editor được tạo, mọi member được xem, `sequence_no` được cấp tuần tự dưới row lock của project và có audit `project_version.created`.
+- Version chỉ là scope nghiệp vụ trong PostgreSQL và dùng chung `ragflow_dataset_id` của project; không tạo dataset RAGFlow mới cho từng version.
+- `PATCH .../versions/{id}/status` chưa triển khai cho đến khi chốt P0 về lifecycle và định nghĩa `latest`.
 
 ### IV. Tra cứu thông tin
 
@@ -440,6 +449,7 @@ Tạo port thuần ở `internal/common/port` hoặc module-specific port:
 3. Tạo `project` slice gồm project, member, version và change request.
 4. Tạo reusable project authorization service/port; không đặt business ACL trong Gin middleware đơn thuần.
 5. Thêm routes/module wiring, OpenAPI, unit/integration tests.
+6. Trong create-project usecase, tạo dataset RAGFlow theo prefix môi trường, persist mapping trong cùng lifecycle với owner membership và bù trừ remote dataset nếu transaction local rollback.
 
 ### Phase 2 - Document upload and management
 
@@ -555,6 +565,9 @@ Tạo port thuần ở `internal/common/port` hoặc module-specific port:
 
 ### Suggested config additions
 
+- `APP_RAGFLOW_ENABLED`, `APP_RAGFLOW_BASE_URL`, `APP_RAGFLOW_API_KEY`: bật và xác thực RAGFlow; API key thật chỉ nằm trong `.env`/secret manager.
+- `APP_RAGFLOW_DATASET_PREFIX`: prefix phân vùng dataset theo installation/môi trường, ví dụ `docs_hub_local`, `docs_hub_staging`.
+
 ```yaml
 localai:
   enabled: true
@@ -653,7 +666,7 @@ Các câu này không chặn skeleton/module cơ bản nhưng phải được tr
 ### Functional
 
 - Login/refresh rotation/logout/me hoạt động; token revoked không dùng lại được.
-- Tạo/list/get project chỉ thấy project có membership; permission matrix đúng.
+- Tạo project đồng thời tạo đúng một dataset RAGFlow, lưu mapping local, tạo owner membership và không expose remote ID; list/get chỉ thấy project có membership, permission matrix đúng.
 - Version/CR state transition đúng và latest resolution dùng sequence/status, không dùng label lexical.
 - Upload vào đúng scope, worker tạo canonical text/chunks/vector và status chuyển đúng.
 - Search trả đúng project/scope và locator có thể mở.
@@ -670,6 +683,7 @@ Các câu này không chặn skeleton/module cơ bản nhưng phải được tr
 ### Edge Cases
 
 - Parallel create/update conflict, last-owner removal, IDOR/cross-project IDs.
+- RAGFlow create lỗi không để lại project local; transaction local lỗi phải thử xóa dataset remote vừa tạo; prefix môi trường không dùng lại tên dataset cũ của tenant khác.
 - Duplicate upload/event, worker restart, poison file, retry exhaustion, DLQ.
 - Unicode tiếng Việt, mixed Vietnamese/English, version labels gần giống nhau.
 - Empty/huge question, prompt injection, no evidence, LocalAI timeout/OOM.

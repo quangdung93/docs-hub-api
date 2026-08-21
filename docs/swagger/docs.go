@@ -15,6 +15,81 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/internal/api/v1/projects": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Tạo project local, owner membership và dataset riêng trên RAGFlow; thất bại nếu không tạo được cả hai phía.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Tạo project và dataset RAGFlow",
+                "parameters": [
+                    {
+                        "description": "Thông tin project",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/http.CreateResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/internal/api/v1/projects/{project_id}/documents": {
             "get": {
                 "security": [
@@ -1005,6 +1080,251 @@ const docTemplate = `{
                 }
             }
         },
+        "/internal/api/v1/projects/{project_id}/retrieval": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "retrieval"
+                ],
+                "summary": "Truy hồi tài liệu theo project version hoặc change request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Câu hỏi và scope",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/usecase.Result"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{project_id}/versions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Thành viên project xem các version theo sequence_no giảm dần.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "project-versions"
+                ],
+                "summary": "Timeline version của project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Trang",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Số bản ghi/trang",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/domain.ProjectVersion"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Owner hoặc editor tạo version mới. Version chỉ lưu local và dùng chung dataset RAGFlow của project.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "project-versions"
+                ],
+                "summary": "Tạo draft version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Thông tin version",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateVersionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.ProjectVersion"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/internal/api/v1/users": {
             "get": {
                 "security": [
@@ -1412,6 +1732,38 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.ProjectVersion": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "released_at": {
+                    "type": "string"
+                },
+                "sequence_no": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Revision": {
             "type": "object",
             "properties": {
@@ -1442,11 +1794,20 @@ const docTemplate = `{
                 "project_id": {
                     "type": "string"
                 },
+                "ragflow_last_error": {
+                    "type": "string"
+                },
+                "ragflow_sync_status": {
+                    "type": "string"
+                },
+                "ragflow_synced_at": {
+                    "type": "string"
+                },
                 "revision_no": {
                     "type": "integer"
                 },
                 "scope": {
-                    "$ref": "#/definitions/domain.Scope"
+                    "$ref": "#/definitions/internal_module_document_domain.Scope"
                 },
                 "sha256": {
                     "type": "string"
@@ -1462,14 +1823,62 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Scope": {
+        "http.CreateRequest": {
             "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
             "properties": {
-                "change_request_id": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
+                },
+                "description": {
                     "type": "string"
                 },
-                "project_version_id": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "http.CreateResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "ragflow_last_error": {
+                    "type": "string"
+                },
+                "ragflow_sync_status": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -1499,6 +1908,18 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "http.CreateVersionRequest": {
+            "type": "object",
+            "required": [
+                "label"
+            ],
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "maxLength": 100
                 }
             }
         },
@@ -1565,6 +1986,35 @@ const docTemplate = `{
                 "title": {
                     "type": "string",
                     "maxLength": 255
+                }
+            }
+        },
+        "http.Request": {
+            "type": "object",
+            "required": [
+                "question"
+            ],
+            "properties": {
+                "change_request_id": {
+                    "type": "string"
+                },
+                "keyword": {
+                    "type": "boolean"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "project_version_id": {
+                    "type": "string"
+                },
+                "question": {
+                    "type": "string"
+                },
+                "similarity_threshold": {
+                    "type": "number"
+                },
+                "vector_similarity_weight": {
+                    "type": "number"
                 }
             }
         },
@@ -1647,6 +2097,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_module_document_domain.Scope": {
+            "type": "object",
+            "properties": {
+                "change_request_id": {
+                    "type": "string"
+                },
+                "project_version_id": {
+                    "type": "string"
+                }
+            }
+        },
         "pagination.Meta": {
             "type": "object",
             "properties": {
@@ -1718,6 +2179,35 @@ const docTemplate = `{
                 }
             }
         },
+        "usecase.Citation": {
+            "type": "object",
+            "properties": {
+                "chunk_id": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "revision_id": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "term_score": {
+                    "type": "number"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "vector_score": {
+                    "type": "number"
+                }
+            }
+        },
         "usecase.PresignResult": {
             "type": "object",
             "properties": {
@@ -1732,6 +2222,23 @@ const docTemplate = `{
                 },
                 "upload_url": {
                     "type": "string"
+                }
+            }
+        },
+        "usecase.Result": {
+            "type": "object",
+            "properties": {
+                "citations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/usecase.Citation"
+                    }
+                },
+                "question": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         }

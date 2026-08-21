@@ -114,6 +114,14 @@ services:
       APP_RABBITMQ_PASSWORD: app_password
       APP_MINIO_SECRET_KEY: minioadmin
       APP_JWT_SECRET: dev-secret-doi-o-that
+      APP_RAGFLOW_ENABLED: ${APP_RAGFLOW_ENABLED:-false}
+      APP_RAGFLOW_BASE_URL: ${APP_RAGFLOW_BASE_URL:-http://ragflow:9380}
+      APP_RAGFLOW_API_KEY: ${APP_RAGFLOW_API_KEY:-}
+      APP_RAGFLOW_DATASET_PREFIX: ${APP_RAGFLOW_DATASET_PREFIX:-docs_hub_local}
+      APP_RAGFLOW_TIMEOUT: ${APP_RAGFLOW_TIMEOUT:-30s}
+      APP_RAGFLOW_UPLOAD_TIMEOUT: ${APP_RAGFLOW_UPLOAD_TIMEOUT:-2m}
+      APP_RAGFLOW_POLL_INTERVAL: ${APP_RAGFLOW_POLL_INTERVAL:-3s}
+      APP_RAGFLOW_MAX_POLL_DURATION: ${APP_RAGFLOW_MAX_POLL_DURATION:-15m}
     ports:
       - "8080:8080" # API
       - "9090:9090" # admin (metrics/health/pprof)
@@ -128,6 +136,35 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+
+  worker:
+    profiles: ["ragflow"]
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    entrypoint: ["/app/worker", "-config", "/app/configs/config.dev.yaml"]
+    environment:
+      APP_ENV: dev
+      APP_POSTGRES_PASSWORD: app_password
+      APP_RABBITMQ_PASSWORD: app_password
+      APP_MINIO_SECRET_KEY: minioadmin
+      APP_JWT_SECRET: dev-secret-doi-o-that
+      APP_RAGFLOW_ENABLED: ${APP_RAGFLOW_ENABLED:-false}
+      APP_RAGFLOW_BASE_URL: ${APP_RAGFLOW_BASE_URL:-http://ragflow:9380}
+      APP_RAGFLOW_API_KEY: ${APP_RAGFLOW_API_KEY:-}
+      APP_RAGFLOW_DATASET_PREFIX: ${APP_RAGFLOW_DATASET_PREFIX:-docs_hub_local}
+      APP_RAGFLOW_TIMEOUT: ${APP_RAGFLOW_TIMEOUT:-30s}
+      APP_RAGFLOW_UPLOAD_TIMEOUT: ${APP_RAGFLOW_UPLOAD_TIMEOUT:-2m}
+      APP_RAGFLOW_POLL_INTERVAL: ${APP_RAGFLOW_POLL_INTERVAL:-3s}
+      APP_RAGFLOW_MAX_POLL_DURATION: ${APP_RAGFLOW_MAX_POLL_DURATION:-15m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   postgres_data:

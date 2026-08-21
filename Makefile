@@ -117,6 +117,10 @@ up: ## Bật toàn bộ hạ tầng local (docker compose)
 up-local: ## Bật dependency tối thiểu cho API local dùng filesystem storage
 	docker compose -f $(COMPOSE_FILE) up -d postgres redis rabbitmq
 
+.PHONY: up-ragflow
+up-ragflow: ## Bật stack kèm ingestion worker RAGFlow (cần APP_RAGFLOW_* trong .env)
+	docker compose -f $(COMPOSE_FILE) --profile ragflow up -d
+
 .PHONY: down
 down: ## Tắt hạ tầng local
 	docker compose -f $(COMPOSE_FILE) down

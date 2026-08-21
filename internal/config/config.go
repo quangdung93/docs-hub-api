@@ -25,6 +25,7 @@ type Config struct {
 	Telemetry TelemetryConfig `mapstructure:"telemetry"`
 	Timeout   TimeoutConfig   `mapstructure:"timeout"   validate:"required"`
 	LocalAI   LocalAIConfig   `mapstructure:"local_ai"`
+	RAGFlow   RAGFlowConfig   `mapstructure:"ragflow"`
 	Ingestion IngestionConfig `mapstructure:"ingestion"`
 }
 
@@ -45,6 +46,19 @@ type LocalAIConfig struct {
 	EmbeddingModel     string        `mapstructure:"embedding_model"`
 	EmbeddingDimension int           `mapstructure:"embedding_dimension"`
 	Timeout            time.Duration `mapstructure:"timeout"`
+}
+
+// RAGFlowConfig cấu hình RAGFlow HTTP API. APIKey luôn đến từ
+// APP_RAGFLOW_API_KEY hoặc secret manager, không đặt trong YAML.
+type RAGFlowConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	BaseURL         string        `mapstructure:"base_url"`
+	APIKey          string        `mapstructure:"api_key"`
+	DatasetPrefix   string        `mapstructure:"dataset_prefix"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	UploadTimeout   time.Duration `mapstructure:"upload_timeout"`
+	PollInterval    time.Duration `mapstructure:"poll_interval"`
+	MaxPollDuration time.Duration `mapstructure:"max_poll_duration"`
 }
 
 // IngestionConfig cấu hình worker polling và deterministic chunking.

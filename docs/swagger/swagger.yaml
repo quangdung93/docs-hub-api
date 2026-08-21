@@ -40,6 +40,27 @@ definitions:
       version:
         type: integer
     type: object
+  domain.ProjectVersion:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      label:
+        type: string
+      project_id:
+        type: string
+      released_at:
+        type: string
+      sequence_no:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
   domain.Revision:
     properties:
       created_at:
@@ -60,10 +81,16 @@ definitions:
         type: string
       project_id:
         type: string
+      ragflow_last_error:
+        type: string
+      ragflow_sync_status:
+        type: string
+      ragflow_synced_at:
+        type: string
       revision_no:
         type: integer
       scope:
-        $ref: '#/definitions/domain.Scope'
+        $ref: '#/definitions/internal_module_document_domain.Scope'
       sha256:
         type: string
       size_bytes:
@@ -73,12 +100,45 @@ definitions:
       updated_at:
         type: string
     type: object
-  domain.Scope:
+  http.CreateRequest:
     properties:
-      change_request_id:
+      code:
+        maxLength: 64
+        minLength: 2
         type: string
-      project_version_id:
+      description:
         type: string
+      name:
+        maxLength: 255
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  http.CreateResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      owner_id:
+        type: string
+      ragflow_last_error:
+        type: string
+      ragflow_sync_status:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
     type: object
   http.CreateUserRequest:
     properties:
@@ -100,6 +160,14 @@ definitions:
     - email
     - full_name
     - password
+    type: object
+  http.CreateVersionRequest:
+    properties:
+      label:
+        maxLength: 100
+        type: string
+    required:
+    - label
     type: object
   http.DeleteUserRequest:
     properties:
@@ -145,6 +213,25 @@ definitions:
     - media_type
     - sha256
     - size_bytes
+    type: object
+  http.Request:
+    properties:
+      change_request_id:
+        type: string
+      keyword:
+        type: boolean
+      page_size:
+        type: integer
+      project_version_id:
+        type: string
+      question:
+        type: string
+      similarity_threshold:
+        type: number
+      vector_similarity_weight:
+        type: number
+    required:
+    - question
     type: object
   http.RetryResponse:
     properties:
@@ -201,6 +288,13 @@ definitions:
       revision:
         $ref: '#/definitions/domain.Revision'
     type: object
+  internal_module_document_domain.Scope:
+    properties:
+      change_request_id:
+        type: string
+      project_version_id:
+        type: string
+    type: object
   pagination.Meta:
     properties:
       has_next:
@@ -248,6 +342,25 @@ definitions:
       trace_id:
         type: string
     type: object
+  usecase.Citation:
+    properties:
+      chunk_id:
+        type: string
+      document_id:
+        type: string
+      excerpt:
+        type: string
+      revision_id:
+        type: string
+      score:
+        type: number
+      term_score:
+        type: number
+      title:
+        type: string
+      vector_score:
+        type: number
+    type: object
   usecase.PresignResult:
     properties:
       expires_at:
@@ -259,12 +372,69 @@ definitions:
       upload_url:
         type: string
     type: object
+  usecase.Result:
+    properties:
+      citations:
+        items:
+          $ref: '#/definitions/usecase.Citation'
+        type: array
+      question:
+        type: string
+      total:
+        type: integer
+    type: object
 info:
   contact: {}
   description: Boilerplate Go Clean Architecture cho ISC.
   title: docs-hub-api
   version: "1.0"
 paths:
+  /internal/api/v1/projects:
+    post:
+      consumes:
+      - application/json
+      description: Tạo project local, owner membership và dataset riêng trên RAGFlow;
+        thất bại nếu không tạo được cả hai phía.
+      parameters:
+      - description: Thông tin project
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/http.CreateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tạo project và dataset RAGFlow
+      tags:
+      - projects
   /internal/api/v1/projects/{project_id}/documents:
     get:
       parameters:
@@ -896,6 +1066,158 @@ paths:
       summary: Tạo presigned upload
       tags:
       - documents
+  /internal/api/v1/projects/{project_id}/retrieval:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Câu hỏi và scope
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/usecase.Result'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Truy hồi tài liệu theo project version hoặc change request
+      tags:
+      - retrieval
+  /internal/api/v1/projects/{project_id}/versions:
+    get:
+      description: Thành viên project xem các version theo sequence_no giảm dần.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - default: 1
+        description: Trang
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Số bản ghi/trang
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.ProjectVersion'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Timeline version của project
+      tags:
+      - project-versions
+    post:
+      consumes:
+      - application/json
+      description: Owner hoặc editor tạo version mới. Version chỉ lưu local và dùng
+        chung dataset RAGFlow của project.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Thông tin version
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateVersionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.ProjectVersion'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tạo draft version
+      tags:
+      - project-versions
   /internal/api/v1/users:
     get:
       parameters:
