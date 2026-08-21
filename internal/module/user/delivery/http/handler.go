@@ -22,10 +22,12 @@ func NewHandler(svc usecase.Service) *Handler {
 // Create godoc
 // @Summary  Tạo người dùng mới
 // @Tags     users
+// @Security BearerAuth
 // @Accept   json
 // @Produce  json
 // @Param    body  body      CreateUserRequest  true  "Thông tin người dùng"
 // @Success  201   {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateUserRequest
@@ -43,9 +45,11 @@ func (h *Handler) Create(c *gin.Context) {
 // GetByID godoc
 // @Summary  Lấy chi tiết người dùng
 // @Tags     users
+// @Security BearerAuth
 // @Produce  json
 // @Param    id   path      string  true  "User ID (UUID)"
 // @Success  200  {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users/{id} [get]
 func (h *Handler) GetByID(c *gin.Context) {
 	id, ok := parseID(c)
@@ -63,6 +67,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 // List godoc
 // @Summary  Danh sách người dùng (phân trang)
 // @Tags     users
+// @Security BearerAuth
 // @Produce  json
 // @Param    page      query     int     false  "Trang"
 // @Param    limit     query     int     false  "Số bản ghi/trang"
@@ -71,6 +76,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 // @Param    sort_by   query     string  false  "Cột sắp xếp"
 // @Param    order     query     string  false  "asc|desc"
 // @Success  200       {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users [get]
 func (h *Handler) List(c *gin.Context) {
 	var q ListUserQuery
@@ -89,11 +95,13 @@ func (h *Handler) List(c *gin.Context) {
 // Update godoc
 // @Summary  Cập nhật hồ sơ người dùng
 // @Tags     users
+// @Security BearerAuth
 // @Accept   json
 // @Produce  json
 // @Param    id    path      string             true  "User ID"
 // @Param    body  body      UpdateUserRequest  true  "Thông tin cập nhật"
 // @Success  200   {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users/{id} [put]
 func (h *Handler) Update(c *gin.Context) {
 	id, ok := parseID(c)
@@ -117,11 +125,13 @@ func (h *Handler) Update(c *gin.Context) {
 // UpdateStatus godoc
 // @Summary  Đổi trạng thái người dùng
 // @Tags     users
+// @Security BearerAuth
 // @Accept   json
 // @Produce  json
 // @Param    id    path      string               true  "User ID"
 // @Param    body  body      UpdateStatusRequest  true  "Trạng thái mới"
 // @Success  200   {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users/{id}/status [patch]
 func (h *Handler) UpdateStatus(c *gin.Context) {
 	id, ok := parseID(c)
@@ -145,11 +155,13 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 // Delete godoc
 // @Summary  Xóa mềm người dùng
 // @Tags     users
+// @Security BearerAuth
 // @Accept   json
 // @Produce  json
 // @Param    id    path      string             true  "User ID"
 // @Param    body  body      DeleteUserRequest  true  "Version"
 // @Success  204
+// @Security BearerAuth
 // @Router   /internal/api/v1/users/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	id, ok := parseID(c)
@@ -170,9 +182,11 @@ func (h *Handler) Delete(c *gin.Context) {
 // CheckEmail godoc
 // @Summary  Kiểm tra email còn trống
 // @Tags     users
+// @Security BearerAuth
 // @Produce  json
 // @Param    email  query     string  true  "Email cần kiểm tra"
 // @Success  200    {object}  response.Envelope
+// @Security BearerAuth
 // @Router   /internal/api/v1/users/check-email [get]
 func (h *Handler) CheckEmail(c *gin.Context) {
 	var q CheckEmailQuery

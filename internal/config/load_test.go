@@ -24,6 +24,8 @@ func TestLoad_LocalConfig(t *testing.T) {
 	require.True(t, cfg.App.IsLocal())
 	require.Equal(t, 8080, cfg.HTTP.APIPort)
 	require.Equal(t, 9090, cfg.HTTP.AdminPort)
+	require.Equal(t, "filesystem", cfg.Storage.Driver)
+	require.Equal(t, "./var/storage", cfg.Storage.Filesystem.Root)
 }
 
 // TestLoad_EnvOverridesYAML là bằng chứng ENV override được YAML.
@@ -50,6 +52,41 @@ func TestLoad_RejectsDevTokenOutsideLocal(t *testing.T) {
 	_, err := config.Load(localConfigPath(t))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "enable_dev_token")
+}
+
+func TestLoad_RAGFlowRequiresAPIKeyWhenEnabled(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://127.0.0.1:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "")
+
+	_, err := config.Load(localConfigPath(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "APP_RAGFLOW_API_KEY")
+}
+
+func TestLoad_RAGFlowFromEnvironment(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "ragflow-secret")
+
+	cfg, err := config.Load(localConfigPath(t))
+	require.NoError(t, err)
+	require.True(t, cfg.RAGFlow.Enabled)
+	require.Equal(t, "http://ragflow.test:9380", cfg.RAGFlow.BaseURL)
+	require.Equal(t, "ragflow-secret", cfg.RAGFlow.APIKey)
+}
+
+func TestLoad_RejectsHandlerTimeoutShorterThanRAGFlow(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "ragflow-secret")
+	t.Setenv("APP_RAGFLOW_TIMEOUT", "30s")
+	t.Setenv("APP_TIMEOUT_HANDLER", "10s")
+	t.Setenv("APP_TIMEOUT_WRITE", "60s")
+
+	_, err := config.Load(localConfigPath(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "timeout.handler phải lớn hơn ragflow.timeout")
 }
 
 func TestPostgresConfig_DSN(t *testing.T) {

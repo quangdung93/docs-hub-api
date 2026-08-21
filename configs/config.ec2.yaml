@@ -1,0 +1,102 @@
+# Cấu hình chạy trên MỘT máy EC2 (all-in-one docker compose).
+# Khác config.dev.yaml ở hai điểm:
+#   - tracing TẮT: không dựng otel-collector/jaeger trên EC2 cho nhẹ.
+#   - cors mở cho origin do người deploy khai báo, không phải domain nội bộ ISC.
+#
+# app.env vẫn là "dev" vì loader chỉ chấp nhận local|dev|staging|production.
+# Kéo theo: mọi secret BẮT BUỘC đến từ ENV, và enable_dev_token không được bật
+# (loader chặn ngoài local).
+app:
+  name: docs-hub-api
+  env: dev
+  enable_dev_token: false
+
+http:
+  api_port: 8080
+  admin_port: 9090
+  max_body_bytes: 1048576
+  shutdown_timeout: 15s
+  enable_pprof: false
+  enable_swagger: true # tiện thử API qua http://<ip-ec2>:8080/swagger/index.html
+
+log:
+  level: info
+  encoding: json
+
+postgres:
+  host: postgres
+  port: 5432
+  user: app
+  password: "" # <- APP_POSTGRES_PASSWORD
+  database: document_hub
+  ssl_mode: disable # cùng docker network, không đi qua internet
+  max_open_conns: 25
+  max_idle_conns: 10
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+
+redis:
+  host: redis
+  port: 6379
+  password: "" # <- APP_REDIS_PASSWORD
+  db: 0
+  pool_size: 20
+
+rabbitmq:
+  enabled: true
+  host: rabbitmq
+  port: 5672
+  user: app
+  password: "" # <- APP_RABBITMQ_PASSWORD
+  vhost: /
+  exchange: document_hub.events
+
+minio:
+  enabled: true
+  endpoint: minio:9000
+  access_key: app
+  secret_key: "" # <- APP_MINIO_SECRET_KEY
+  bucket: document-hub
+  use_ssl: false
+  region: us-east-1
+
+project:
+  avatar_max_bytes: 5242880 # 5 MiB — TẠM THỜI, chờ team chốt lại
+  avatar_presigned_ttl: 15m
+
+jwt:
+  algorithm: HS256
+  secret: "" # <- APP_JWT_SECRET
+  issuer: docs-hub-api
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+# Thêm domain/IP thật của bạn vào đây khi có frontend gọi tới.
+# Không dùng "*" chung với allow_credentials=true — trình duyệt sẽ từ chối.
+cors:
+  allowed_origins: ["https://docshub.io.vn"]
+  allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
+  allow_credentials: true
+  max_age: 300
+
+rate_limit:
+  enabled: true
+  requests_per_window: 200
+  window: 1m
+
+telemetry:
+  tracing_enabled: false
+  otlp_endpoint: otel-collector:4317
+  sample_ratio: 1.0
+
+timeout:
+  read_header: 5s
+  read: 15s
+  write: 60s
+  idle: 60s
+  handler: 45s
+  db: 3s
+  redis: 2s
+  mq: 3s
+  external: 5s

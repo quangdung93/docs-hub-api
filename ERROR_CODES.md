@@ -8,13 +8,16 @@ Kế thừa catalogue chuẩn ISC (`templates/04`). Tài liệu này chỉ ghi p
 | Nghiệp vụ | 200 | false | Service chủ động trả `*apperr.BusinessError` |
 | Kỹ thuật | 4xx/5xx | false | Middleware `errorhandler.go` |
 
-## Mã nghiệp vụ dùng trong module user
+## Mã nghiệp vụ dùng trong module user/document
 | Mã | HTTP | Retryable | Ngữ cảnh |
 |---|---|---|---|
 | `DUPLICATE_EMAIL` | 200 | false | Email đã tồn tại khi tạo user |
 | `USER_LOCKED` | 200 | false | Thao tác trên tài khoản bị khóa |
 | `INVALID_PROFILE` | 200 | false | Giá trị trạng thái không hợp lệ |
 | `CONFLICT_VERSION` ⚠️ | 200 | true | Optimistic lock — version cũ (xem ADR-0003) |
+| `FILE_TOO_LARGE` | 200 | false | File upload vượt giới hạn 50 MiB |
+| `UPLOAD_INVALID` | 200 | false | Phiên upload không hợp lệ, đã hoàn tất hoặc hết hạn |
+| `DOCUMENT_RETRY_INVALID` | 200 | false | Revision không ở trạng thái `failed` |
 
 ⚠️ `CONFLICT_VERSION` là mã **bổ sung**, chưa có trong catalogue ISC gốc. Đang chờ TL duyệt (ADR-0003); fallback `SESSION_CONFLICT`.
 

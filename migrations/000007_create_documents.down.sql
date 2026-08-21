@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS document_uploads;
+DROP TABLE IF EXISTS ingestion_jobs;
+DROP TABLE IF EXISTS document_revisions;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS change_requests;
+DROP TABLE IF EXISTS project_versions;
+DROP INDEX IF EXISTS uk_projects_code_active;
+ALTER TABLE projects DROP COLUMN IF EXISTS deleted_at;
+ALTER TABLE projects DROP COLUMN IF EXISTS updated_at;
+ALTER TABLE projects DROP COLUMN IF EXISTS version;
+ALTER TABLE projects DROP COLUMN IF EXISTS code;

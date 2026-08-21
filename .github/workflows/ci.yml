@@ -1,0 +1,91 @@
+# Kiểm tra chất lượng — chạy cho mọi pull request.
+# Không đụng tới môi trường thật; việc deploy nằm ở deploy.yml.
+name: ci
+
+# CHỈ chạy trên pull_request, không chạy trên push:
+#   - tránh mỗi commit kích hoạt hai lần chạy trùng nhau (tốn phút build);
+#   - `only-new-issues` của golangci-lint chỉ có tác dụng ở event pull_request
+#     (nó so với nhánh base). Ở event push, lint quét toàn bộ repo và fail vì
+#     18 issue tồn đọng sẵn trên main.
+# Push lên main đã có deploy.yml chạy verify trước khi build.
+on:
+  pull_request:
+
+# Push liên tiếp vào cùng một nhánh thì chỉ giữ lần chạy mới nhất.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: test -z "$(gofmt -l . | tee /dev/stderr)"
+
+      - name: go vet
+        run: go vet ./...
+
+      # Pin version để CI và máy dev báo lỗi giống nhau. Bản v1.61 KHÔNG chạy
+      # được với Go 1.25, nên dùng nhánh v2 (kéo theo .golangci.yml schema v2).
+      # golangci-lint v2 cần action v7 trở lên.
+      #
+      # only-new-issues: code sẵn có trên main còn 18 issue (errorlint, goconst,
+      # noctx, revive, wrapcheck, lll). Bắt PR này dọn hết là trộn hai việc khác
+      # nhau, nên lint chỉ chặn lỗi MỚI do PR thêm vào; nợ cũ dọn ở PR riêng.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+          args: --timeout 5m
+          only-new-issues: true
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit test
+        run: go test -race -short -coverprofile=coverage.out ./...
+
+      - name: Tổng coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+  # Integration test cần Postgres thật (repository layer chạy SQL trực tiếp).
+  test-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app_password
+          POSTGRES_DB: document_hub
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app -d document_hub"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: "host=localhost port=5432 user=app password=app_password dbname=document_hub sslmode=disable TimeZone=UTC"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration test
+        run: go test -tags=integration -race ./internal/module/user/repository/... ./test/integration/...

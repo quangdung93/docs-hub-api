@@ -12,11 +12,15 @@ coverage.html
 # Local env & secrets — KHÔNG commit secret vào repo
 .env
 .env.local
+.env.ec2
 *.local.env
 
 # Go build/vendor cache
 /vendor/
 .cache/
+
+# Tài liệu/object lưu local khi storage.driver=filesystem
+/var/storage/
 
 # IDE
 .idea/

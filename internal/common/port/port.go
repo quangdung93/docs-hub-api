@@ -8,6 +8,8 @@ package port
 
 import (
 	"context"
+	"errors"
+	"io"
 	"time"
 )
 
@@ -57,14 +59,34 @@ type StoredObject struct {
 	ContentType string
 }
 
-// ObjectStore là interface lưu trữ file (implement bằng MinIO/S3).
+// ErrPresignUnsupported báo storage backend không hỗ trợ presigned URL.
+// Filesystem local dùng upload/download qua API đã xác thực thay vì URL S3.
+var ErrPresignUnsupported = errors.New("object store không hỗ trợ presigned URL")
+
+// ObjectStore là interface lưu trữ file (implement bằng filesystem hoặc MinIO/S3).
 type ObjectStore interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) (StoredObject, error)
+	// PutReader tải dữ liệu theo luồng để không giữ toàn bộ file lớn trong RAM.
+	PutReader(ctx context.Context, key string, reader io.Reader, size int64, contentType string) (StoredObject, error)
 	Get(ctx context.Context, key string) ([]byte, error)
+	// GetReader đọc object theo luồng để kiểm tra hash hoặc phục vụ parser.
+	GetReader(ctx context.Context, key string) (io.ReadCloser, error)
+	// Stat trả metadata hiện tại để xác minh upload trực tiếp trước khi tạo revision.
+	Stat(ctx context.Context, key string) (StoredObject, error)
+	// PresignedPutURL tạo URL upload trực tiếp có thời hạn.
+	PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	// PresignedGetURL tạo URL tải file có thời hạn.
 	PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	Delete(ctx context.Context, key string) error
 }
+
+// ErrObjectNotFound được ObjectStore.Stat trả về khi object chưa tồn tại
+// (ví dụ: client xin presigned URL nhưng chưa/không upload xong).
+var ErrObjectNotFound = objectNotFoundError{}
+
+type objectNotFoundError struct{}
+
+func (objectNotFoundError) Error() string { return "object store: object không tồn tại" }
 
 // Clock trừu tượng hóa thời gian để usecase test được (không gọi time.Now trực tiếp).
 type Clock interface {

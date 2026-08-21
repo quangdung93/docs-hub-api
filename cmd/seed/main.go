@@ -48,7 +48,16 @@ func run() error {
 	}
 	defer func() { _ = postgres.Close(db) }()
 
-	return seedAdmin(context.Background(), repository.New(db), hashing.NewHasher(0))
+	ctx := context.Background()
+	userRepo := repository.New(db)
+	if err = seedAdmin(ctx, userRepo, hashing.NewHasher(0)); err != nil {
+		return err
+	}
+	admin, err := userRepo.FindByEmail(ctx, "admin@local")
+	if err != nil {
+		return fmt.Errorf("đọc admin để seed project: %w", err)
+	}
+	return seedProjects(ctx, db, admin.ID)
 }
 
 // seedAdmin tạo tài khoản admin mặc định nếu chưa tồn tại (idempotent).

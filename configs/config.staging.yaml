@@ -8,7 +8,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576
+  max_body_bytes: 57671680
   shutdown_timeout: 20s
   enable_pprof: false
   enable_swagger: true
@@ -45,6 +45,11 @@ rabbitmq:
   vhost: /
   exchange: document_hub.events
 
+storage:
+  driver: minio
+  filesystem:
+    root: ./var/storage
+
 minio:
   enabled: true
   endpoint: minio:9000
@@ -54,6 +59,10 @@ minio:
   use_ssl: true
   region: us-east-1
 
+project:
+  avatar_max_bytes: 5242880 # 5 MiB — TẠM THỜI, chờ team chốt lại
+  avatar_presigned_ttl: 15m
+
 jwt:
   algorithm: HS256
   secret: ""
@@ -62,7 +71,7 @@ jwt:
   refresh_ttl: 168h
 
 cors:
-  allowed_origins: ["https://staging.document-hub.isc.fpt.net"]
+  allowed_origins: ["https://docshub.io.vn"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
   allow_credentials: true
@@ -81,10 +90,18 @@ telemetry:
 timeout:
   read_header: 5s
   read: 15s
-  write: 20s
+  write: 60s
   idle: 60s
-  handler: 10s
+  handler: 45s
   db: 3s
   redis: 2s
   mq: 3s
   external: 5s
+ragflow:
+  enabled: false
+  base_url: https://ragflow.example.internal
+  dataset_prefix: docs_hub_staging
+  timeout: 30s
+  upload_timeout: 2m
+  poll_interval: 3s
+  max_poll_duration: 15m

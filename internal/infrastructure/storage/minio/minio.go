@@ -58,6 +58,8 @@ type Store struct {
 	bucket string
 }
 
+var _ port.ObjectStore = (*Store)(nil)
+
 // NewStore bọc client thành port.ObjectStore.
 func NewStore(client *minio.Client, bucket string) *Store {
 	return &Store{client: client, bucket: bucket}
@@ -65,7 +67,18 @@ func NewStore(client *minio.Client, bucket string) *Store {
 
 // Put tải object lên bucket.
 func (s *Store) Put(ctx context.Context, key string, data []byte, contentType string) (port.StoredObject, error) {
-	info, err := s.client.PutObject(ctx, s.bucket, key, bytes.NewReader(data), int64(len(data)),
+	return s.PutReader(ctx, key, bytes.NewReader(data), int64(len(data)), contentType)
+}
+
+// PutReader tải object theo luồng, phù hợp với file lớn.
+func (s *Store) PutReader(
+	ctx context.Context,
+	key string,
+	reader io.Reader,
+	size int64,
+	contentType string,
+) (port.StoredObject, error) {
+	info, err := s.client.PutObject(ctx, s.bucket, key, reader, size,
 		minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
 		return port.StoredObject{}, fmt.Errorf("put object %q thất bại: %w", key, err)
@@ -75,9 +88,9 @@ func (s *Store) Put(ctx context.Context, key string, data []byte, contentType st
 
 // Get tải object về bộ nhớ.
 func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
-	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	obj, err := s.GetReader(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("get object %q thất bại: %w", key, err)
+		return nil, err
 	}
 	defer func() { _ = obj.Close() }()
 
@@ -88,13 +101,45 @@ func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	return data, nil
 }
 
+// GetReader mở object dưới dạng stream; caller phải đóng reader.
+func (s *Store) GetReader(ctx context.Context, key string) (io.ReadCloser, error) {
+	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get object %q thất bại: %w", key, err)
+	}
+	return obj, nil
+}
+
 // PresignedGetURL tạo URL tải object có thời hạn.
 func (s *Store) PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
 	if err != nil {
-		return "", fmt.Errorf("presign %q thất bại: %w", key, err)
+		return "", fmt.Errorf("presign get %q thất bại: %w", key, err)
 	}
 	return u.String(), nil
+}
+
+// PresignedPutURL tạo URL tải object LÊN có thời hạn — dùng cho luồng client
+// tự upload thẳng lên storage, backend không đụng vào bytes file.
+func (s *Store) PresignedPutURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, ttl)
+	if err != nil {
+		return "", fmt.Errorf("presign put %q thất bại: %w", key, err)
+	}
+	return u.String(), nil
+}
+
+// Stat kiểm tra object đã thực sự tồn tại trong bucket chưa — dùng để xác
+// nhận client đã upload xong qua presigned URL. Không tồn tại -> port.ErrObjectNotFound.
+func (s *Store) Stat(ctx context.Context, key string) (port.StoredObject, error) {
+	info, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		if errResp := minio.ToErrorResponse(err); errResp.Code == "NoSuchKey" {
+			return port.StoredObject{}, port.ErrObjectNotFound
+		}
+		return port.StoredObject{}, fmt.Errorf("stat object %q thất bại: %w", key, err)
+	}
+	return port.StoredObject{Key: key, Size: info.Size, ContentType: info.ContentType}, nil
 }
 
 // Delete xóa object.

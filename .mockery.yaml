@@ -19,3 +19,17 @@ packages:
       Publisher:
       ObjectStore:
       Clock:
+  github.com/quangdung93/docs-hub-api/internal/module/auth/domain:
+    interfaces:
+      UserRepository:
+      SessionRepository:
+  github.com/quangdung93/docs-hub-api/internal/module/auth/usecase:
+    interfaces:
+      AuthUseCase:
+  github.com/quangdung93/docs-hub-api/internal/module/project/domain:
+    interfaces:
+      ProjectRepository:
+      ProjectMemberRepository:
+  github.com/quangdung93/docs-hub-api/internal/module/project/usecase:
+    interfaces:
+      Service:
