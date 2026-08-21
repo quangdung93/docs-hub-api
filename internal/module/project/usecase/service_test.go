@@ -25,6 +25,9 @@ func (f *fakeProjectRepo) Create(_ context.Context, p *domain.Project) error {
 	f.created = p
 	return f.createErr
 }
+func (*fakeProjectRepo) Stats(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error) {
+	return nil, nil
+}
 func (*fakeProjectRepo) Update(context.Context, *domain.Project) error { return nil }
 func (*fakeProjectRepo) FindByID(context.Context, uuid.UUID) (*domain.Project, error) {
 	return nil, domain.ErrNotFound

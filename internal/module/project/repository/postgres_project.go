@@ -241,6 +241,56 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 	return nil
 }
 
+// statsRow là một dòng kết quả đếm cho một dự án.
+type statsRow struct {
+	ProjectID     string `gorm:"column:project_id"`
+	DocumentCount int64  `gorm:"column:document_count"`
+	MemberCount   int64  `gorm:"column:member_count"`
+	ChunkCount    int64  `gorm:"column:chunk_count"`
+}
+
+// Stats đếm bằng subquery tương quan thay vì JOIN nhiều bảng: JOIN ba bảng
+// một lúc sẽ nhân bản dòng và làm sai kết quả đếm (fan-out). Cả ba bảng đều
+// đã có index trên project_id.
+func (r *projectRepository) Stats(
+	ctx context.Context, ids []uuid.UUID,
+) (map[uuid.UUID]domain.ProjectStats, error) {
+	out := make(map[uuid.UUID]domain.ProjectStats, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	strIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		strIDs = append(strIDs, id.String())
+	}
+
+	const statsSQL = `
+		SELECT p.id AS project_id,
+		       (SELECT count(*) FROM documents d WHERE d.project_id = p.id) AS document_count,
+		       (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
+		       (SELECT count(*) FROM document_chunks c WHERE c.project_id = p.id) AS chunk_count
+		FROM projects p WHERE p.id IN ?`
+
+	var rows []statsRow
+	if err := postgres.DBFrom(ctx, r.db).Raw(statsSQL, strIDs).Scan(&rows).Error; err != nil {
+		return nil, translate(err)
+	}
+
+	for _, row := range rows {
+		id, err := uuid.Parse(row.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("parse project id %q: %w", row.ProjectID, err)
+		}
+		out[id] = domain.ProjectStats{
+			DocumentCount: row.DocumentCount,
+			MemberCount:   row.MemberCount,
+			ChunkCount:    row.ChunkCount,
+		}
+	}
+	return out, nil
+}
+
 func (r *projectRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Project, error) {
 	var m projectModel
 	if err := postgres.DBFrom(ctx, r.db).First(&m, "id = ?", id.String()).Error; err != nil {

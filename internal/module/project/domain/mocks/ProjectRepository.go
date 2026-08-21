@@ -246,6 +246,65 @@ func (_c *MockProjectRepository_ListForUser_Call) RunAndReturn(run func(context.
 	return _c
 }
 
+// Stats provides a mock function with given fields: ctx, ids
+func (_m *MockProjectRepository) Stats(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error) {
+	ret := _m.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Stats")
+	}
+
+	var r0 map[uuid.UUID]domain.ProjectStats
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error)); ok {
+		return rf(ctx, ids)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []uuid.UUID) map[uuid.UUID]domain.ProjectStats); ok {
+		r0 = rf(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uuid.UUID]domain.ProjectStats)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = rf(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockProjectRepository_Stats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stats'
+type MockProjectRepository_Stats_Call struct {
+	*mock.Call
+}
+
+// Stats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []uuid.UUID
+func (_e *MockProjectRepository_Expecter) Stats(ctx interface{}, ids interface{}) *MockProjectRepository_Stats_Call {
+	return &MockProjectRepository_Stats_Call{Call: _e.mock.On("Stats", ctx, ids)}
+}
+
+func (_c *MockProjectRepository_Stats_Call) Run(run func(ctx context.Context, ids []uuid.UUID)) *MockProjectRepository_Stats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]uuid.UUID))
+	})
+	return _c
+}
+
+func (_c *MockProjectRepository_Stats_Call) Return(_a0 map[uuid.UUID]domain.ProjectStats, _a1 error) *MockProjectRepository_Stats_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockProjectRepository_Stats_Call) RunAndReturn(run func(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error)) *MockProjectRepository_Stats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: ctx, p
 func (_m *MockProjectRepository) Update(ctx context.Context, p *domain.Project) error {
 	ret := _m.Called(ctx, p)

@@ -587,6 +587,38 @@ paths:
       summary: Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
       tags:
       - projects
+    get:
+      description: Lấy thông tin một dự án kèm số lượng tài liệu/thành viên/chunk.
+      parameters:
+      - description: Project ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Chi tiết một dự án
+      tags:
+      - projects
     patch:
       consumes:
       - application/json

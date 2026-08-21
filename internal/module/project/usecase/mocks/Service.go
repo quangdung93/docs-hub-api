@@ -428,6 +428,65 @@ func (_c *MockService_Delete_Call) RunAndReturn(run func(context.Context, usecas
 	return _c
 }
 
+// GetByID provides a mock function with given fields: ctx, projectID
+func (_m *MockService) GetByID(ctx context.Context, projectID uuid.UUID) (*domain.Project, error) {
+	ret := _m.Called(ctx, projectID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByID")
+	}
+
+	var r0 *domain.Project
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) (*domain.Project, error)); ok {
+		return rf(ctx, projectID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) *domain.Project); ok {
+		r0 = rf(ctx, projectID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.Project)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = rf(ctx, projectID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_GetByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByID'
+type MockService_GetByID_Call struct {
+	*mock.Call
+}
+
+// GetByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID uuid.UUID
+func (_e *MockService_Expecter) GetByID(ctx interface{}, projectID interface{}) *MockService_GetByID_Call {
+	return &MockService_GetByID_Call{Call: _e.mock.On("GetByID", ctx, projectID)}
+}
+
+func (_c *MockService_GetByID_Call) Run(run func(ctx context.Context, projectID uuid.UUID)) *MockService_GetByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uuid.UUID))
+	})
+	return _c
+}
+
+func (_c *MockService_GetByID_Call) Return(_a0 *domain.Project, _a1 error) *MockService_GetByID_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_GetByID_Call) RunAndReturn(run func(context.Context, uuid.UUID) (*domain.Project, error)) *MockService_GetByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InviteMember provides a mock function with given fields: ctx, in
 func (_m *MockService) InviteMember(ctx context.Context, in usecase.InviteMemberInput) (*domain.ProjectMember, error) {
 	ret := _m.Called(ctx, in)
@@ -783,6 +842,65 @@ func (_c *MockService_RequestAvatarUpload_Call) Return(_a0 *usecase.RequestAvata
 }
 
 func (_c *MockService_RequestAvatarUpload_Call) RunAndReturn(run func(context.Context, usecase.RequestAvatarUploadInput) (*usecase.RequestAvatarUploadResult, error)) *MockService_RequestAvatarUpload_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Stats provides a mock function with given fields: ctx, ids
+func (_m *MockService) Stats(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error) {
+	ret := _m.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Stats")
+	}
+
+	var r0 map[uuid.UUID]domain.ProjectStats
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error)); ok {
+		return rf(ctx, ids)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []uuid.UUID) map[uuid.UUID]domain.ProjectStats); ok {
+		r0 = rf(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[uuid.UUID]domain.ProjectStats)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []uuid.UUID) error); ok {
+		r1 = rf(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_Stats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stats'
+type MockService_Stats_Call struct {
+	*mock.Call
+}
+
+// Stats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []uuid.UUID
+func (_e *MockService_Expecter) Stats(ctx interface{}, ids interface{}) *MockService_Stats_Call {
+	return &MockService_Stats_Call{Call: _e.mock.On("Stats", ctx, ids)}
+}
+
+func (_c *MockService_Stats_Call) Run(run func(ctx context.Context, ids []uuid.UUID)) *MockService_Stats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]uuid.UUID))
+	})
+	return _c
+}
+
+func (_c *MockService_Stats_Call) Return(_a0 map[uuid.UUID]domain.ProjectStats, _a1 error) *MockService_Stats_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_Stats_Call) RunAndReturn(run func(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error)) *MockService_Stats_Call {
 	_c.Call.Return(run)
 	return _c
 }
