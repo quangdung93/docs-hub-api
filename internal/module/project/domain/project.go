@@ -197,6 +197,14 @@ type ProjectMember struct {
 	JoinedAt  *time.Time
 }
 
+// MemberWithUser là read model cho danh sách thành viên: kèm sẵn tên và email
+// để client khỏi phải gọi GET /users/{id} cho từng người (mục #11 báo cáo API).
+type MemberWithUser struct {
+	ProjectMember
+	FullName string
+	Email    string
+}
+
 // NewInvite tạo một lời mời thành viên mới (trạng thái pending).
 func NewInvite(projectID, userID uuid.UUID, role Role) *ProjectMember {
 	return &ProjectMember{
@@ -241,7 +249,7 @@ type ProjectRepository interface {
 type ProjectMemberRepository interface {
 	Create(ctx context.Context, m *ProjectMember) error
 	FindByProjectAndUser(ctx context.Context, projectID, userID uuid.UUID) (*ProjectMember, error)
-	ListByProject(ctx context.Context, projectID uuid.UUID) ([]ProjectMember, error)
+	ListByProject(ctx context.Context, projectID uuid.UUID) ([]MemberWithUser, error)
 	UpdateRole(ctx context.Context, projectID, userID uuid.UUID, role Role) error
 	// UpdateStatus ghi lại status + joined_at (dùng cho Accept).
 	UpdateStatus(ctx context.Context, m *ProjectMember) error

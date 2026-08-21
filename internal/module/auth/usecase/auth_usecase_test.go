@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
+	portmocks "github.com/quangdung93/docs-hub-api/internal/common/port/mocks"
+	"github.com/quangdung93/docs-hub-api/internal/common/tokenrevoke"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain/mocks"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
@@ -30,7 +32,8 @@ func setupTest(t *testing.T) (*mocks.MockUserRepository, *mocks.MockSessionRepos
 		Issuer:    "test-issuer",
 		AccessTTL: testAccessTTL,
 	})
-	uc := NewAuthUseCase(userRepo, sessionRepo, mgr, testAccessTTL, testRefreshTTL)
+	// revoked=nil: các test này không kiểm tra danh sách thu hồi.
+	uc := NewAuthUseCase(userRepo, sessionRepo, mgr, testAccessTTL, testRefreshTTL, nil)
 	return userRepo, sessionRepo, uc
 }
 
@@ -208,15 +211,61 @@ func TestAuthUseCase_Logout(t *testing.T) {
 		_, sr, uc := setupTest(t)
 		sr.On("Delete", mock.Anything, "some-token").Return(nil).Once()
 
-		assert.NoError(t, uc.Logout(t.Context(), userID, "some-token"))
+		assert.NoError(t, uc.Logout(t.Context(), userID, "some-token", ""))
 	})
 
 	t.Run("KhongCoRefreshToken_ThiThuHoiMoiPhien", func(t *testing.T) {
 		_, sr, uc := setupTest(t)
 		sr.On("DeleteByUserID", mock.Anything, userID).Return(nil).Once()
 
-		assert.NoError(t, uc.Logout(t.Context(), userID, ""))
+		assert.NoError(t, uc.Logout(t.Context(), userID, "", ""))
 	})
+}
+
+// TestLogout_ThuHoiAccessToken chốt mục #5 báo cáo API: logout phải vô hiệu
+// access token ngay, không đợi hết hạn.
+func TestLogout_ThuHoiAccessToken(t *testing.T) {
+	userID := uuid.New()
+	hashed, _ := bcrypt.GenerateFromPassword([]byte("pw"), bcrypt.DefaultCost)
+	user := &domain.User{ID: userID, Username: "u", PasswordHash: string(hashed)}
+
+	ur := mocks.NewMockUserRepository(t)
+	sr := mocks.NewMockSessionRepository(t)
+	cache := portmocks.NewMockCache(t)
+	mgr, _ := jwt.NewManager(jwt.Config{Secret: "s", Issuer: "i", AccessTTL: testAccessTTL})
+	uc := NewAuthUseCase(ur, sr, mgr, testAccessTTL, testRefreshTTL, cache)
+
+	ur.On("FindByUsername", mock.Anything, "u").Return(user, nil).Once()
+	sr.On("Create", mock.Anything, mock.AnythingOfType("*domain.Session")).Return(nil).Once()
+	_, pair, err := uc.Login(t.Context(), "u", "pw")
+	require.NoError(t, err)
+
+	// Token phải được ghi vào danh sách chặn, TTL không vượt quá hạn của token.
+	var gotKey string
+	var gotTTL time.Duration
+	cache.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything,
+		mock.AnythingOfType("time.Duration")).
+		Run(func(args mock.Arguments) {
+			gotKey = args.Get(1).(string)
+			gotTTL = args.Get(3).(time.Duration)
+		}).Return(nil).Once()
+	sr.On("Delete", mock.Anything, pair.RefreshToken).Return(nil).Once()
+
+	require.NoError(t, uc.Logout(t.Context(), userID, pair.RefreshToken, pair.AccessToken))
+
+	assert.Equal(t, tokenrevoke.Key(pair.AccessToken), gotKey, "phải dùng đúng khóa dùng chung")
+	assert.Greater(t, gotTTL, time.Duration(0))
+	assert.LessOrEqual(t, gotTTL, testAccessTTL)
+}
+
+// TestLogout_KhongCoCache_VanChay: chưa bật Redis thì logout vẫn phải thu hồi
+// session, chỉ là access token sống nốt thời hạn.
+func TestLogout_KhongCoCache_VanChay(t *testing.T) {
+	_, sr, uc := setupTest(t)
+	userID := uuid.New()
+	sr.On("Delete", mock.Anything, "rt").Return(nil).Once()
+
+	assert.NoError(t, uc.Logout(t.Context(), userID, "rt", "token-bat-ky"))
 }
 
 func TestAuthUseCase_GetMe(t *testing.T) {

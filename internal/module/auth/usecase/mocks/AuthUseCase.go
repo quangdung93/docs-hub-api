@@ -152,17 +152,17 @@ func (_c *MockAuthUseCase_Login_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
-// Logout provides a mock function with given fields: ctx, userID, refreshToken
-func (_m *MockAuthUseCase) Logout(ctx context.Context, userID uuid.UUID, refreshToken string) error {
-	ret := _m.Called(ctx, userID, refreshToken)
+// Logout provides a mock function with given fields: ctx, userID, refreshToken, accessToken
+func (_m *MockAuthUseCase) Logout(ctx context.Context, userID uuid.UUID, refreshToken string, accessToken string) error {
+	ret := _m.Called(ctx, userID, refreshToken, accessToken)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Logout")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, string) error); ok {
-		r0 = rf(ctx, userID, refreshToken)
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, string, string) error); ok {
+		r0 = rf(ctx, userID, refreshToken, accessToken)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -179,13 +179,14 @@ type MockAuthUseCase_Logout_Call struct {
 //   - ctx context.Context
 //   - userID uuid.UUID
 //   - refreshToken string
-func (_e *MockAuthUseCase_Expecter) Logout(ctx interface{}, userID interface{}, refreshToken interface{}) *MockAuthUseCase_Logout_Call {
-	return &MockAuthUseCase_Logout_Call{Call: _e.mock.On("Logout", ctx, userID, refreshToken)}
+//   - accessToken string
+func (_e *MockAuthUseCase_Expecter) Logout(ctx interface{}, userID interface{}, refreshToken interface{}, accessToken interface{}) *MockAuthUseCase_Logout_Call {
+	return &MockAuthUseCase_Logout_Call{Call: _e.mock.On("Logout", ctx, userID, refreshToken, accessToken)}
 }
 
-func (_c *MockAuthUseCase_Logout_Call) Run(run func(ctx context.Context, userID uuid.UUID, refreshToken string)) *MockAuthUseCase_Logout_Call {
+func (_c *MockAuthUseCase_Logout_Call) Run(run func(ctx context.Context, userID uuid.UUID, refreshToken string, accessToken string)) *MockAuthUseCase_Logout_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uuid.UUID), args[2].(string))
+		run(args[0].(context.Context), args[1].(uuid.UUID), args[2].(string), args[3].(string))
 	})
 	return _c
 }
@@ -195,7 +196,7 @@ func (_c *MockAuthUseCase_Logout_Call) Return(_a0 error) *MockAuthUseCase_Logout
 	return _c
 }
 
-func (_c *MockAuthUseCase_Logout_Call) RunAndReturn(run func(context.Context, uuid.UUID, string) error) *MockAuthUseCase_Logout_Call {
+func (_c *MockAuthUseCase_Logout_Call) RunAndReturn(run func(context.Context, uuid.UUID, string, string) error) *MockAuthUseCase_Logout_Call {
 	_c.Call.Return(run)
 	return _c
 }

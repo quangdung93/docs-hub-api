@@ -29,7 +29,7 @@ func registerRoutes(engine *gin.Engine, cfg *config.Config, infra *Infra, module
 		infra.Log.Warn("Đã TẮT JWT authentication cho internal API ở local",
 			zap.String("actor_email", actor.Email), zap.String("actor_id", actor.UserID))
 	} else {
-		internal.Use(middleware.Auth(infra.JWT))
+		internal.Use(middleware.Auth(infra.JWT, infra.Cache))
 	}
 
 	// dev-token chỉ bật ở local (đã được config chặn ở môi trường khác).

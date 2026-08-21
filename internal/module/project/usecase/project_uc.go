@@ -29,7 +29,7 @@ type Service interface {
 	CreateVersion(ctx context.Context, in CreateVersionInput) (*domain.ProjectVersion, error)
 	ListVersions(ctx context.Context, projectID uuid.UUID, page pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error)
 
-	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error)
+	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error)
 	InviteMember(ctx context.Context, in InviteMemberInput) (*domain.ProjectMember, error)
 	ChangeMemberRole(ctx context.Context, in ChangeMemberRoleInput) (*domain.ProjectMember, error)
 	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
@@ -356,7 +356,7 @@ func (s *service) Delete(ctx context.Context, in DeleteProjectInput) error {
 }
 
 // ListMembers liệt kê thành viên (mọi trạng thái) của dự án.
-func (s *service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error) {
+func (s *service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error) {
 	members, err := s.memberRepo.ListByProject(ctx, projectID)
 	if err != nil {
 		return nil, apperr.Database("Lỗi truy vấn danh sách thành viên").WithCause(err)

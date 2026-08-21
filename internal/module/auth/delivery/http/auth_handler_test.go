@@ -180,7 +180,7 @@ func TestRefresh_TokenSai_Returns401_VaXoaCookie(t *testing.T) {
 func TestLogout_Success_Returns200(t *testing.T) {
 	userID := uuid.New()
 	uc, r := setupRouter(t, userID.String())
-	uc.On("Logout", mock.Anything, userID, "").Return(nil).Once()
+	uc.On("Logout", mock.Anything, userID, "", "valid_token").Return(nil).Once()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal/api/v1/auth/logout", nil)

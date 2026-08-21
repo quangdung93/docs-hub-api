@@ -214,6 +214,16 @@ type ProjectMemberResponse struct {
 	Status    string     `json:"status"`
 	InvitedAt time.Time  `json:"invited_at"`
 	JoinedAt  *time.Time `json:"joined_at,omitempty"`
+	// User đính kèm sẵn để client khỏi gọi GET /users/{id} cho từng thành viên.
+	// Rỗng nếu user đã bị xóa (LEFT JOIN không khớp).
+	User *MemberUserResponse `json:"user,omitempty"`
+}
+
+// MemberUserResponse là thông tin user rút gọn kèm trong danh sách thành viên.
+type MemberUserResponse struct {
+	ID       string `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
 }
 
 func toMemberResponse(m *domain.ProjectMember) ProjectMemberResponse {
@@ -228,10 +238,20 @@ func toMemberResponse(m *domain.ProjectMember) ProjectMemberResponse {
 	}
 }
 
-func toMemberResponseList(members []domain.ProjectMember) []ProjectMemberResponse {
+func toMemberResponseList(members []domain.MemberWithUser) []ProjectMemberResponse {
 	out := make([]ProjectMemberResponse, 0, len(members))
 	for i := range members {
-		out = append(out, toMemberResponse(&members[i]))
+		item := toMemberResponse(&members[i].ProjectMember)
+		// Email rỗng nghĩa là LEFT JOIN không khớp (user đã bị xóa) — để user
+		// là null thay vì trả object toàn chuỗi rỗng gây hiểu nhầm.
+		if members[i].Email != "" {
+			item.User = &MemberUserResponse{
+				ID:       members[i].UserID.String(),
+				FullName: members[i].FullName,
+				Email:    members[i].Email,
+			}
+		}
+		out = append(out, item)
 	}
 	return out
 }

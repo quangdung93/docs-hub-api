@@ -4,6 +4,8 @@ package http
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -13,6 +15,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/errcode"
 	"github.com/quangdung93/docs-hub-api/internal/common/response"
 	"github.com/quangdung93/docs-hub-api/internal/common/validatorx"
+	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/usecase"
 )
 
@@ -33,6 +36,31 @@ type AuthHandler struct {
 // NewAuthHandler tạo AuthHandler.
 func NewAuthHandler(authUC usecase.AuthUseCase, secureCookie bool) *AuthHandler {
 	return &AuthHandler{authUC: authUC, secureCookie: secureCookie}
+}
+
+// UserResponse là thông tin user trả cho client.
+//
+// roles là MẢNG, không phải chuỗi JSON — trả thẳng domain.User sẽ khiến
+// client phải parse hai lần (mục #13 trong báo cáo API).
+type UserResponse struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	FullName  string    `json:"full_name"`
+	Roles     []string  `json:"roles"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toUserResponse(u *domain.User) *UserResponse {
+	if u == nil {
+		return nil
+	}
+	return &UserResponse{
+		ID:        u.ID.String(),
+		Username:  u.Username,
+		FullName:  u.FullName,
+		Roles:     u.RolesList(),
+		CreatedAt: u.CreatedAt,
+	}
 }
 
 // LoginRequest là body đăng nhập.
@@ -84,7 +112,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.setAuthCookies(c, pair)
 	// Giữ nguyên khóa "token" để client cũ không vỡ; bổ sung refresh_token.
 	response.OK(c, gin.H{
-		"user":          user,
+		"user":          toUserResponse(user),
 		"token":         pair.AccessToken,
 		"refresh_token": pair.RefreshToken,
 		"expires_in":    pair.ExpiresIn,
@@ -120,7 +148,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	h.setAuthCookies(c, pair)
 	response.OK(c, gin.H{
-		"user":          user,
+		"user":          toUserResponse(user),
 		"token":         pair.AccessToken,
 		"refresh_token": pair.RefreshToken,
 		"expires_in":    pair.ExpiresIn,
@@ -156,7 +184,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		req.RefreshToken, _ = c.Cookie(refreshCookie)
 	}
 
-	_ = h.authUC.Logout(c.Request.Context(), userID, req.RefreshToken)
+	// Lấy chính access token đang dùng để vô hiệu nó ngay, không đợi hết hạn.
+	accessToken := bearerToken(c.GetHeader("Authorization"))
+	if accessToken == "" {
+		accessToken, _ = c.Cookie(accessCookie)
+	}
+
+	_ = h.authUC.Logout(c.Request.Context(), userID, req.RefreshToken, accessToken)
 
 	h.clearAuthCookies(c)
 	response.OK(c, gin.H{"message": "Đăng xuất thành công"})
@@ -185,7 +219,17 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	response.OK(c, user)
+	response.OK(c, toUserResponse(user))
+}
+
+// bearerToken tách token khỏi header "Authorization: Bearer <token>".
+// Trả chuỗi rỗng nếu header thiếu hoặc sai định dạng.
+func bearerToken(header string) string {
+	const prefix = "Bearer "
+	if !strings.HasPrefix(header, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 }
 
 // setAuthCookies đặt cookie cho cả hai token. Thời hạn cookie lấy ĐÚNG theo TTL
