@@ -67,6 +67,11 @@ services:
     environment:
       MINIO_ROOT_USER: app
       MINIO_ROOT_PASSWORD: ${APP_MINIO_SECRET_KEY:?thiếu APP_MINIO_SECRET_KEY trong .env.ec2}
+      # Mặc định MinIO đá mọi request trình duyệt vào cổng API sang console
+      # (:9001). Cổng API giờ nằm sau storage.docshub.io.vn, còn console chỉ
+      # bind loopback — redirect đó dẫn người dùng tới một địa chỉ không tồn
+      # tại từ ngoài. Tắt redirect, console vẫn dùng được qua SSH tunnel.
+      MINIO_BROWSER_REDIRECT: "false"
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001" # console — xem qua SSH tunnel
