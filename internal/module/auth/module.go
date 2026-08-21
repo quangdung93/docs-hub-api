@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
 
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/delivery/http"
@@ -21,6 +22,8 @@ type Deps struct {
 	RefreshTTL time.Duration
 	// SecureCookie bật cờ Secure của cookie — chỉ true khi chạy sau HTTPS.
 	SecureCookie bool
+	// Cache lưu access token đã logout. Nil thì logout chỉ thu hồi session.
+	Cache port.Cache
 }
 
 type Module struct {
@@ -30,7 +33,7 @@ type Module struct {
 func New(d Deps) *Module {
 	userRepo := postgres.NewUserRepository(d.DB)
 	sessionRepo := postgres.NewSessionRepository(d.DB)
-	svc := usecase.NewAuthUseCase(userRepo, sessionRepo, d.JWTManager, d.AccessTTL, d.RefreshTTL)
+	svc := usecase.NewAuthUseCase(userRepo, sessionRepo, d.JWTManager, d.AccessTTL, d.RefreshTTL, d.Cache)
 	return &Module{handler: http.NewAuthHandler(svc, d.SecureCookie)}
 }
 

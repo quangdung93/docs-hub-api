@@ -28,29 +28,6 @@ func (_m *MockService) EXPECT() *MockService_Expecter {
 	return &MockService_Expecter{mock: &_m.Mock}
 }
 
-// CreateVersion provides a mock function with given fields.
-func (_m *MockService) CreateVersion(ctx context.Context, in usecase.CreateVersionInput) (*domain.ProjectVersion, error) {
-	ret := _m.Called(ctx, in)
-	var version *domain.ProjectVersion
-	if ret.Get(0) != nil {
-		version = ret.Get(0).(*domain.ProjectVersion)
-	}
-	return version, ret.Error(1)
-}
-
-// ListVersions provides a mock function with given fields.
-func (_m *MockService) ListVersions(
-	ctx context.Context, projectID uuid.UUID, page pagination.Query,
-) ([]domain.ProjectVersion, pagination.Meta, error) {
-	ret := _m.Called(ctx, projectID, page)
-	var versions []domain.ProjectVersion
-	if ret.Get(0) != nil {
-		versions = ret.Get(0).([]domain.ProjectVersion)
-	}
-	meta, _ := ret.Get(1).(pagination.Meta)
-	return versions, meta, ret.Error(2)
-}
-
 // AcceptInvite provides a mock function with given fields: ctx, projectID, userID
 func (_m *MockService) AcceptInvite(ctx context.Context, projectID uuid.UUID, userID uuid.UUID) (*domain.ProjectMember, error) {
 	ret := _m.Called(ctx, projectID, userID)
@@ -345,6 +322,65 @@ func (_c *MockService_Create_Call) RunAndReturn(run func(context.Context, usecas
 	return _c
 }
 
+// CreateVersion provides a mock function with given fields: ctx, in
+func (_m *MockService) CreateVersion(ctx context.Context, in usecase.CreateVersionInput) (*domain.ProjectVersion, error) {
+	ret := _m.Called(ctx, in)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateVersion")
+	}
+
+	var r0 *domain.ProjectVersion
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, usecase.CreateVersionInput) (*domain.ProjectVersion, error)); ok {
+		return rf(ctx, in)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, usecase.CreateVersionInput) *domain.ProjectVersion); ok {
+		r0 = rf(ctx, in)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.ProjectVersion)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, usecase.CreateVersionInput) error); ok {
+		r1 = rf(ctx, in)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_CreateVersion_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateVersion'
+type MockService_CreateVersion_Call struct {
+	*mock.Call
+}
+
+// CreateVersion is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in usecase.CreateVersionInput
+func (_e *MockService_Expecter) CreateVersion(ctx interface{}, in interface{}) *MockService_CreateVersion_Call {
+	return &MockService_CreateVersion_Call{Call: _e.mock.On("CreateVersion", ctx, in)}
+}
+
+func (_c *MockService_CreateVersion_Call) Run(run func(ctx context.Context, in usecase.CreateVersionInput)) *MockService_CreateVersion_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(usecase.CreateVersionInput))
+	})
+	return _c
+}
+
+func (_c *MockService_CreateVersion_Call) Return(_a0 *domain.ProjectVersion, _a1 error) *MockService_CreateVersion_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_CreateVersion_Call) RunAndReturn(run func(context.Context, usecase.CreateVersionInput) (*domain.ProjectVersion, error)) *MockService_CreateVersion_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: ctx, in
 func (_m *MockService) Delete(ctx context.Context, in usecase.DeleteProjectInput) error {
 	ret := _m.Called(ctx, in)
@@ -519,23 +555,23 @@ func (_c *MockService_List_Call) RunAndReturn(run func(context.Context, uuid.UUI
 }
 
 // ListMembers provides a mock function with given fields: ctx, projectID
-func (_m *MockService) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error) {
+func (_m *MockService) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error) {
 	ret := _m.Called(ctx, projectID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListMembers")
 	}
 
-	var r0 []domain.ProjectMember
+	var r0 []domain.MemberWithUser
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]domain.ProjectMember, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]domain.MemberWithUser, error)); ok {
 		return rf(ctx, projectID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) []domain.ProjectMember); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) []domain.MemberWithUser); ok {
 		r0 = rf(ctx, projectID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]domain.ProjectMember)
+			r0 = ret.Get(0).([]domain.MemberWithUser)
 		}
 	}
 
@@ -567,12 +603,79 @@ func (_c *MockService_ListMembers_Call) Run(run func(ctx context.Context, projec
 	return _c
 }
 
-func (_c *MockService_ListMembers_Call) Return(_a0 []domain.ProjectMember, _a1 error) *MockService_ListMembers_Call {
+func (_c *MockService_ListMembers_Call) Return(_a0 []domain.MemberWithUser, _a1 error) *MockService_ListMembers_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockService_ListMembers_Call) RunAndReturn(run func(context.Context, uuid.UUID) ([]domain.ProjectMember, error)) *MockService_ListMembers_Call {
+func (_c *MockService_ListMembers_Call) RunAndReturn(run func(context.Context, uuid.UUID) ([]domain.MemberWithUser, error)) *MockService_ListMembers_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListVersions provides a mock function with given fields: ctx, projectID, page
+func (_m *MockService) ListVersions(ctx context.Context, projectID uuid.UUID, page pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error) {
+	ret := _m.Called(ctx, projectID, page)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListVersions")
+	}
+
+	var r0 []domain.ProjectVersion
+	var r1 pagination.Meta
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error)); ok {
+		return rf(ctx, projectID, page)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, pagination.Query) []domain.ProjectVersion); ok {
+		r0 = rf(ctx, projectID, page)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.ProjectVersion)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, pagination.Query) pagination.Meta); ok {
+		r1 = rf(ctx, projectID, page)
+	} else {
+		r1 = ret.Get(1).(pagination.Meta)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, uuid.UUID, pagination.Query) error); ok {
+		r2 = rf(ctx, projectID, page)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockService_ListVersions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListVersions'
+type MockService_ListVersions_Call struct {
+	*mock.Call
+}
+
+// ListVersions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID uuid.UUID
+//   - page pagination.Query
+func (_e *MockService_Expecter) ListVersions(ctx interface{}, projectID interface{}, page interface{}) *MockService_ListVersions_Call {
+	return &MockService_ListVersions_Call{Call: _e.mock.On("ListVersions", ctx, projectID, page)}
+}
+
+func (_c *MockService_ListVersions_Call) Run(run func(ctx context.Context, projectID uuid.UUID, page pagination.Query)) *MockService_ListVersions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uuid.UUID), args[2].(pagination.Query))
+	})
+	return _c
+}
+
+func (_c *MockService_ListVersions_Call) Return(_a0 []domain.ProjectVersion, _a1 pagination.Meta, _a2 error) *MockService_ListVersions_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockService_ListVersions_Call) RunAndReturn(run func(context.Context, uuid.UUID, pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error)) *MockService_ListVersions_Call {
 	_c.Call.Return(run)
 	return _c
 }

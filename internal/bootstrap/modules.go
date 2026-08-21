@@ -38,6 +38,7 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 			// Cookie Secure chỉ bật khi KHÔNG phải local — local chạy HTTP nên
 			// bật Secure sẽ khiến trình duyệt bỏ qua cookie.
 			SecureCookie: !cfg.App.IsLocal(),
+			Cache:        infra.Cache,
 		}),
 		project.New(project.Deps{
 			DB:                 infra.DB,

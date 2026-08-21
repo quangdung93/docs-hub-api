@@ -46,7 +46,7 @@ func (f *fakeMemberRepo) FindByProjectAndUser(context.Context, uuid.UUID, uuid.U
 	}
 	return f.member, nil
 }
-func (*fakeMemberRepo) ListByProject(context.Context, uuid.UUID) ([]domain.ProjectMember, error) {
+func (*fakeMemberRepo) ListByProject(context.Context, uuid.UUID) ([]domain.MemberWithUser, error) {
 	return nil, nil
 }
 func (*fakeMemberRepo) UpdateRole(context.Context, uuid.UUID, uuid.UUID, domain.Role) error {

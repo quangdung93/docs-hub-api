@@ -454,7 +454,11 @@ func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().ListMembers(mock.Anything, projectID).
-		Return([]domain.ProjectMember{*domain.NewInvite(projectID, uuid.New(), domain.RoleViewer)}, nil)
+		Return([]domain.MemberWithUser{{
+			ProjectMember: *domain.NewInvite(projectID, uuid.New(), domain.RoleViewer),
+			FullName:      "Nguyễn Văn A",
+			Email:         "a@example.com",
+		}}, nil)
 
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
@@ -463,6 +467,15 @@ func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+
+	// Mục #11 báo cáo API: phải kèm sẵn tên và email, để client khỏi gọi
+	// GET /users/{id} cho từng thành viên.
+	env := decodeEnvelope(t, w.Body.Bytes())
+	data := env["data"].([]any)
+	require.Len(t, data, 1)
+	user := data[0].(map[string]any)["user"].(map[string]any)
+	require.Equal(t, "Nguyễn Văn A", user["full_name"])
+	require.Equal(t, "a@example.com", user["email"])
 }
 
 func TestInviteMember_Owner_Returns201(t *testing.T) {

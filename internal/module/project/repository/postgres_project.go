@@ -195,18 +195,6 @@ func memberFromDomain(m *domain.ProjectMember) *projectMemberModel {
 	}
 }
 
-func membersToDomain(models []projectMemberModel) ([]domain.ProjectMember, error) {
-	out := make([]domain.ProjectMember, 0, len(models))
-	for i := range models {
-		m, err := memberToDomain(&models[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, nil
-}
-
 // --- ProjectRepository ---
 
 type projectRepository struct {
@@ -343,22 +331,57 @@ func (r *projectMemberRepository) FindByProjectAndUser(
 	return &member, nil
 }
 
+// memberWithUserRow là kết quả join project_members với users.
+//
+// Khai báo PHẲNG chứ không nhúng projectMemberModel: Scan của GORM không đổ
+// dữ liệu vào struct lồng (kể cả có thẻ embedded), kết quả là mọi trường đều
+// rỗng mà không báo lỗi gì.
+type memberWithUserRow struct {
+	ID        string     `gorm:"column:id"`
+	ProjectID string     `gorm:"column:project_id"`
+	UserID    string     `gorm:"column:user_id"`
+	Role      string     `gorm:"column:role"`
+	Status    string     `gorm:"column:status"`
+	InvitedAt time.Time  `gorm:"column:invited_at"`
+	JoinedAt  *time.Time `gorm:"column:joined_at"`
+	FullName  string     `gorm:"column:full_name"`
+	Email     string     `gorm:"column:email"`
+}
+
+// ListByProject trả kèm tên và email trong MỘT truy vấn. LEFT JOIN chứ không
+// INNER: user bị xóa thì vẫn phải thấy bản ghi thành viên, chỉ là thiếu tên.
 func (r *projectMemberRepository) ListByProject(
 	ctx context.Context, projectID uuid.UUID,
-) ([]domain.ProjectMember, error) {
-	var models []projectMemberModel
+) ([]domain.MemberWithUser, error) {
+	var rows []memberWithUserRow
 	err := postgres.DBFrom(ctx, r.db).
-		Where("project_id = ?", projectID.String()).
-		Order("invited_at ASC").
-		Find(&models).Error
+		Table("project_members AS pm").
+		Select("pm.*, u.full_name, u.email").
+		Joins("LEFT JOIN users AS u ON u.id = pm.user_id").
+		Where("pm.project_id = ?", projectID.String()).
+		Order("pm.invited_at ASC").
+		Scan(&rows).Error
 	if err != nil {
 		return nil, translate(err)
 	}
-	members, err := membersToDomain(models)
-	if err != nil {
-		return nil, fmt.Errorf("map danh sách thành viên: %w", err)
+
+	out := make([]domain.MemberWithUser, 0, len(rows))
+	for _, row := range rows {
+		member, mapErr := memberToDomain(&projectMemberModel{
+			ID: row.ID, ProjectID: row.ProjectID, UserID: row.UserID,
+			Role: row.Role, Status: row.Status,
+			InvitedAt: row.InvitedAt, JoinedAt: row.JoinedAt,
+		})
+		if mapErr != nil {
+			return nil, fmt.Errorf("map danh sách thành viên: %w", mapErr)
+		}
+		out = append(out, domain.MemberWithUser{
+			ProjectMember: member,
+			FullName:      row.FullName,
+			Email:         row.Email,
+		})
 	}
-	return members, nil
+	return out, nil
 }
 
 func (r *projectMemberRepository) UpdateRole(
