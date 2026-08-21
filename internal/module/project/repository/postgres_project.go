@@ -34,7 +34,7 @@ type projectModel struct {
 	Settings          domain.ProjectSettings `gorm:"column:settings;type:jsonb;not null"`
 	AvatarKey         string                 `gorm:"column:avatar_key;type:text"`
 	Version           int                    `gorm:"column:version;not null;default:1"`
-	RAGFlowDatasetID  string                 `gorm:"column:ragflow_dataset_id"`
+	RAGFlowDatasetID  *string                `gorm:"column:ragflow_dataset_id"`
 	RAGFlowSyncStatus string                 `gorm:"column:ragflow_sync_status"`
 	RAGFlowLastError  string                 `gorm:"column:ragflow_last_error"`
 	CreatedAt         time.Time              `gorm:"column:created_at;autoCreateTime"`
@@ -42,6 +42,20 @@ type projectModel struct {
 }
 
 func (projectModel) TableName() string { return "projects" }
+
+func nullableString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func stringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
 
 // projectMemberModel ánh xạ bảng `project_members`.
 type projectMemberModel struct {
@@ -106,7 +120,7 @@ func projectToDomain(m *projectModel) (domain.Project, error) {
 		Settings:          m.Settings,
 		AvatarKey:         m.AvatarKey,
 		Version:           m.Version,
-		RAGFlowDatasetID:  m.RAGFlowDatasetID,
+		RAGFlowDatasetID:  stringOrEmpty(m.RAGFlowDatasetID),
 		RAGFlowSyncStatus: m.RAGFlowSyncStatus,
 		RAGFlowLastError:  m.RAGFlowLastError,
 		CreatedAt:         m.CreatedAt,
@@ -125,7 +139,7 @@ func projectFromDomain(p *domain.Project) *projectModel {
 		Settings:          p.Settings,
 		AvatarKey:         p.AvatarKey,
 		Version:           p.Version,
-		RAGFlowDatasetID:  p.RAGFlowDatasetID,
+		RAGFlowDatasetID:  nullableString(p.RAGFlowDatasetID),
 		RAGFlowSyncStatus: p.RAGFlowSyncStatus,
 		RAGFlowLastError:  p.RAGFlowLastError,
 		CreatedAt:         p.CreatedAt,
@@ -225,7 +239,7 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 			colStatus:             p.Status,
 			"settings":            p.Settings,
 			"avatar_key":          p.AvatarKey,
-			"ragflow_dataset_id":  p.RAGFlowDatasetID,
+			"ragflow_dataset_id":  nullableString(p.RAGFlowDatasetID),
 			"ragflow_sync_status": p.RAGFlowSyncStatus,
 			"ragflow_last_error":  p.RAGFlowLastError,
 			"updated_at":          gorm.Expr("now()"),

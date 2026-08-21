@@ -76,6 +76,19 @@ func TestLoad_RAGFlowFromEnvironment(t *testing.T) {
 	require.Equal(t, "ragflow-secret", cfg.RAGFlow.APIKey)
 }
 
+func TestLoad_RejectsHandlerTimeoutShorterThanRAGFlow(t *testing.T) {
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "ragflow-secret")
+	t.Setenv("APP_RAGFLOW_TIMEOUT", "30s")
+	t.Setenv("APP_TIMEOUT_HANDLER", "10s")
+	t.Setenv("APP_TIMEOUT_WRITE", "60s")
+
+	_, err := config.Load(localConfigPath(t))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "timeout.handler phải lớn hơn ragflow.timeout")
+}
+
 func TestPostgresConfig_DSN(t *testing.T) {
 	p := config.PostgresConfig{
 		Host: "127.0.0.1", Port: 5432, User: "app", Password: "p",

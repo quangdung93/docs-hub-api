@@ -37,7 +37,7 @@ type revisionModel struct {
 	SizeBytes                         int64
 	SHA256, ObjectKey, Status         string
 	ErrorCode, ErrorDetail            string     `gorm:"column:error_detail_sanitized"`
-	RAGFlowDocumentID                 string     `gorm:"column:ragflow_document_id"`
+	RAGFlowDocumentID                 *string    `gorm:"column:ragflow_document_id"`
 	RAGFlowSyncStatus                 string     `gorm:"column:ragflow_sync_status"`
 	RAGFlowLastError                  string     `gorm:"column:ragflow_last_error"`
 	RAGFlowSyncedAt                   *time.Time `gorm:"column:ragflow_synced_at"`
@@ -289,6 +289,14 @@ func ptrID(s *string) *uuid.UUID {
 	x := uuid.MustParse(*s)
 	return &x
 }
+
+func stringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func toDocument(m documentModel) *domain.Document {
 	return &domain.Document{
 		ID: uuid.MustParse(m.ID), ProjectID: uuid.MustParse(m.ProjectID),
@@ -304,7 +312,7 @@ func toRevision(m revisionModel) *domain.Revision {
 		RevisionNo: m.RevisionNo, FileName: m.FileName, MediaType: m.MediaType,
 		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey, Status: m.Status,
 		ErrorCode: m.ErrorCode, ErrorDetail: m.ErrorDetail, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
-		RAGFlowDocumentID: m.RAGFlowDocumentID, RAGFlowSyncStatus: m.RAGFlowSyncStatus,
+		RAGFlowDocumentID: stringOrEmpty(m.RAGFlowDocumentID), RAGFlowSyncStatus: m.RAGFlowSyncStatus,
 		RAGFlowLastError: m.RAGFlowLastError, RAGFlowSyncedAt: m.RAGFlowSyncedAt,
 	}
 }

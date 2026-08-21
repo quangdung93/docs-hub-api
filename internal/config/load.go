@@ -111,6 +111,12 @@ func checkSafety(cfg *Config) error {
 			cfg.RAGFlow.PollInterval <= 0 || cfg.RAGFlow.MaxPollDuration <= 0 {
 			return fmt.Errorf("timeout/poll interval của ragflow phải lớn hơn 0")
 		}
+		if cfg.Timeout.Handler <= cfg.RAGFlow.Timeout {
+			return fmt.Errorf("timeout.handler phải lớn hơn ragflow.timeout để request không bị hủy sớm")
+		}
+		if cfg.Timeout.Write <= cfg.Timeout.Handler {
+			return fmt.Errorf("timeout.write phải lớn hơn timeout.handler khi bật ragflow")
+		}
 		if cfg.App.IsProduction() && !strings.HasPrefix(strings.ToLower(cfg.RAGFlow.BaseURL), "https://") {
 			return fmt.Errorf("production yêu cầu ragflow.base_url dùng HTTPS")
 		}

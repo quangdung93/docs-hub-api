@@ -93,9 +93,9 @@ telemetry:
 timeout:
   read_header: 5s
   read: 15s
-  write: 20s
+  write: 60s
   idle: 60s
-  handler: 10s
+  handler: 45s
   db: 3s
   redis: 2s
   mq: 3s
