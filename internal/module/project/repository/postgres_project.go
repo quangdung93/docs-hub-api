@@ -195,18 +195,6 @@ func memberFromDomain(m *domain.ProjectMember) *projectMemberModel {
 	}
 }
 
-func membersToDomain(models []projectMemberModel) ([]domain.ProjectMember, error) {
-	out := make([]domain.ProjectMember, 0, len(models))
-	for i := range models {
-		m, err := memberToDomain(&models[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, nil
-}
-
 // --- ProjectRepository ---
 
 type projectRepository struct {
@@ -251,6 +239,62 @@ func (r *projectRepository) Update(ctx context.Context, p *domain.Project) error
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// statsRow là một dòng kết quả đếm cho một dự án.
+type statsRow struct {
+	ProjectID     string `gorm:"column:project_id"`
+	DocumentCount int64  `gorm:"column:document_count"`
+	MemberCount   int64  `gorm:"column:member_count"`
+	ChunkCount    int64  `gorm:"column:chunk_count"`
+}
+
+// Stats đếm bằng subquery tương quan thay vì JOIN nhiều bảng: JOIN ba bảng
+// một lúc sẽ nhân bản dòng và làm sai kết quả đếm (fan-out). Cả ba bảng đều
+// đã có index trên project_id.
+//
+// documents dùng xóa mềm nên PHẢI lọc deleted_at IS NULL — đây là SQL thô, GORM
+// không tự áp scope soft-delete. Thiếu điều kiện này thì tài liệu đã xóa vẫn
+// được đếm (đã xảy ra thật: danh sách rỗng nhưng document_count vẫn báo 5).
+// project_members và document_chunks không có cột deleted_at nên đếm thẳng.
+func (r *projectRepository) Stats(
+	ctx context.Context, ids []uuid.UUID,
+) (map[uuid.UUID]domain.ProjectStats, error) {
+	out := make(map[uuid.UUID]domain.ProjectStats, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	strIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		strIDs = append(strIDs, id.String())
+	}
+
+	const statsSQL = `
+		SELECT p.id AS project_id,
+		       (SELECT count(*) FROM documents d
+		         WHERE d.project_id = p.id AND d.deleted_at IS NULL) AS document_count,
+		       (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
+		       (SELECT count(*) FROM document_chunks c WHERE c.project_id = p.id) AS chunk_count
+		FROM projects p WHERE p.id IN ?`
+
+	var rows []statsRow
+	if err := postgres.DBFrom(ctx, r.db).Raw(statsSQL, strIDs).Scan(&rows).Error; err != nil {
+		return nil, translate(err)
+	}
+
+	for _, row := range rows {
+		id, err := uuid.Parse(row.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("parse project id %q: %w", row.ProjectID, err)
+		}
+		out[id] = domain.ProjectStats{
+			DocumentCount: row.DocumentCount,
+			MemberCount:   row.MemberCount,
+			ChunkCount:    row.ChunkCount,
+		}
+	}
+	return out, nil
 }
 
 func (r *projectRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Project, error) {
@@ -343,22 +387,57 @@ func (r *projectMemberRepository) FindByProjectAndUser(
 	return &member, nil
 }
 
+// memberWithUserRow là kết quả join project_members với users.
+//
+// Khai báo PHẲNG chứ không nhúng projectMemberModel: Scan của GORM không đổ
+// dữ liệu vào struct lồng (kể cả có thẻ embedded), kết quả là mọi trường đều
+// rỗng mà không báo lỗi gì.
+type memberWithUserRow struct {
+	ID        string     `gorm:"column:id"`
+	ProjectID string     `gorm:"column:project_id"`
+	UserID    string     `gorm:"column:user_id"`
+	Role      string     `gorm:"column:role"`
+	Status    string     `gorm:"column:status"`
+	InvitedAt time.Time  `gorm:"column:invited_at"`
+	JoinedAt  *time.Time `gorm:"column:joined_at"`
+	FullName  string     `gorm:"column:full_name"`
+	Email     string     `gorm:"column:email"`
+}
+
+// ListByProject trả kèm tên và email trong MỘT truy vấn. LEFT JOIN chứ không
+// INNER: user bị xóa thì vẫn phải thấy bản ghi thành viên, chỉ là thiếu tên.
 func (r *projectMemberRepository) ListByProject(
 	ctx context.Context, projectID uuid.UUID,
-) ([]domain.ProjectMember, error) {
-	var models []projectMemberModel
+) ([]domain.MemberWithUser, error) {
+	var rows []memberWithUserRow
 	err := postgres.DBFrom(ctx, r.db).
-		Where("project_id = ?", projectID.String()).
-		Order("invited_at ASC").
-		Find(&models).Error
+		Table("project_members AS pm").
+		Select("pm.*, u.full_name, u.email").
+		Joins("LEFT JOIN users AS u ON u.id = pm.user_id").
+		Where("pm.project_id = ?", projectID.String()).
+		Order("pm.invited_at ASC").
+		Scan(&rows).Error
 	if err != nil {
 		return nil, translate(err)
 	}
-	members, err := membersToDomain(models)
-	if err != nil {
-		return nil, fmt.Errorf("map danh sách thành viên: %w", err)
+
+	out := make([]domain.MemberWithUser, 0, len(rows))
+	for _, row := range rows {
+		member, mapErr := memberToDomain(&projectMemberModel{
+			ID: row.ID, ProjectID: row.ProjectID, UserID: row.UserID,
+			Role: row.Role, Status: row.Status,
+			InvitedAt: row.InvitedAt, JoinedAt: row.JoinedAt,
+		})
+		if mapErr != nil {
+			return nil, fmt.Errorf("map danh sách thành viên: %w", mapErr)
+		}
+		out = append(out, domain.MemberWithUser{
+			ProjectMember: member,
+			FullName:      row.FullName,
+			Email:         row.Email,
+		})
 	}
-	return members, nil
+	return out, nil
 }
 
 func (r *projectMemberRepository) UpdateRole(

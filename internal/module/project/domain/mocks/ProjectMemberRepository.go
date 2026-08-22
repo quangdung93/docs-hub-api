@@ -180,23 +180,23 @@ func (_c *MockProjectMemberRepository_FindByProjectAndUser_Call) RunAndReturn(ru
 }
 
 // ListByProject provides a mock function with given fields: ctx, projectID
-func (_m *MockProjectMemberRepository) ListByProject(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error) {
+func (_m *MockProjectMemberRepository) ListByProject(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error) {
 	ret := _m.Called(ctx, projectID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListByProject")
 	}
 
-	var r0 []domain.ProjectMember
+	var r0 []domain.MemberWithUser
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]domain.ProjectMember, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) ([]domain.MemberWithUser, error)); ok {
 		return rf(ctx, projectID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) []domain.ProjectMember); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) []domain.MemberWithUser); ok {
 		r0 = rf(ctx, projectID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]domain.ProjectMember)
+			r0 = ret.Get(0).([]domain.MemberWithUser)
 		}
 	}
 
@@ -228,12 +228,12 @@ func (_c *MockProjectMemberRepository_ListByProject_Call) Run(run func(ctx conte
 	return _c
 }
 
-func (_c *MockProjectMemberRepository_ListByProject_Call) Return(_a0 []domain.ProjectMember, _a1 error) *MockProjectMemberRepository_ListByProject_Call {
+func (_c *MockProjectMemberRepository_ListByProject_Call) Return(_a0 []domain.MemberWithUser, _a1 error) *MockProjectMemberRepository_ListByProject_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockProjectMemberRepository_ListByProject_Call) RunAndReturn(run func(context.Context, uuid.UUID) ([]domain.ProjectMember, error)) *MockProjectMemberRepository_ListByProject_Call {
+func (_c *MockProjectMemberRepository_ListByProject_Call) RunAndReturn(run func(context.Context, uuid.UUID) ([]domain.MemberWithUser, error)) *MockProjectMemberRepository_ListByProject_Call {
 	_c.Call.Return(run)
 	return _c
 }

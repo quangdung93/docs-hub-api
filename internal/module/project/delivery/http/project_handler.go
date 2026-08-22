@@ -49,6 +49,7 @@ func Register(rg *gin.RouterGroup, h *Handler, memberRepo domain.ProjectMemberRe
 	{
 		projects.GET("", h.List)
 		projects.POST("", h.Create)
+		projects.GET("/:id", h.GetByID)
 		// projects.PATCH("/:id", onlyOwner, h.Update)
 		projects.PATCH("/:id", h.Update)
 		// projects.DELETE("/:id", onlyOwner, h.Delete)
@@ -163,16 +164,21 @@ type ProjectResponse struct {
 	Status      string                  `json:"status"`
 	Settings    ProjectSettingsResponse `json:"settings"`
 	// AvatarURL là presigned GET URL của ảnh đại diện, rỗng nếu dự án chưa có ảnh.
-	AvatarURL         string    `json:"avatar_url,omitempty"`
-	RAGFlowSyncStatus string    `json:"ragflow_sync_status"`
-	RAGFlowLastError  string    `json:"ragflow_last_error,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	AvatarURL         string `json:"avatar_url,omitempty"`
+	RAGFlowSyncStatus string `json:"ragflow_sync_status"`
+	RAGFlowLastError  string `json:"ragflow_last_error,omitempty"`
+	// Ba con số tổng hợp để client hiển thị mà không phải gọi thêm endpoint
+	// rồi tự đếm (mục #10 báo cáo API).
+	DocumentCount int64     `json:"document_count"`
+	MemberCount   int64     `json:"member_count"`
+	ChunkCount    int64     `json:"chunk_count"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // toProjectResponse ánh xạ entity sang DTO. avatarURL do caller tự resolve
 // (qua Service.AvatarURL) — hàm này thuần, không gọi service.
-func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
+func toProjectResponse(p *domain.Project, avatarURL string, stats domain.ProjectStats) ProjectResponse {
 	return ProjectResponse{
 		ID:          p.ID.String(),
 		OwnerID:     p.OwnerID.String(),
@@ -189,9 +195,22 @@ func toProjectResponse(p *domain.Project, avatarURL string) ProjectResponse {
 		AvatarURL:         avatarURL,
 		RAGFlowSyncStatus: p.RAGFlowSyncStatus,
 		RAGFlowLastError:  p.RAGFlowLastError,
+		DocumentCount:     stats.DocumentCount,
+		MemberCount:       stats.MemberCount,
+		ChunkCount:        stats.ChunkCount,
 		CreatedAt:         p.CreatedAt,
 		UpdatedAt:         p.UpdatedAt,
 	}
+}
+
+// statsOf lấy số liệu tổng hợp của MỘT dự án. Lỗi -> c.Error + false.
+func (h *Handler) statsOf(c *gin.Context, id uuid.UUID) (domain.ProjectStats, bool) {
+	stats, err := h.svc.Stats(c.Request.Context(), []uuid.UUID{id})
+	if err != nil {
+		_ = c.Error(err)
+		return domain.ProjectStats{}, false
+	}
+	return stats[id], true
 }
 
 // resolveAvatarURL gọi Service.AvatarURL và biến lỗi thành c.Error. Trả false
@@ -214,6 +233,16 @@ type ProjectMemberResponse struct {
 	Status    string     `json:"status"`
 	InvitedAt time.Time  `json:"invited_at"`
 	JoinedAt  *time.Time `json:"joined_at,omitempty"`
+	// User đính kèm sẵn để client khỏi gọi GET /users/{id} cho từng thành viên.
+	// Rỗng nếu user đã bị xóa (LEFT JOIN không khớp).
+	User *MemberUserResponse `json:"user,omitempty"`
+}
+
+// MemberUserResponse là thông tin user rút gọn kèm trong danh sách thành viên.
+type MemberUserResponse struct {
+	ID       string `json:"id"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
 }
 
 func toMemberResponse(m *domain.ProjectMember) ProjectMemberResponse {
@@ -228,10 +257,20 @@ func toMemberResponse(m *domain.ProjectMember) ProjectMemberResponse {
 	}
 }
 
-func toMemberResponseList(members []domain.ProjectMember) []ProjectMemberResponse {
+func toMemberResponseList(members []domain.MemberWithUser) []ProjectMemberResponse {
 	out := make([]ProjectMemberResponse, 0, len(members))
 	for i := range members {
-		out = append(out, toMemberResponse(&members[i]))
+		item := toMemberResponse(&members[i].ProjectMember)
+		// Email rỗng nghĩa là LEFT JOIN không khớp (user đã bị xóa) — để user
+		// là null thay vì trả object toàn chuỗi rỗng gây hiểu nhầm.
+		if members[i].Email != "" {
+			item.User = &MemberUserResponse{
+				ID:       members[i].UserID.String(),
+				FullName: members[i].FullName,
+				Email:    members[i].Email,
+			}
+		}
+		out = append(out, item)
 	}
 	return out
 }
@@ -312,7 +351,11 @@ func (h *Handler) Create(c *gin.Context) {
 	if !ok {
 		return
 	}
-	response.Created(c, toProjectResponse(project, avatarURL))
+	stats, ok := h.statsOf(c, project.ID)
+	if !ok {
+		return
+	}
+	response.Created(c, toProjectResponse(project, avatarURL, stats))
 }
 
 // List godoc
@@ -341,15 +384,61 @@ func (h *Handler) List(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	// Đếm cho TẤT CẢ dự án trong một truy vấn, tránh N+1.
+	ids := make([]uuid.UUID, 0, len(projects))
+	for i := range projects {
+		ids = append(ids, projects[i].ID)
+	}
+	stats, err := h.svc.Stats(c.Request.Context(), ids)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	out := make([]ProjectResponse, 0, len(projects))
 	for i := range projects {
 		avatarURL, ok := h.resolveAvatarURL(c, &projects[i])
 		if !ok {
 			return
 		}
-		out = append(out, toProjectResponse(&projects[i], avatarURL))
+		out = append(out, toProjectResponse(&projects[i], avatarURL, stats[projects[i].ID]))
 	}
 	response.OKPaged(c, out, meta)
+}
+
+// GetByID godoc
+// @Summary  Chi tiết một dự án
+// @Description Lấy thông tin một dự án kèm số lượng tài liệu/thành viên/chunk.
+// @Tags     projects
+// @Produce  json
+// @Param    id   path      string  true  "Project ID (UUID)"
+// @Success  200  {object}  response.Envelope
+// @Failure  400  {object}  response.Envelope
+// @Failure  401  {object}  response.Envelope
+// @Failure  404  {object}  response.Envelope
+// @Security BearerAuth
+// @Router   /internal/api/v1/projects/{id} [get]
+func (h *Handler) GetByID(c *gin.Context) {
+	projectID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	project, err := h.svc.GetByID(c.Request.Context(), projectID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	avatarURL, ok := h.resolveAvatarURL(c, project)
+	if !ok {
+		return
+	}
+	stats, ok := h.statsOf(c, project.ID)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL, stats))
 }
 
 // Update godoc
@@ -390,7 +479,11 @@ func (h *Handler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-	response.OK(c, toProjectResponse(project, avatarURL))
+	stats, ok := h.statsOf(c, project.ID)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL, stats))
 }
 
 // Delete godoc
@@ -474,7 +567,11 @@ func (h *Handler) CompleteAvatarUpload(c *gin.Context) {
 	if !ok {
 		return
 	}
-	response.OK(c, toProjectResponse(project, avatarURL))
+	stats, ok := h.statsOf(c, project.ID)
+	if !ok {
+		return
+	}
+	response.OK(c, toProjectResponse(project, avatarURL, stats))
 }
 
 // --- Handlers: Project members ---

@@ -78,9 +78,15 @@ func upsertProject(tx *gorm.DB, project projectSeed, adminID uuid.UUID) error {
 	if err := tx.Exec(projectSQL, project.id, project.code, project.name, project.description, adminID).Error; err != nil {
 		return fmt.Errorf("upsert project %s: %w", project.code, err)
 	}
+	// Chốt theo id (giống projectSQL ở trên) chứ KHÔNG theo (project_id,user_id).
+	// Bản ghi seed dùng chính id dự án làm id thành viên, nên khi ĐỔI tài khoản
+	// admin thì user_id khác đi và mệnh đề (project_id,user_id) không khớp —
+	// Postgres cố INSERT thật rồi đụng khoá chính. Chốt theo id vừa idempotent
+	// vừa cập nhật được chủ sở hữu mới.
 	const memberSQL = `INSERT INTO project_members(id,project_id,user_id,role,status,joined_at)
-		VALUES(?,?,?,'owner','active',now()) ON CONFLICT(project_id,user_id)
-		DO UPDATE SET role='owner',status='active',joined_at=COALESCE(project_members.joined_at,now())`
+		VALUES(?,?,?,'owner','active',now()) ON CONFLICT(id)
+		DO UPDATE SET user_id=excluded.user_id,role='owner',status='active',
+		joined_at=COALESCE(project_members.joined_at,now())`
 	if err := tx.Exec(memberSQL, project.id, project.id, adminID).Error; err != nil {
 		return fmt.Errorf("upsert owner project %s: %w", project.code, err)
 	}

@@ -53,7 +53,7 @@ func run() error {
 	if err = seedAdmin(ctx, userRepo, hashing.NewHasher(0)); err != nil {
 		return err
 	}
-	admin, err := userRepo.FindByEmail(ctx, "admin@local")
+	admin, err := userRepo.FindByEmail(ctx, domain.DefaultAdminEmail)
 	if err != nil {
 		return fmt.Errorf("đọc admin để seed project: %w", err)
 	}
@@ -62,9 +62,8 @@ func run() error {
 
 // seedAdmin tạo tài khoản admin mặc định nếu chưa tồn tại (idempotent).
 func seedAdmin(ctx context.Context, repo domain.UserRepository, hasher *hashing.Hasher) error {
-	const adminEmail = "admin@local"
 
-	exists, err := repo.ExistsByEmail(ctx, adminEmail, nil)
+	exists, err := repo.ExistsByEmail(ctx, domain.DefaultAdminEmail, nil)
 	if err != nil {
 		return fmt.Errorf("kiểm tra admin tồn tại: %w", err)
 	}
@@ -77,11 +76,11 @@ func seedAdmin(ctx context.Context, repo domain.UserRepository, hasher *hashing.
 	if err != nil {
 		return fmt.Errorf("băm mật khẩu admin: %w", err)
 	}
-	admin := domain.NewUser(adminEmail, "Quản trị viên", hash, []string{"admin"})
+	admin := domain.NewUser(domain.DefaultAdminEmail, "Quản trị viên", hash, []string{"admin"})
 	if err := repo.Create(ctx, admin); err != nil {
 		return fmt.Errorf("tạo admin: %w", err)
 	}
 
-	fmt.Printf("seed: đã tạo admin %s / Admin@12345\n", adminEmail)
+	fmt.Printf("seed: đã tạo admin %s / Admin@12345\n", domain.DefaultAdminEmail)
 	return nil
 }

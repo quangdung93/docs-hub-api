@@ -199,6 +199,11 @@ definitions:
     - password
     - username
     type: object
+  http.LogoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    type: object
   http.PresignRequest:
     properties:
       change_request_id:
@@ -263,6 +268,11 @@ definitions:
       status:
         type: string
       updated_at:
+        type: string
+    type: object
+  http.RefreshRequest:
+    properties:
+      refresh_token:
         type: string
     type: object
   http.Request:
@@ -464,7 +474,16 @@ info:
 paths:
   /internal/api/v1/auth/logout:
     post:
-      description: Xóa token ở client (xóa Cookie) và revoke ở server
+      consumes:
+      - application/json
+      description: Thu hồi session ở server và xóa cookie. Không kèm refresh_token
+        thì thu hồi mọi phiên của user.
+      parameters:
+      - description: Refresh token cần thu hồi (bỏ trống = mọi phiên)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/http.LogoutRequest'
       produces:
       - application/json
       responses:
@@ -472,8 +491,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.Envelope'
-        "400":
-          description: Bad Request
+        "401":
+          description: Unauthorized
           schema:
             $ref: '#/definitions/response.Envelope'
       security:
@@ -581,6 +600,38 @@ paths:
       security:
       - BearerAuth: []
       summary: Xóa dự án (chỉ Owner, yêu cầu xác nhận đúng tên dự án)
+      tags:
+      - projects
+    get:
+      description: Lấy thông tin một dự án kèm số lượng tài liệu/thành viên/chunk.
+      parameters:
+      - description: Project ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Chi tiết một dự án
       tags:
       - projects
     patch:
@@ -1875,7 +1926,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Xác thực và trả về JWT qua Cookie
+      description: Xác thực và trả về access token + refresh token (kèm cookie)
       parameters:
       - description: Thông tin đăng nhập
         in: body
@@ -1899,6 +1950,32 @@ paths:
           schema:
             $ref: '#/definitions/response.Envelope'
       summary: Đăng nhập
+      tags:
+      - auth
+  /public/api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Đổi refresh token còn hiệu lực lấy cặp token mới. Refresh token
+        cũ bị thu hồi ngay.
+      parameters:
+      - description: Refresh token (bỏ trống thì đọc từ cookie)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/http.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Gia hạn access token
       tags:
       - auth
 securityDefinitions:

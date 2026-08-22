@@ -202,13 +202,19 @@ func TestListMembers_HappyPath(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	projectID := uuid.New()
-	members := []domain.ProjectMember{*domain.NewInvite(projectID, uuid.New(), domain.RoleViewer)}
+	members := []domain.MemberWithUser{{
+		ProjectMember: *domain.NewInvite(projectID, uuid.New(), domain.RoleViewer),
+		FullName:      "Nguyễn Văn A",
+		Email:         "a@example.com",
+	}}
 
 	h.memberRepo.EXPECT().ListByProject(mock.Anything, projectID).Return(members, nil)
 
 	got, err := h.svc.ListMembers(ctx, projectID)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
+	require.Equal(t, "Nguyễn Văn A", got[0].FullName)
+	require.Equal(t, "a@example.com", got[0].Email)
 }
 
 func TestInviteMember_HappyPath(t *testing.T) {

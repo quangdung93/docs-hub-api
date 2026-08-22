@@ -21,15 +21,24 @@ func New(ctx context.Context, cfg *config.Config) (port.ObjectStore, port.Health
 		}
 		return store, fsstore.NewHealthChecker(store), nil
 	case "minio":
-		client, err := miniostore.New(ctx, miniostore.Config{
+		mcfg := miniostore.Config{
 			Endpoint: cfg.MinIO.Endpoint, AccessKey: cfg.MinIO.AccessKey,
 			SecretKey: cfg.MinIO.SecretKey, Bucket: cfg.MinIO.Bucket,
 			UseSSL: cfg.MinIO.UseSSL, Region: cfg.MinIO.Region,
-		})
+			PublicEndpoint: cfg.MinIO.PublicEndpoint, PublicUseSSL: cfg.MinIO.PublicUseSSL,
+		}
+		client, err := miniostore.New(ctx, mcfg)
 		if err != nil {
 			return nil, nil, fmt.Errorf("khởi tạo MinIO: %w", err)
 		}
-		return miniostore.NewStore(client, cfg.MinIO.Bucket), miniostore.NewHealthChecker(client, cfg.MinIO.Bucket), nil
+		// Client riêng để ký presigned URL theo host công khai; nil khi không
+		// cấu hình, lúc đó store ký bằng client nội bộ.
+		presign, err := miniostore.NewPresign(mcfg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("khởi tạo MinIO: %w", err)
+		}
+		return miniostore.NewStoreWithPresign(client, presign, cfg.MinIO.Bucket),
+			miniostore.NewHealthChecker(client, cfg.MinIO.Bucket), nil
 	default:
 		return nil, nil, fmt.Errorf("storage.driver %q không được hỗ trợ", cfg.Storage.Driver)
 	}

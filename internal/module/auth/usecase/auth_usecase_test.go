@@ -9,11 +9,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
+	portmocks "github.com/quangdung93/docs-hub-api/internal/common/port/mocks"
+	"github.com/quangdung93/docs-hub-api/internal/common/tokenrevoke"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain/mocks"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
+)
+
+const (
+	testAccessTTL  = 15 * time.Minute
+	testRefreshTTL = 168 * time.Hour
 )
 
 func setupTest(t *testing.T) (*mocks.MockUserRepository, *mocks.MockSessionRepository, AuthUseCase) {
@@ -22,9 +30,10 @@ func setupTest(t *testing.T) (*mocks.MockUserRepository, *mocks.MockSessionRepos
 	mgr, _ := jwt.NewManager(jwt.Config{
 		Secret:    "test-secret",
 		Issuer:    "test-issuer",
-		AccessTTL: 15 * time.Minute,
+		AccessTTL: testAccessTTL,
 	})
-	uc := NewAuthUseCase(userRepo, sessionRepo, mgr)
+	// revoked=nil: các test này không kiểm tra danh sách thu hồi.
+	uc := NewAuthUseCase(userRepo, sessionRepo, mgr, testAccessTTL, testRefreshTTL, nil)
 	return userRepo, sessionRepo, uc
 }
 
@@ -78,31 +87,185 @@ func TestAuthUseCase_Login(t *testing.T) {
 			ur, sr, uc := setupTest(t)
 			tt.mockSetup(ur, sr)
 
-			user, token, err := uc.Login(context.Background(), tt.username, tt.password)
+			user, pair, err := uc.Login(t.Context(), tt.username, tt.password)
 
 			if tt.expectedError != nil {
 				assert.ErrorIs(t, err, tt.expectedError)
-				assert.Empty(t, token)
+				assert.Empty(t, pair.AccessToken)
+				assert.Empty(t, pair.RefreshToken)
 				assert.Nil(t, user)
-			} else {
-				assert.NoError(t, err)
-				assert.NotEmpty(t, token)
-				assert.NotNil(t, user)
-				assert.Empty(t, user.PasswordHash)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, user)
+			assert.NotEmpty(t, pair.AccessToken)
+			assert.NotEmpty(t, pair.RefreshToken)
+			assert.Empty(t, user.PasswordHash)
+			// TTL phải lấy từ config, không hardcode.
+			assert.Equal(t, int(testAccessTTL.Seconds()), pair.ExpiresIn)
+			assert.Equal(t, int(testRefreshTTL.Seconds()), pair.RefreshExpiresIn)
 		})
 	}
 }
 
-func TestAuthUseCase_Logout(t *testing.T) {
+// TestLogin_LuuRefreshTokenChuKhongPhaiAccessToken chốt quyết định thiết kế:
+// bảng sessions giữ refresh token để thu hồi được, không giữ access token.
+func TestLogin_LuuRefreshTokenChuKhongPhaiAccessToken(t *testing.T) {
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("pw"), bcrypt.DefaultCost)
+	validUser := &domain.User{ID: uuid.New(), Username: "u", PasswordHash: string(hashedPassword)}
+
 	ur, sr, uc := setupTest(t)
-	token := "dummy_token"
-	_ = ur
+	ur.On("FindByUsername", mock.Anything, "u").Return(validUser, nil).Once()
 
-	sr.On("Delete", mock.Anything, token).Return(nil).Once()
+	var saved *domain.Session
+	sr.On("Create", mock.Anything, mock.AnythingOfType("*domain.Session")).
+		Run(func(args mock.Arguments) { saved = args.Get(1).(*domain.Session) }).
+		Return(nil).Once()
 
-	err := uc.Logout(context.Background(), token)
-	assert.NoError(t, err)
+	_, pair, err := uc.Login(t.Context(), "u", "pw")
+	require.NoError(t, err)
+	require.NotNil(t, saved)
+
+	assert.Equal(t, pair.RefreshToken, saved.Token, "session phải lưu refresh token")
+	assert.NotEqual(t, pair.AccessToken, saved.Token, "session KHÔNG được lưu access token")
+	assert.Equal(t, validUser.ID, saved.UserID)
+	// Hạn session phải theo refreshTTL, sai số nhỏ do thời gian chạy.
+	assert.WithinDuration(t, time.Now().Add(testRefreshTTL), saved.ExpiresAt, time.Minute)
+}
+
+func TestAuthUseCase_Refresh(t *testing.T) {
+	userID := uuid.New()
+	validUser := &domain.User{ID: userID, Username: "testuser", PasswordHash: "hash"}
+
+	t.Run("Success_CapTokenMoiVaThuHoiTokenCu", func(t *testing.T) {
+		ur, sr, uc := setupTest(t)
+		const oldToken = "old-refresh-token"
+
+		sr.On("FindByToken", mock.Anything, oldToken).Return(&domain.Session{
+			ID: uuid.New(), UserID: userID, Token: oldToken,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}, nil).Once()
+		ur.On("FindByID", mock.Anything, userID.String()).Return(validUser, nil).Once()
+		sr.On("Create", mock.Anything, mock.AnythingOfType("*domain.Session")).Return(nil).Once()
+		sr.On("Delete", mock.Anything, oldToken).Return(nil).Once()
+
+		user, pair, err := uc.Refresh(t.Context(), oldToken)
+
+		require.NoError(t, err)
+		require.NotNil(t, user)
+		assert.NotEmpty(t, pair.AccessToken)
+		assert.NotEqual(t, oldToken, pair.RefreshToken, "phải xoay vòng sang refresh token mới")
+		assert.Empty(t, user.PasswordHash)
+	})
+
+	t.Run("Fail_TokenRong", func(t *testing.T) {
+		_, _, uc := setupTest(t)
+		_, _, err := uc.Refresh(t.Context(), "")
+		assert.ErrorIs(t, err, ErrInvalidRefresh)
+	})
+
+	t.Run("Fail_KhongTonTai", func(t *testing.T) {
+		_, sr, uc := setupTest(t)
+		sr.On("FindByToken", mock.Anything, "unknown").Return(nil, domain.ErrSessionNotFound).Once()
+
+		_, _, err := uc.Refresh(t.Context(), "unknown")
+		assert.ErrorIs(t, err, ErrInvalidRefresh)
+	})
+
+	t.Run("Fail_HetHan_VaDonBanGhiRac", func(t *testing.T) {
+		_, sr, uc := setupTest(t)
+		const expired = "expired-token"
+
+		sr.On("FindByToken", mock.Anything, expired).Return(&domain.Session{
+			ID: uuid.New(), UserID: userID, Token: expired,
+			ExpiresAt: time.Now().Add(-time.Minute), // đã hết hạn
+		}, nil).Once()
+		// Bản ghi hết hạn phải bị xóa chứ không để lại rác.
+		sr.On("Delete", mock.Anything, expired).Return(nil).Once()
+
+		_, _, err := uc.Refresh(t.Context(), expired)
+		assert.ErrorIs(t, err, ErrInvalidRefresh)
+	})
+
+	t.Run("Fail_UserDaBiXoa_ThiThuHoiSession", func(t *testing.T) {
+		ur, sr, uc := setupTest(t)
+		const token = "orphan-token"
+
+		sr.On("FindByToken", mock.Anything, token).Return(&domain.Session{
+			ID: uuid.New(), UserID: userID, Token: token,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}, nil).Once()
+		ur.On("FindByID", mock.Anything, userID.String()).Return(nil, errors.New("not found")).Once()
+		sr.On("Delete", mock.Anything, token).Return(nil).Once()
+
+		_, _, err := uc.Refresh(t.Context(), token)
+		assert.ErrorIs(t, err, ErrInvalidRefresh)
+	})
+}
+
+func TestAuthUseCase_Logout(t *testing.T) {
+	userID := uuid.New()
+
+	t.Run("CoRefreshToken_ThiChiThuHoiPhienDo", func(t *testing.T) {
+		_, sr, uc := setupTest(t)
+		sr.On("Delete", mock.Anything, "some-token").Return(nil).Once()
+
+		assert.NoError(t, uc.Logout(t.Context(), userID, "some-token", ""))
+	})
+
+	t.Run("KhongCoRefreshToken_ThiThuHoiMoiPhien", func(t *testing.T) {
+		_, sr, uc := setupTest(t)
+		sr.On("DeleteByUserID", mock.Anything, userID).Return(nil).Once()
+
+		assert.NoError(t, uc.Logout(t.Context(), userID, "", ""))
+	})
+}
+
+// TestLogout_ThuHoiAccessToken chốt mục #5 báo cáo API: logout phải vô hiệu
+// access token ngay, không đợi hết hạn.
+func TestLogout_ThuHoiAccessToken(t *testing.T) {
+	userID := uuid.New()
+	hashed, _ := bcrypt.GenerateFromPassword([]byte("pw"), bcrypt.DefaultCost)
+	user := &domain.User{ID: userID, Username: "u", PasswordHash: string(hashed)}
+
+	ur := mocks.NewMockUserRepository(t)
+	sr := mocks.NewMockSessionRepository(t)
+	cache := portmocks.NewMockCache(t)
+	mgr, _ := jwt.NewManager(jwt.Config{Secret: "s", Issuer: "i", AccessTTL: testAccessTTL})
+	uc := NewAuthUseCase(ur, sr, mgr, testAccessTTL, testRefreshTTL, cache)
+
+	ur.On("FindByUsername", mock.Anything, "u").Return(user, nil).Once()
+	sr.On("Create", mock.Anything, mock.AnythingOfType("*domain.Session")).Return(nil).Once()
+	_, pair, err := uc.Login(t.Context(), "u", "pw")
+	require.NoError(t, err)
+
+	// Token phải được ghi vào danh sách chặn, TTL không vượt quá hạn của token.
+	var gotKey string
+	var gotTTL time.Duration
+	cache.On("Set", mock.Anything, mock.AnythingOfType("string"), mock.Anything,
+		mock.AnythingOfType("time.Duration")).
+		Run(func(args mock.Arguments) {
+			gotKey = args.Get(1).(string)
+			gotTTL = args.Get(3).(time.Duration)
+		}).Return(nil).Once()
+	sr.On("Delete", mock.Anything, pair.RefreshToken).Return(nil).Once()
+
+	require.NoError(t, uc.Logout(t.Context(), userID, pair.RefreshToken, pair.AccessToken))
+
+	assert.Equal(t, tokenrevoke.Key(pair.AccessToken), gotKey, "phải dùng đúng khóa dùng chung")
+	assert.Greater(t, gotTTL, time.Duration(0))
+	assert.LessOrEqual(t, gotTTL, testAccessTTL)
+}
+
+// TestLogout_KhongCoCache_VanChay: chưa bật Redis thì logout vẫn phải thu hồi
+// session, chỉ là access token sống nốt thời hạn.
+func TestLogout_KhongCoCache_VanChay(t *testing.T) {
+	_, sr, uc := setupTest(t)
+	userID := uuid.New()
+	sr.On("Delete", mock.Anything, "rt").Return(nil).Once()
+
+	assert.NoError(t, uc.Logout(t.Context(), userID, "rt", "token-bat-ky"))
 }
 
 func TestAuthUseCase_GetMe(t *testing.T) {
@@ -119,8 +282,8 @@ func TestAuthUseCase_GetMe(t *testing.T) {
 
 		user, err := uc.GetMe(context.Background(), userID.String())
 
-		assert.NoError(t, err)
-		assert.NotNil(t, user)
+		require.NoError(t, err)
+		require.NotNil(t, user)
 		assert.Empty(t, user.PasswordHash)
 	})
 
@@ -132,4 +295,16 @@ func TestAuthUseCase_GetMe(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, user)
 	})
+}
+
+// TestNewRefreshToken_KhongTrungNhau đảm bảo token sinh ra là ngẫu nhiên thật.
+func TestNewRefreshToken_KhongTrungNhau(t *testing.T) {
+	seen := make(map[string]bool, 100)
+	for range 100 {
+		tok, err := newRefreshToken()
+		require.NoError(t, err)
+		assert.NotEmpty(t, tok)
+		assert.False(t, seen[tok], "refresh token bị trùng: %s", tok)
+		seen[tok] = true
+	}
 }

@@ -12,9 +12,12 @@ COMPOSE_FILE   := deployments/compose/docker-compose.yml
 GIT_SHA        := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 LDFLAGS        := -s -w -X main.version=$(GIT_SHA)
 
-# Công cụ (pin version để mọi máy giống nhau)
-GOLANGCI_VERSION := v1.61.0
-MOCKERY_VERSION  := v2.46.3
+# Công cụ (pin version để mọi máy giống nhau).
+# LƯU Ý: golangci-lint phải là nhánh v2 — bản v1.61 KHÔNG build được với
+# Go 1.25 (lỗi trong golang.org/x/tools), và .golangci.yml đã là schema v2.
+# Module path của v2 có thêm "/v2/". mockery v2.46 vướng đúng lỗi đó.
+GOLANGCI_VERSION := v2.12.2
+MOCKERY_VERSION  := v2.53.6
 SWAG_VERSION     := v1.16.4
 MIGRATE_VERSION  := v4.18.1
 
@@ -58,8 +61,13 @@ vet: ## go vet
 	go vet ./...
 
 .PHONY: lint
-lint: ## Chạy golangci-lint
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_VERSION) run --timeout 5m
+lint: ## Chạy golangci-lint trên TOÀN BỘ repo (gồm cả nợ cũ trên main)
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run --timeout 5m
+
+.PHONY: lint-new
+lint-new: ## Chỉ báo lỗi MỚI so với main — đúng thứ CI chặn merge
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run \
+		--timeout 5m --new-from-rev=origin/main
 
 .PHONY: lint-fmt-check
 lint-fmt-check: ## Kiểm tra code đã format chưa (dùng trong CI)
@@ -77,7 +85,13 @@ cover: test ## Báo cáo coverage dạng HTML
 
 .PHONY: test-integration
 test-integration: ## Integration test (cần Docker daemon)
-	go test -tags=integration -race -v ./internal/module/user/repository/... ./test/integration/...
+	# Quét ./... thay vì liệt kê từng đường dẫn: liệt kê tay đã làm integration
+	# test của auth (PR #19) không bao giờ được chạy vì quên thêm vào danh sách.
+	#
+	# -p 1 chạy tuần tự từng package: auth và user repository dùng CHUNG bảng
+	# users trên cùng một Postgres và đều TRUNCATE, chạy song song sẽ xóa dữ
+	# liệu của nhau giữa chừng.
+	go test -tags=integration -race -v -p 1 ./...
 
 ## ------------------------------------------------------------------ Codegen
 .PHONY: mocks
@@ -172,4 +186,4 @@ hooks: ## Cài git pre-commit hook
 
 ## ------------------------------------------------------------------ CI gộp
 .PHONY: ci
-ci: lint-fmt-check vet lint test ## Chạy toàn bộ kiểm tra như CI
+ci: lint-fmt-check vet lint-new test ## Chạy toàn bộ kiểm tra như CI

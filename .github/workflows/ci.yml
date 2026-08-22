@@ -87,5 +87,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Quét ./... thay vì liệt kê từng đường dẫn: liệt kê tay đã làm integration
+      # test của auth (PR #19) không bao giờ được chạy vì quên thêm vào danh sách.
+      #
+      # -p 1 chạy tuần tự từng package: auth và user repository dùng CHUNG bảng
+      # users trên cùng một Postgres và đều TRUNCATE, chạy song song sẽ xóa dữ
+      # liệu của nhau giữa chừng.
       - name: Integration test
-        run: go test -tags=integration -race ./internal/module/user/repository/... ./test/integration/...
+        run: go test -tags=integration -race -p 1 ./...
