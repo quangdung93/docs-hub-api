@@ -197,6 +197,14 @@ type ProjectMember struct {
 	JoinedAt  *time.Time
 }
 
+// ProjectStats là các con số tổng hợp của một dự án, để client hiển thị mà
+// không phải gọi thêm nhiều endpoint rồi tự đếm (mục #10 báo cáo API).
+type ProjectStats struct {
+	DocumentCount int64
+	MemberCount   int64
+	ChunkCount    int64
+}
+
 // MemberWithUser là read model cho danh sách thành viên: kèm sẵn tên và email
 // để client khỏi phải gọi GET /users/{id} cho từng người (mục #11 báo cáo API).
 type MemberWithUser struct {
@@ -242,6 +250,10 @@ type ProjectRepository interface {
 	ListForUser(ctx context.Context, userID uuid.UUID, page pagination.Query) ([]Project, int64, error)
 	// Delete xóa CỨNG dự án (DB tự cascade sang project_members).
 	Delete(ctx context.Context, id uuid.UUID) error
+	// Stats đếm tài liệu/thành viên/chunk cho NHIỀU dự án trong một truy vấn.
+	// Nhận danh sách id để tránh N+1 khi liệt kê. Dự án không có bản ghi nào
+	// vẫn xuất hiện trong map với giá trị 0.
+	Stats(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]ProjectStats, error)
 }
 
 // ProjectMemberRepository là PORT (interface) mà usecase phụ thuộc để thao tác
