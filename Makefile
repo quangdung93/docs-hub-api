@@ -85,7 +85,13 @@ cover: test ## Báo cáo coverage dạng HTML
 
 .PHONY: test-integration
 test-integration: ## Integration test (cần Docker daemon)
-	go test -tags=integration -race -v ./internal/module/user/repository/... ./test/integration/...
+	# Quét ./... thay vì liệt kê từng đường dẫn: liệt kê tay đã làm integration
+	# test của auth (PR #19) không bao giờ được chạy vì quên thêm vào danh sách.
+	#
+	# -p 1 chạy tuần tự từng package: auth và user repository dùng CHUNG bảng
+	# users trên cùng một Postgres và đều TRUNCATE, chạy song song sẽ xóa dữ
+	# liệu của nhau giữa chừng.
+	go test -tags=integration -race -v -p 1 ./...
 
 ## ------------------------------------------------------------------ Codegen
 .PHONY: mocks

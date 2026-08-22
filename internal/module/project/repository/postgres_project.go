@@ -252,6 +252,11 @@ type statsRow struct {
 // Stats đếm bằng subquery tương quan thay vì JOIN nhiều bảng: JOIN ba bảng
 // một lúc sẽ nhân bản dòng và làm sai kết quả đếm (fan-out). Cả ba bảng đều
 // đã có index trên project_id.
+//
+// documents dùng xóa mềm nên PHẢI lọc deleted_at IS NULL — đây là SQL thô, GORM
+// không tự áp scope soft-delete. Thiếu điều kiện này thì tài liệu đã xóa vẫn
+// được đếm (đã xảy ra thật: danh sách rỗng nhưng document_count vẫn báo 5).
+// project_members và document_chunks không có cột deleted_at nên đếm thẳng.
 func (r *projectRepository) Stats(
 	ctx context.Context, ids []uuid.UUID,
 ) (map[uuid.UUID]domain.ProjectStats, error) {
@@ -267,7 +272,8 @@ func (r *projectRepository) Stats(
 
 	const statsSQL = `
 		SELECT p.id AS project_id,
-		       (SELECT count(*) FROM documents d WHERE d.project_id = p.id) AS document_count,
+		       (SELECT count(*) FROM documents d
+		         WHERE d.project_id = p.id AND d.deleted_at IS NULL) AS document_count,
 		       (SELECT count(*) FROM project_members m WHERE m.project_id = p.id) AS member_count,
 		       (SELECT count(*) FROM document_chunks c WHERE c.project_id = p.id) AS chunk_count
 		FROM projects p WHERE p.id IN ?`
