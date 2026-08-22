@@ -181,8 +181,11 @@ type ProjectConfig struct {
 // JWTConfig cấu hình ký/verify token.
 // Secret/khóa đến từ ENV: APP_JWT_SECRET.
 type JWTConfig struct {
-	Algorithm  string        `mapstructure:"algorithm"   validate:"required,oneof=HS256 RS256"`
-	Secret     string        `mapstructure:"secret"`
+	Algorithm string `mapstructure:"algorithm"   validate:"required,oneof=HS256 RS256"`
+	Secret    string `mapstructure:"secret"`
+	// PrivateKey là khóa riêng RSA dạng PEM, BẮT BUỘC khi algorithm=RS256.
+	// Là secret nên đặt qua ENV (APP_JWT_PRIVATE_KEY), không ghi vào file config.
+	PrivateKey string        `mapstructure:"private_key"`
 	Issuer     string        `mapstructure:"issuer"      validate:"required"`
 	AccessTTL  time.Duration `mapstructure:"access_ttl"  validate:"required"`
 	RefreshTTL time.Duration `mapstructure:"refresh_ttl" validate:"required"`
