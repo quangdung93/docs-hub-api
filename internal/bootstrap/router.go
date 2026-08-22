@@ -9,6 +9,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/contextx"
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/middleware"
+	userdomain "github.com/quangdung93/docs-hub-api/internal/module/user/domain"
 )
 
 // registerRoutes dựng 2 nhóm route và gắn các module.
@@ -49,8 +50,9 @@ func loadLocalActor(infra *Infra) (contextx.Actor, error) {
 		ID, Email string
 	}
 	if err := infra.DB.Table("users").Select("id,email").
-		Where("email=? AND deleted_at IS NULL", "admin@local").Take(&user).Error; err != nil {
-		return contextx.Actor{}, fmt.Errorf("không tìm thấy local actor admin@local; chạy `make seed`: %w", err)
+		Where("email=? AND deleted_at IS NULL", userdomain.DefaultAdminEmail).Take(&user).Error; err != nil {
+		return contextx.Actor{}, fmt.Errorf("không tìm thấy local actor %s; chạy `make seed`: %w",
+			userdomain.DefaultAdminEmail, err)
 	}
 	return contextx.Actor{UserID: user.ID, Email: user.Email, Roles: []string{"admin"}}, nil
 }
