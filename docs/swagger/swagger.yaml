@@ -79,6 +79,15 @@ definitions:
       updated_at:
         type: string
     type: object
+  http.AskRequest:
+    properties:
+      question:
+        type: string
+      scope:
+        $ref: '#/definitions/internal_module_chat_delivery_http.ScopeRequest'
+    required:
+    - question
+    type: object
   http.ChangeMemberRoleRequest:
     properties:
       role:
@@ -106,6 +115,13 @@ definitions:
         $ref: '#/definitions/http.ProjectSettingsRequest'
     required:
     - name
+    type: object
+  http.CreateRequest:
+    properties:
+      scope:
+        $ref: '#/definitions/internal_module_chat_delivery_http.ScopeRequest'
+      title:
+        type: string
     type: object
   http.CreateUserRequest:
     properties:
@@ -251,22 +267,21 @@ definitions:
     type: object
   http.Request:
     properties:
-      change_request_id:
-        type: string
       keyword:
         type: boolean
       page_size:
         type: integer
-      project_version_id:
+      query:
         type: string
-      question:
-        type: string
+      scope:
+        $ref: '#/definitions/internal_module_retrieval_delivery_http.ScopeRequest'
       similarity_threshold:
         type: number
       vector_similarity_weight:
         type: number
     required:
-    - question
+    - query
+    - scope
     type: object
   http.RequestAvatarUploadRequest:
     properties:
@@ -346,12 +361,42 @@ definitions:
       revision:
         $ref: '#/definitions/domain.Revision'
     type: object
+  internal_module_chat_delivery_http.ScopeRequest:
+    properties:
+      change_request_ids:
+        items:
+          type: string
+        type: array
+      mode:
+        type: string
+      version_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - mode
+    type: object
   internal_module_document_domain.Scope:
     properties:
       change_request_id:
         type: string
       project_version_id:
         type: string
+    type: object
+  internal_module_retrieval_delivery_http.ScopeRequest:
+    properties:
+      change_request_ids:
+        items:
+          type: string
+        type: array
+      mode:
+        type: string
+      version_ids:
+        items:
+          type: string
+        type: array
+    required:
+    - mode
     type: object
   pagination.Meta:
     properties:
@@ -400,25 +445,6 @@ definitions:
       trace_id:
         type: string
     type: object
-  usecase.Citation:
-    properties:
-      chunk_id:
-        type: string
-      document_id:
-        type: string
-      excerpt:
-        type: string
-      revision_id:
-        type: string
-      score:
-        type: number
-      term_score:
-        type: number
-      title:
-        type: string
-      vector_score:
-        type: number
-    type: object
   usecase.PresignResult:
     properties:
       expires_at:
@@ -429,17 +455,6 @@ definitions:
         type: string
       upload_url:
         type: string
-    type: object
-  usecase.Result:
-    properties:
-      citations:
-        items:
-          $ref: '#/definitions/usecase.Citation'
-        type: array
-      question:
-        type: string
-      total:
-        type: integer
     type: object
 info:
   contact: {}
@@ -644,6 +659,127 @@ paths:
         tải lên)
       tags:
       - projects
+  /internal/api/v1/projects/{id}/conversations:
+    get:
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Trang
+        in: query
+        name: page
+        type: integer
+      - description: Số bản ghi/trang
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Liệt kê conversation của actor
+      tags:
+      - conversations
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Tiêu đề và scope tùy chọn
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tạo conversation trong project
+      tags:
+      - conversations
+  /internal/api/v1/projects/{id}/conversations/{conversation_id}:
+    get:
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Conversation ID
+        format: uuid
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xem conversation, messages và citations
+      tags:
+      - conversations
+  /internal/api/v1/projects/{id}/conversations/{conversation_id}/messages:
+    post:
+      consumes:
+      - application/json
+      description: RAGFlow Chat sinh answer và citations; nếu không truyền scope,
+        truy vấn tất cả version và change request của project.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Conversation ID
+        format: uuid
+        in: path
+        name: conversation_id
+        required: true
+        type: string
+      - description: Câu hỏi và scope tùy chọn
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.AskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Hỏi đáp trên conversation với citation
+      tags:
+      - conversations
   /internal/api/v1/projects/{id}/documents:
     get:
       parameters:
@@ -1397,7 +1533,7 @@ paths:
       summary: Xác nhận lời mời tham gia dự án
       tags:
       - projects
-  /internal/api/v1/projects/{id}/retrieval:
+  /internal/api/v1/projects/{id}/search:
     post:
       consumes:
       - application/json
@@ -1420,12 +1556,7 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.Envelope'
-            - properties:
-                data:
-                  $ref: '#/definitions/usecase.Result'
-              type: object
+            $ref: '#/definitions/response.Envelope'
         "400":
           description: Bad Request
           schema:

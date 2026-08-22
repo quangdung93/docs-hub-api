@@ -154,6 +154,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("telemetry.sample_ratio", 1.0)
 	v.SetDefault("local_ai.base_url", "http://127.0.0.1:8081")
+	v.SetDefault("local_ai.chat_model", "")
 	v.SetDefault("local_ai.embedding_model", "")
 	v.SetDefault("local_ai.embedding_dimension", 0)
 	v.SetDefault("local_ai.timeout", "30s")

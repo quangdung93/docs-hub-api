@@ -1,8 +1,6 @@
 package http
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
@@ -17,13 +15,18 @@ type Handler struct{ service *usecase.Service }
 func New(service *usecase.Service) *Handler { return &Handler{service: service} }
 
 type Request struct {
-	Question               string  `json:"question" binding:"required"`
-	ProjectVersionID       string  `json:"project_version_id"`
-	ChangeRequestID        string  `json:"change_request_id"`
-	PageSize               int     `json:"page_size"`
-	SimilarityThreshold    float64 `json:"similarity_threshold"`
-	VectorSimilarityWeight float64 `json:"vector_similarity_weight"`
-	Keyword                bool    `json:"keyword"`
+	Query                  string       `json:"query" binding:"required"`
+	Scope                  ScopeRequest `json:"scope" binding:"required"`
+	PageSize               int          `json:"page_size"`
+	SimilarityThreshold    float64      `json:"similarity_threshold"`
+	VectorSimilarityWeight float64      `json:"vector_similarity_weight"`
+	Keyword                bool         `json:"keyword"`
+}
+
+type ScopeRequest struct {
+	Mode             string   `json:"mode" binding:"required"`
+	VersionIDs       []string `json:"version_ids"`
+	ChangeRequestIDs []string `json:"change_request_ids"`
 }
 
 // Retrieve godoc
@@ -34,12 +37,12 @@ type Request struct {
 // @Produce json
 // @Param id path string true "Project ID" format(uuid)
 // @Param body body Request true "Câu hỏi và scope"
-// @Success 200 {object} response.Envelope{data=usecase.Result}
+// @Success 200 {object} response.Envelope
 // @Failure 400 {object} response.Envelope
 // @Failure 401 {object} response.Envelope
 // @Failure 403 {object} response.Envelope
 // @Failure 504 {object} response.Envelope
-// @Router /internal/api/v1/projects/{id}/retrieval [post]
+// @Router /internal/api/v1/projects/{id}/search [post]
 func (h *Handler) Retrieve(c *gin.Context) {
 	projectID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -51,13 +54,13 @@ func (h *Handler) Retrieve(c *gin.Context) {
 		_ = c.Error(apperr.BadRequest("Dữ liệu retrieval không hợp lệ"))
 		return
 	}
-	scope, err := parseScope(request.ProjectVersionID, request.ChangeRequestID)
+	scope, err := ParseScope(request.Scope)
 	if err != nil {
 		_ = c.Error(apperr.BadRequest(err.Error()))
 		return
 	}
 	result, err := h.service.Retrieve(c.Request.Context(), usecase.Input{
-		ProjectID: projectID, Scope: scope, Question: request.Question, PageSize: request.PageSize,
+		ProjectID: projectID, Scope: scope, Query: request.Query, PageSize: request.PageSize,
 		SimilarityThreshold:    request.SimilarityThreshold,
 		VectorSimilarityWeight: request.VectorSimilarityWeight, Keyword: request.Keyword,
 	})
@@ -68,24 +71,24 @@ func (h *Handler) Retrieve(c *gin.Context) {
 	response.OK(c, result)
 }
 
-func parseScope(versionID, changeID string) (domain.Scope, error) {
-	var scope domain.Scope
-	if versionID != "" {
-		id, err := uuid.Parse(versionID)
+func ParseScope(input ScopeRequest) (domain.Scope, error) {
+	scope := domain.Scope{Mode: input.Mode}
+	for _, raw := range input.VersionIDs {
+		id, err := uuid.Parse(raw)
 		if err != nil {
-			return scope, errors.New("Project version ID không hợp lệ")
+			return scope, apperr.BadRequest("Project version ID không hợp lệ")
 		}
-		scope.VersionID = &id
+		scope.VersionIDs = append(scope.VersionIDs, id)
 	}
-	if changeID != "" {
-		id, err := uuid.Parse(changeID)
+	for _, raw := range input.ChangeRequestIDs {
+		id, err := uuid.Parse(raw)
 		if err != nil {
-			return scope, errors.New("Change request ID không hợp lệ")
+			return scope, apperr.BadRequest("Change request ID không hợp lệ")
 		}
-		scope.ChangeRequestID = &id
+		scope.ChangeRequestIDs = append(scope.ChangeRequestIDs, id)
 	}
 	if !scope.Valid() {
-		return scope, errors.New("Phải truyền đúng một project_version_id hoặc change_request_id")
+		return scope, apperr.BadRequest("Scope chỉ hỗ trợ versions, change_requests hoặc all với danh sách ID phù hợp")
 	}
 	return scope, nil
 }

@@ -105,8 +105,19 @@ func (*fakeRAG) FindDocumentByName(context.Context, string, string) (*port.RAGDo
 func (*fakeRAG) StartParsing(context.Context, string, []string) error    { return nil }
 func (*fakeRAG) StopParsing(context.Context, string, []string) error     { return nil }
 func (*fakeRAG) DeleteDocuments(context.Context, string, []string) error { return nil }
+func (*fakeRAG) UpdateDocumentMetadata(context.Context, string, []string, map[string]string) error {
+	return nil
+}
 func (*fakeRAG) Retrieve(context.Context, port.RAGRetrievalRequest) (port.RAGRetrievalResult, error) {
 	return port.RAGRetrievalResult{}, nil
+}
+func (*fakeRAG) CreateChat(context.Context, string, []string) (port.RAGChat, error) {
+	return port.RAGChat{}, nil
+}
+func (*fakeRAG) FindChatByName(context.Context, string) (*port.RAGChat, error) { return nil, nil }
+func (*fakeRAG) UpdateChatDatasets(context.Context, string, []string) error    { return nil }
+func (*fakeRAG) CompleteChat(context.Context, port.RAGChatCompletionRequest) (port.RAGChatCompletionResult, error) {
+	return port.RAGChatCompletionResult{}, nil
 }
 
 func newIntegratedService(projectRepo *fakeProjectRepo, memberRepo *fakeMemberRepo, versions *fakeVersionRepo, rag port.RAGClient) Service {

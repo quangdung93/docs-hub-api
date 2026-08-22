@@ -332,6 +332,193 @@ const docTemplate = `{
                 }
             }
         },
+        "/internal/api/v1/projects/{id}/conversations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "conversations"
+                ],
+                "summary": "Liệt kê conversation của actor",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Trang",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Số bản ghi/trang",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "conversations"
+                ],
+                "summary": "Tạo conversation trong project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tiêu đề và scope tùy chọn",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.CreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/conversations/{conversation_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "conversations"
+                ],
+                "summary": "Xem conversation, messages và citations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Conversation ID",
+                        "name": "conversation_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/conversations/{conversation_id}/messages": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "RAGFlow Chat sinh answer và citations; nếu không truyền scope, truy vấn tất cả version và change request của project.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "conversations"
+                ],
+                "summary": "Hỏi đáp trên conversation với citation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Conversation ID",
+                        "name": "conversation_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Câu hỏi và scope tùy chọn",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.AskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/internal/api/v1/projects/{id}/documents": {
             "get": {
                 "security": [
@@ -1518,7 +1705,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/internal/api/v1/projects/{id}/retrieval": {
+        "/internal/api/v1/projects/{id}/search": {
             "post": {
                 "security": [
                     {
@@ -1558,19 +1745,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/response.Envelope"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/usecase.Result"
-                                        }
-                                    }
-                                }
-                            ]
+                            "$ref": "#/definitions/response.Envelope"
                         }
                     },
                     "400": {
@@ -2254,6 +2429,20 @@ const docTemplate = `{
                 }
             }
         },
+        "http.AskRequest": {
+            "type": "object",
+            "required": [
+                "question"
+            ],
+            "properties": {
+                "question": {
+                    "type": "string"
+                },
+                "scope": {
+                    "$ref": "#/definitions/internal_module_chat_delivery_http.ScopeRequest"
+                }
+            }
+        },
         "http.ChangeMemberRoleRequest": {
             "type": "object",
             "required": [
@@ -2291,6 +2480,17 @@ const docTemplate = `{
                 },
                 "settings": {
                     "$ref": "#/definitions/http.ProjectSettingsRequest"
+                }
+            }
+        },
+        "http.CreateRequest": {
+            "type": "object",
+            "properties": {
+                "scope": {
+                    "$ref": "#/definitions/internal_module_chat_delivery_http.ScopeRequest"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -2506,23 +2706,21 @@ const docTemplate = `{
         "http.Request": {
             "type": "object",
             "required": [
-                "question"
+                "query",
+                "scope"
             ],
             "properties": {
-                "change_request_id": {
-                    "type": "string"
-                },
                 "keyword": {
                     "type": "boolean"
                 },
                 "page_size": {
                     "type": "integer"
                 },
-                "project_version_id": {
+                "query": {
                     "type": "string"
                 },
-                "question": {
-                    "type": "string"
+                "scope": {
+                    "$ref": "#/definitions/internal_module_retrieval_delivery_http.ScopeRequest"
                 },
                 "similarity_threshold": {
                     "type": "number"
@@ -2644,6 +2842,29 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_module_chat_delivery_http.ScopeRequest": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "change_request_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "version_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "internal_module_document_domain.Scope": {
             "type": "object",
             "properties": {
@@ -2652,6 +2873,29 @@ const docTemplate = `{
                 },
                 "project_version_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_module_retrieval_delivery_http.ScopeRequest": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "change_request_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "version_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -2726,35 +2970,6 @@ const docTemplate = `{
                 }
             }
         },
-        "usecase.Citation": {
-            "type": "object",
-            "properties": {
-                "chunk_id": {
-                    "type": "string"
-                },
-                "document_id": {
-                    "type": "string"
-                },
-                "excerpt": {
-                    "type": "string"
-                },
-                "revision_id": {
-                    "type": "string"
-                },
-                "score": {
-                    "type": "number"
-                },
-                "term_score": {
-                    "type": "number"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "vector_score": {
-                    "type": "number"
-                }
-            }
-        },
         "usecase.PresignResult": {
             "type": "object",
             "properties": {
@@ -2769,23 +2984,6 @@ const docTemplate = `{
                 },
                 "upload_url": {
                     "type": "string"
-                }
-            }
-        },
-        "usecase.Result": {
-            "type": "object",
-            "properties": {
-                "citations": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/usecase.Citation"
-                    }
-                },
-                "question": {
-                    "type": "string"
-                },
-                "total": {
-                    "type": "integer"
                 }
             }
         }

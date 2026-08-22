@@ -41,9 +41,10 @@ type FilesystemConfig struct {
 	Root string `mapstructure:"root"`
 }
 
-// LocalAIConfig cấu hình OpenAI-compatible embedding endpoint.
+// LocalAIConfig cấu hình các endpoint OpenAI-compatible của LocalAI.
 type LocalAIConfig struct {
 	BaseURL            string        `mapstructure:"base_url"`
+	ChatModel          string        `mapstructure:"chat_model"`
 	EmbeddingModel     string        `mapstructure:"embedding_model"`
 	EmbeddingDimension int           `mapstructure:"embedding_dimension"`
 	Timeout            time.Duration `mapstructure:"timeout"`

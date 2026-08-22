@@ -17,13 +17,18 @@ type Deps struct {
 	BypassACL bool
 }
 
-type Module struct{ handler *retrievalhttp.Handler }
+type Module struct {
+	handler *retrievalhttp.Handler
+	service *usecase.Service
+}
 
 func New(deps Deps) *Module {
 	repo := repository.New(deps.DB)
 	service := usecase.New(repo, deps.RAG, deps.BypassACL)
-	return &Module{handler: retrievalhttp.New(service)}
+	return &Module{handler: retrievalhttp.New(service), service: service}
 }
+
+func (m *Module) Service() *usecase.Service { return m.service }
 
 func (*Module) Name() string { return "retrieval" }
 func (m *Module) RegisterRoutes(internal, _ *gin.RouterGroup) {

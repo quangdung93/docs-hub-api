@@ -33,7 +33,7 @@ func New(repo domain.Repository, rag Retriever, bypassACL bool) *Service {
 type Input struct {
 	ProjectID              uuid.UUID
 	Scope                  domain.Scope
-	Question               string
+	Query                  string
 	PageSize               int
 	SimilarityThreshold    float64
 	VectorSimilarityWeight float64
@@ -41,52 +41,49 @@ type Input struct {
 }
 
 type Citation struct {
-	ChunkID     string    `json:"chunk_id"`
-	DocumentID  uuid.UUID `json:"document_id"`
-	RevisionID  uuid.UUID `json:"revision_id"`
-	Title       string    `json:"title"`
-	Excerpt     string    `json:"excerpt"`
-	Score       float64   `json:"score"`
-	VectorScore float64   `json:"vector_score"`
-	TermScore   float64   `json:"term_score"`
+	Key                string    `json:"key"`
+	ChunkID            string    `json:"chunk_id"`
+	DocumentID         uuid.UUID `json:"document_id"`
+	DocumentRevisionID uuid.UUID `json:"document_revision_id"`
+	DocumentTitle      string    `json:"-"`
+	DocumentName       string    `json:"document_name"`
+	ScopeType          string    `json:"scope_type"`
+	ScopeLabel         string    `json:"scope_label"`
+	LineStart          *int      `json:"line_start"`
+	LineEnd            *int      `json:"line_end"`
+	PageStart          *int      `json:"page_start"`
+	PageEnd            *int      `json:"page_end"`
+	Excerpt            string    `json:"excerpt"`
+	SourceURL          string    `json:"source_url"`
+	Score              float64   `json:"score"`
+	VectorScore        float64   `json:"vector_score"`
+	TermScore          float64   `json:"term_score"`
 }
 
 type Result struct {
-	Question  string     `json:"question"`
-	Citations []Citation `json:"citations"`
-	Total     int        `json:"total"`
+	Query         string                 `json:"query"`
+	ResolvedScope []domain.ResolvedScope `json:"resolved_scope"`
+	Citations     []Citation             `json:"citations"`
+	Total         int                    `json:"total"`
 }
 
 func (s *Service) Retrieve(ctx context.Context, in Input) (*Result, error) {
-	in.Question = strings.TrimSpace(in.Question)
-	if in.Question == "" || len(in.Question) > maxQuestionLength {
+	in.Query = strings.TrimSpace(in.Query)
+	if in.Query == "" || len(in.Query) > maxQuestionLength {
 		return nil, apperr.BadRequest("Câu hỏi rỗng hoặc vượt quá 8000 ký tự")
 	}
 	if !in.Scope.Valid() {
-		return nil, apperr.BadRequest("Phải truyền đúng một project_version_id hoặc change_request_id")
+		return nil, apperr.BadRequest("Scope chỉ hỗ trợ versions, change_requests hoặc all với danh sách ID phù hợp")
 	}
-	actor, ok := contextx.ActorFrom(ctx)
-	if !ok {
-		return nil, apperr.Unauthorized("Chưa xác thực")
+	if err := s.authorize(ctx, in.ProjectID); err != nil {
+		return nil, err
 	}
-	actorID, err := uuid.Parse(actor.UserID)
-	if err != nil {
-		return nil, apperr.Unauthorized("Định danh người dùng không hợp lệ")
-	}
-	if !s.bypassACL {
-		role, roleErr := s.repo.MemberRole(ctx, in.ProjectID, actorID)
-		if roleErr != nil {
-			return nil, apperr.Database("Không thể kiểm tra quyền project").WithCause(roleErr)
-		}
-		if role == "" {
-			return nil, apperr.Forbidden("Không có quyền truy cập project")
-		}
-	}
-	exists, err := s.repo.ScopeExists(ctx, in.ProjectID, in.Scope)
+	resolved, err := s.repo.ResolveScope(ctx, in.ProjectID, in.Scope)
 	if err != nil {
 		return nil, apperr.Database("Không thể kiểm tra scope").WithCause(err)
 	}
-	if !exists {
+	expected := len(in.Scope.VersionIDs) + len(in.Scope.ChangeRequestIDs)
+	if in.Scope.Mode != domain.ScopeAll && len(resolved) != expected {
 		return nil, apperr.NotFound("NOT_FOUND", "Không tìm thấy version hoặc change request")
 	}
 	datasetID, err := s.repo.DatasetID(ctx, in.ProjectID)
@@ -101,31 +98,59 @@ func (s *Service) Retrieve(ctx context.Context, in Input) (*Result, error) {
 		return nil, apperr.Database("Không thể đọc revision mapping").WithCause(err)
 	}
 	if len(refs) == 0 {
-		return nil, apperr.BadRequest("Scope chưa có revision sẵn sàng trên RAGFlow")
+		return &Result{Query: in.Query, ResolvedScope: resolved, Citations: []Citation{}}, nil
 	}
+	if in.Scope.Mode == domain.ScopeAll {
+		resolved = scopesFrom(refs)
+	}
+	citations := make([]Citation, 0)
+	for _, group := range groupByScope(resolved, refs) {
+		groupCitations, retrieveErr := s.retrieveGroup(ctx, in, datasetID, group)
+		if retrieveErr != nil {
+			return nil, retrieveErr
+		}
+		citations = append(citations, groupCitations...)
+	}
+	for i := range citations {
+		citations[i].Key = fmt.Sprintf("S%d", i+1)
+	}
+	return &Result{Query: in.Query, ResolvedScope: resolved, Citations: citations, Total: len(citations)}, nil
+}
+
+func (s *Service) authorize(ctx context.Context, projectID uuid.UUID) error {
+	actor, ok := contextx.ActorFrom(ctx)
+	if !ok {
+		return apperr.Unauthorized("Chưa xác thực")
+	}
+	actorID, err := uuid.Parse(actor.UserID)
+	if err != nil {
+		return apperr.Unauthorized("Định danh người dùng không hợp lệ")
+	}
+	if s.bypassACL {
+		return nil
+	}
+	role, err := s.repo.MemberRole(ctx, projectID, actorID)
+	if err != nil {
+		return apperr.Database("Không thể kiểm tra quyền project").WithCause(err)
+	}
+	if role == "" {
+		return apperr.Forbidden("Không có quyền truy cập project")
+	}
+	return nil
+}
+
+func (s *Service) retrieveGroup(
+	ctx context.Context, in Input, datasetID string, refs []domain.RevisionRef,
+) ([]Citation, error) {
 	remoteIDs := make([]string, len(refs))
 	allowed := make(map[string]domain.RevisionRef, len(refs))
 	for i, ref := range refs {
 		remoteIDs[i] = ref.RAGFlowDocumentID
 		allowed[ref.RAGFlowDocumentID] = ref
 	}
-	pageSize := in.PageSize
-	if pageSize < 1 {
-		pageSize = 10
-	}
-	if pageSize > 50 {
-		pageSize = 50
-	}
-	threshold := in.SimilarityThreshold
-	if threshold <= 0 {
-		threshold = 0.2
-	}
-	weight := in.VectorSimilarityWeight
-	if weight <= 0 || weight > 1 {
-		weight = 0.3
-	}
+	pageSize, threshold, weight := retrievalOptions(in)
 	remote, err := s.rag.Retrieve(ctx, port.RAGRetrievalRequest{
-		Question: in.Question, DatasetIDs: []string{datasetID}, DocumentIDs: remoteIDs,
+		Question: in.Query, DatasetIDs: []string{datasetID}, DocumentIDs: remoteIDs,
 		Page: 1, PageSize: pageSize, SimilarityThreshold: threshold,
 		VectorSimilarityWeight: weight, Keyword: in.Keyword,
 	})
@@ -139,10 +164,62 @@ func (s *Service) Retrieve(ctx context.Context, in Input) (*Result, error) {
 			continue
 		}
 		citations = append(citations, Citation{
-			ChunkID: chunk.ID, DocumentID: ref.DocumentID, RevisionID: ref.RevisionID,
-			Title: ref.Title, Excerpt: chunk.Content, Score: chunk.Similarity,
+			ChunkID: chunk.ID, DocumentID: ref.DocumentID, DocumentRevisionID: ref.RevisionID,
+			DocumentTitle: ref.Title, DocumentName: ref.FileName,
+			ScopeType: ref.Scope.Type, ScopeLabel: ref.Scope.Label,
+			Excerpt: chunk.Content, SourceURL: sourceURL(in.ProjectID, ref), Score: chunk.Similarity,
 			VectorScore: chunk.VectorSimilarity, TermScore: chunk.TermSimilarity,
 		})
 	}
-	return &Result{Question: in.Question, Citations: citations, Total: len(citations)}, nil
+	return citations, nil
+}
+
+func retrievalOptions(in Input) (int, float64, float64) {
+	pageSize := in.PageSize
+	if pageSize < 1 {
+		pageSize = 10
+	} else if pageSize > 50 {
+		pageSize = 50
+	}
+	threshold := in.SimilarityThreshold
+	if threshold <= 0 {
+		threshold = 0.2
+	}
+	weight := in.VectorSimilarityWeight
+	if weight <= 0 || weight > 1 {
+		weight = 0.3
+	}
+	return pageSize, threshold, weight
+}
+
+func sourceURL(projectID uuid.UUID, ref domain.RevisionRef) string {
+	return fmt.Sprintf("/internal/api/v1/projects/%s/documents/%s/revisions/%s/view",
+		projectID, ref.DocumentID, ref.RevisionID)
+}
+
+func scopesFrom(refs []domain.RevisionRef) []domain.ResolvedScope {
+	seen := make(map[uuid.UUID]struct{}, len(refs))
+	resolved := make([]domain.ResolvedScope, 0, len(refs))
+	for _, ref := range refs {
+		if _, exists := seen[ref.Scope.ID]; exists {
+			continue
+		}
+		seen[ref.Scope.ID] = struct{}{}
+		resolved = append(resolved, ref.Scope)
+	}
+	return resolved
+}
+
+func groupByScope(resolved []domain.ResolvedScope, refs []domain.RevisionRef) [][]domain.RevisionRef {
+	byID := make(map[uuid.UUID][]domain.RevisionRef, len(resolved))
+	for _, ref := range refs {
+		byID[ref.Scope.ID] = append(byID[ref.Scope.ID], ref)
+	}
+	groups := make([][]domain.RevisionRef, 0, len(resolved))
+	for _, scope := range resolved {
+		if group := byID[scope.ID]; len(group) > 0 {
+			groups = append(groups, group)
+		}
+	}
+	return groups
 }

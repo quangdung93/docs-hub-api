@@ -14,6 +14,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -227,6 +228,24 @@ func (c *Client) DeleteDocuments(ctx context.Context, datasetID string, document
 	return c.doJSON(ctx, http.MethodDelete, endpoint, map[string]any{"ids": documentIDs}, nil)
 }
 
+func (c *Client) UpdateDocumentMetadata(
+	ctx context.Context, datasetID string, documentIDs []string, metadata map[string]string,
+) error {
+	updates := make([]map[string]string, 0, len(metadata))
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		updates = append(updates, map[string]string{"key": key, "value": metadata[key]})
+	}
+	endpoint := fmt.Sprintf("/api/v1/datasets/%s/metadata/update", url.PathEscape(datasetID))
+	return c.doJSON(ctx, http.MethodPost, endpoint, map[string]any{
+		"selector": map[string]any{"document_ids": documentIDs}, "updates": updates,
+	}, nil)
+}
+
 func (c *Client) Retrieve(ctx context.Context, in port.RAGRetrievalRequest) (port.RAGRetrievalResult, error) {
 	body := map[string]any{
 		"question": in.Question, "dataset_ids": in.DatasetIDs, "document_ids": in.DocumentIDs,
@@ -260,6 +279,252 @@ func (c *Client) Retrieve(ctx context.Context, in port.RAGRetrievalRequest) (por
 		}
 	}
 	return out, nil
+}
+
+func (c *Client) CreateChat(ctx context.Context, name string, datasetIDs []string) (port.RAGChat, error) {
+	var remote struct {
+		ID         string   `json:"id"`
+		Name       string   `json:"name"`
+		DatasetIDs []string `json:"dataset_ids"`
+	}
+	body := map[string]any{"name": name, "dataset_ids": datasetIDs}
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/chats", body, &remote); err != nil {
+		return port.RAGChat{}, err
+	}
+	if remote.ID == "" {
+		return port.RAGChat{}, errors.New("RAGFlow create chat thiếu id")
+	}
+	return port.RAGChat{ID: remote.ID, Name: remote.Name, DatasetIDs: remote.DatasetIDs}, nil
+}
+
+func (c *Client) FindChatByName(ctx context.Context, name string) (*port.RAGChat, error) {
+	var env envelope
+	endpoint := "/api/v1/chats?page=1&page_size=2&name=" + url.QueryEscape(name)
+	if err := c.doEnvelope(ctx, http.MethodGet, endpoint, nil, &env); err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		ID         string   `json:"id"`
+		Name       string   `json:"name"`
+		DatasetIDs []string `json:"dataset_ids"`
+	}
+	if err := decodeCollection(env.Data, []string{"chats"}, &rows); err != nil {
+		return nil, fmt.Errorf("decode danh sách chat RAGFlow: %w", err)
+	}
+	for _, row := range rows {
+		if row.Name == name {
+			return &port.RAGChat{ID: row.ID, Name: row.Name, DatasetIDs: row.DatasetIDs}, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *Client) UpdateChatDatasets(ctx context.Context, chatID string, datasetIDs []string) error {
+	endpoint := fmt.Sprintf("/api/v1/chats/%s", url.PathEscape(chatID))
+	return c.doJSON(ctx, http.MethodPatch, endpoint, map[string]any{"dataset_ids": datasetIDs}, nil)
+}
+
+func (c *Client) CompleteChat(
+	ctx context.Context, in port.RAGChatCompletionRequest,
+) (port.RAGChatCompletionResult, error) {
+	messages := make([]map[string]string, len(in.Messages))
+	for i, message := range in.Messages {
+		messages[i] = map[string]string{"role": message.Role, "content": message.Content}
+	}
+	extra := map[string]any{"reference": true}
+	if len(in.MetadataConditions) > 0 {
+		conditions := make([]map[string]string, len(in.MetadataConditions))
+		for i, condition := range in.MetadataConditions {
+			conditions[i] = map[string]string{
+				"name": condition.Name, "comparison_operator": condition.Operator, "value": condition.Value,
+			}
+		}
+		logic := in.MetadataLogic
+		if logic == "" {
+			logic = "and"
+		}
+		extra["metadata_condition"] = map[string]any{"logic": logic, "conditions": conditions}
+	}
+	body := map[string]any{
+		"model": "model", "messages": messages, "stream": false, "extra_body": extra,
+	}
+	endpoint := fmt.Sprintf("/api/v1/openai/%s/chat/completions", url.PathEscape(in.ChatID))
+	result, err := c.completeChatAt(ctx, endpoint, body)
+	if err == nil {
+		return result, nil
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.HTTPStatus != http.StatusNotFound {
+		return port.RAGChatCompletionResult{}, err
+	}
+	legacy := fmt.Sprintf("/api/v1/chats_openai/%s/chat/completions", url.PathEscape(in.ChatID))
+	return c.completeChatAt(ctx, legacy, body)
+}
+
+func (c *Client) completeChatAt(
+	ctx context.Context, endpoint string, body any,
+) (port.RAGChatCompletionResult, error) {
+	rawBody, err := json.Marshal(body)
+	if err != nil {
+		return port.RAGChatCompletionResult{}, fmt.Errorf("encode RAGFlow chat request: %w", err)
+	}
+	req, err := c.request(ctx, http.MethodPost, endpoint, bytes.NewReader(rawBody))
+	if err != nil {
+		return port.RAGChatCompletionResult{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return port.RAGChatCompletionResult{}, fmt.Errorf("gọi RAGFlow POST %s: %w", endpoint, err)
+	}
+	defer res.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes+1))
+	if err != nil {
+		return port.RAGChatCompletionResult{}, fmt.Errorf("đọc RAGFlow chat response: %w", err)
+	}
+	if len(raw) > maxResponseBytes {
+		return port.RAGChatCompletionResult{}, errors.New("RAGFlow chat response vượt giới hạn")
+	}
+	if res.StatusCode/100 != 2 {
+		return port.RAGChatCompletionResult{}, decodeAPIError(res.StatusCode, raw)
+	}
+	var response struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Model   string `json:"model"`
+		Choices []struct {
+			Message struct {
+				Content   string          `json:"content"`
+				Reference json.RawMessage `json:"reference"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err = json.Unmarshal(raw, &response); err != nil {
+		return port.RAGChatCompletionResult{}, fmt.Errorf("decode RAGFlow chat response: %w", err)
+	}
+	if response.Code != 0 {
+		return port.RAGChatCompletionResult{}, &APIError{
+			HTTPStatus: http.StatusBadGateway, Code: response.Code,
+			Message: response.Message, Retryable: false,
+		}
+	}
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return port.RAGChatCompletionResult{}, errors.New("RAGFlow chat không trả nội dung")
+	}
+	references, err := decodeChatReferences(response.Choices[0].Message.Reference)
+	if err != nil {
+		return port.RAGChatCompletionResult{}, fmt.Errorf("decode RAGFlow chat references: %w", err)
+	}
+	return port.RAGChatCompletionResult{
+		Content: response.Choices[0].Message.Content, Model: response.Model, References: references,
+	}, nil
+}
+
+// decodeChatReferences hỗ trợ cả hai schema mà các phiên bản RAGFlow đang trả:
+// reference là mảng chunk trực tiếp, hoặc object chứa field chunks.
+func decodeChatReferences(raw json.RawMessage) ([]port.RAGChunk, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return []port.RAGChunk{}, nil
+	}
+	if trimmed[0] == '[' {
+		return decodeReferenceChunks(trimmed)
+	}
+	var reference struct {
+		Chunks json.RawMessage `json:"chunks"`
+	}
+	if err := json.Unmarshal(trimmed, &reference); err != nil {
+		return nil, err
+	}
+	return decodeReferenceChunks(reference.Chunks)
+}
+
+func decodeReferenceChunks(raw json.RawMessage) ([]port.RAGChunk, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return []port.RAGChunk{}, nil
+	}
+	type chunk struct {
+		ID, DatasetID, DocumentID, DocumentName, Content string
+		Similarity, VectorSimilarity, TermSimilarity     float64
+	}
+	decode := func(value json.RawMessage) (chunk, error) {
+		var remote struct {
+			ID               string  `json:"id"`
+			DatasetID        string  `json:"dataset_id"`
+			DocumentID       string  `json:"document_id"`
+			DocumentName     string  `json:"document_name"`
+			Content          string  `json:"content"`
+			ContentWeighted  string  `json:"content_with_weight"`
+			Similarity       float64 `json:"similarity"`
+			VectorSimilarity float64 `json:"vector_similarity"`
+			TermSimilarity   float64 `json:"term_similarity"`
+		}
+		if err := json.Unmarshal(value, &remote); err != nil {
+			return chunk{}, err
+		}
+		content := remote.Content
+		if content == "" {
+			content = remote.ContentWeighted
+		}
+		return chunk{
+			ID: remote.ID, DatasetID: remote.DatasetID, DocumentID: remote.DocumentID,
+			DocumentName: remote.DocumentName, Content: content, Similarity: remote.Similarity,
+			VectorSimilarity: remote.VectorSimilarity, TermSimilarity: remote.TermSimilarity,
+		}, nil
+	}
+	values := make([]json.RawMessage, 0)
+	trimmed := bytes.TrimSpace(raw)
+	if trimmed[0] == '[' {
+		if err := json.Unmarshal(trimmed, &values); err != nil {
+			return nil, err
+		}
+	} else {
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &object); err != nil {
+			return nil, err
+		}
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			left, leftErr := strconv.Atoi(keys[i])
+			right, rightErr := strconv.Atoi(keys[j])
+			if leftErr == nil && rightErr == nil {
+				return left < right
+			}
+			return keys[i] < keys[j]
+		})
+		for _, key := range keys {
+			values = append(values, object[key])
+		}
+	}
+	out := make([]port.RAGChunk, 0, len(values))
+	for _, value := range values {
+		item, err := decode(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, port.RAGChunk{
+			ID: item.ID, DatasetID: item.DatasetID, DocumentID: item.DocumentID,
+			DocumentName: item.DocumentName, Content: item.Content, Similarity: item.Similarity,
+			VectorSimilarity: item.VectorSimilarity, TermSimilarity: item.TermSimilarity,
+		})
+	}
+	return out, nil
+}
+
+func decodeAPIError(status int, raw []byte) error {
+	var env envelope
+	_ = json.Unmarshal(raw, &env)
+	message := strings.TrimSpace(env.Message)
+	if message == "" {
+		message = strings.TrimSpace(string(raw))
+	}
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	return &APIError{HTTPStatus: status, Code: env.Code, Message: message, Retryable: retryableStatus(status)}
 }
 
 func (c *Client) doJSON(ctx context.Context, method, endpoint string, body, out any) error {

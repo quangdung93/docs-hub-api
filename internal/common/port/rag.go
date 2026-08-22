@@ -63,6 +63,36 @@ type RAGRetrievalResult struct {
 	Total  int
 }
 
+type RAGChat struct {
+	ID         string
+	Name       string
+	DatasetIDs []string
+}
+
+type RAGChatMessage struct {
+	Role    string
+	Content string
+}
+
+type RAGMetadataCondition struct {
+	Name     string
+	Operator string
+	Value    string
+}
+
+type RAGChatCompletionRequest struct {
+	ChatID             string
+	Messages           []RAGChatMessage
+	MetadataLogic      string
+	MetadataConditions []RAGMetadataCondition
+}
+
+type RAGChatCompletionResult struct {
+	Content    string
+	Model      string
+	References []RAGChunk
+}
+
 // RAGClient là capability tối thiểu dùng chung cho ingestion và retrieval.
 type RAGClient interface {
 	Health(ctx context.Context) error
@@ -76,5 +106,10 @@ type RAGClient interface {
 	StartParsing(ctx context.Context, datasetID string, documentIDs []string) error
 	StopParsing(ctx context.Context, datasetID string, documentIDs []string) error
 	DeleteDocuments(ctx context.Context, datasetID string, documentIDs []string) error
+	UpdateDocumentMetadata(ctx context.Context, datasetID string, documentIDs []string, metadata map[string]string) error
 	Retrieve(ctx context.Context, input RAGRetrievalRequest) (RAGRetrievalResult, error)
+	CreateChat(ctx context.Context, name string, datasetIDs []string) (RAGChat, error)
+	FindChatByName(ctx context.Context, name string) (*RAGChat, error)
+	UpdateChatDatasets(ctx context.Context, chatID string, datasetIDs []string) error
+	CompleteChat(ctx context.Context, input RAGChatCompletionRequest) (RAGChatCompletionResult, error)
 }
