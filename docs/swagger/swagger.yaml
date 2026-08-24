@@ -1295,7 +1295,7 @@ paths:
       consumes:
       - multipart/form-data
       description: Upload multipart trực tiếp. Phải truyền đúng một project_version_id
-        hoặc change_request_id.
+        hoặc change_request_id. Giới hạn file upload tối đa là <= 50 MB (50 MiB).
       parameters:
       - description: Project ID
         format: uuid
@@ -1303,7 +1303,8 @@ paths:
         name: id
         required: true
         type: string
-      - description: File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX
+      - description: File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX (tối đa 50
+          MB)
         in: formData
         name: file
         required: true
@@ -1332,7 +1333,7 @@ paths:
         in: formData
         name: change_request_id
         type: string
-      - description: Kích thước khai báo để đối chiếu
+      - description: Kích thước khai báo để đối chiếu (<= 50 MB)
         in: formData
         name: size_bytes
         type: integer

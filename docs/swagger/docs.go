@@ -696,7 +696,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload multipart trực tiếp. Phải truyền đúng một project_version_id hoặc change_request_id.",
+                "description": "Upload multipart trực tiếp. Phải truyền đúng một project_version_id hoặc change_request_id. Giới hạn file upload tối đa là \u003c= 50 MB (50 MiB).",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -718,7 +718,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "file",
-                        "description": "File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX",
+                        "description": "File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX (tối đa 50 MB)",
                         "name": "file",
                         "in": "formData",
                         "required": true
@@ -759,7 +759,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Kích thước khai báo để đối chiếu",
+                        "description": "Kích thước khai báo để đối chiếu (\u003c= 50 MB)",
                         "name": "size_bytes",
                         "in": "formData"
                     },
