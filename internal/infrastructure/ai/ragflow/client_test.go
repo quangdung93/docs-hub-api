@@ -45,11 +45,29 @@ func TestClient_DatasetDocumentAndRetrieval(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/datasets/ds-1/documents":
 			require.Equal(t, "doc-1", r.URL.Query().Get("id"))
 			_, _ = io.WriteString(w, `{"code":0,"data":{"docs":[{"id":"doc-1","name":"revision.txt","run":3,"progress":1}]}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/datasets/ds-1/metadata/update":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			selector := body["selector"].(map[string]any)
+			require.Equal(t, []any{"doc-1"}, selector["document_ids"])
+			_, _ = io.WriteString(w, `{"code":0,"data":{"updated":1}}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/retrieval":
 			var body map[string]any
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			require.Equal(t, []any{"doc-1"}, body["document_ids"])
 			_, _ = io.WriteString(w, `{"code":0,"data":{"total":1,"chunks":[{"id":"chunk-1","dataset_id":"ds-1","document_id":"doc-1","content":"answer","similarity":0.9}]}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/chats":
+			require.Equal(t, "chat_project_1", r.URL.Query().Get("name"))
+			_, _ = io.WriteString(w, `{"code":0,"data":{"chats":[]}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/chats":
+			_, _ = io.WriteString(w, `{"code":0,"data":{"id":"chat-1","name":"chat_project_1","dataset_ids":["ds-1"]}}`)
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/chats/chat-1":
+			_, _ = io.WriteString(w, `{"code":0,"data":{"id":"chat-1"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/openai/chat-1/chat/completions":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, false, body["stream"])
+			_, _ = io.WriteString(w, `{"model":"qwen@ragflow","choices":[{"message":{"content":"final answer","reference":{"chunks":{"2":{"id":"chunk-2","dataset_id":"ds-1","document_id":"doc-1","document_name":"revision.txt","content":"evidence","similarity":0.8}}}}}]}`)
 		default:
 			http.Error(w, "unexpected", http.StatusNotFound)
 		}
@@ -73,6 +91,9 @@ func TestClient_DatasetDocumentAndRetrieval(t *testing.T) {
 	document, err = client.GetDocument(context.Background(), "ds-1", "doc-1")
 	require.NoError(t, err)
 	require.True(t, document.Ready())
+	require.NoError(t, client.UpdateDocumentMetadata(context.Background(), "ds-1", []string{"doc-1"}, map[string]string{
+		"docs_hub_scope_id": "version-1",
+	}))
 	result, err := client.Retrieve(context.Background(), port.RAGRetrievalRequest{
 		Question: "question", DatasetIDs: []string{"ds-1"}, DocumentIDs: []string{"doc-1"},
 		Page: 1, PageSize: 10, SimilarityThreshold: 0.2, VectorSimilarityWeight: 0.3,
@@ -80,6 +101,22 @@ func TestClient_DatasetDocumentAndRetrieval(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Chunks, 1)
 	require.Equal(t, "answer", result.Chunks[0].Content)
+	chat, err := client.FindChatByName(context.Background(), "chat_project_1")
+	require.NoError(t, err)
+	require.Nil(t, chat)
+	createdChat, err := client.CreateChat(context.Background(), "chat_project_1", []string{"ds-1"})
+	require.NoError(t, err)
+	require.Equal(t, "chat-1", createdChat.ID)
+	require.NoError(t, client.UpdateChatDatasets(context.Background(), "chat-1", []string{"ds-1"}))
+	completion, err := client.CompleteChat(context.Background(), port.RAGChatCompletionRequest{
+		ChatID: "chat-1", Messages: []port.RAGChatMessage{{Role: "user", Content: "question"}},
+		MetadataConditions: []port.RAGMetadataCondition{{Name: "docs_hub_scope_id", Operator: "is", Value: "version-1"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "final answer", completion.Content)
+	require.Equal(t, "qwen@ragflow", completion.Model)
+	require.Len(t, completion.References, 1)
+	require.Equal(t, "chunk-2", completion.References[0].ID)
 	require.NoError(t, client.DeleteDatasets(context.Background(), []string{"ds-1"}))
 }
 
@@ -96,6 +133,26 @@ func TestClient_MapsEnvelopeError(t *testing.T) {
 	require.ErrorAs(t, err, &apiErr)
 	require.Equal(t, http.StatusUnauthorized, apiErr.HTTPStatus)
 	require.False(t, apiErr.Retryable)
+}
+
+func TestClient_CompleteChat_ReferenceLaMang(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/openai/chat-1/chat/completions", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"model":"gpt-4.1-mini","choices":[{"message":{"content":"final answer","reference":[{"id":"chunk-1","dataset_id":"ds-1","document_id":"doc-1","document_name":"revision.txt","content":"evidence","similarity":0.9}]}}]}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key", time.Second, time.Second)
+	completion, err := client.CompleteChat(context.Background(), port.RAGChatCompletionRequest{
+		ChatID: "chat-1", Messages: []port.RAGChatMessage{{Role: "user", Content: "question"}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "final answer", completion.Content)
+	require.Len(t, completion.References, 1)
+	require.Equal(t, "chunk-1", completion.References[0].ID)
 }
 
 func TestClient_FindDocumentByName_DatasetRongKhongBiCode102(t *testing.T) {

@@ -24,12 +24,16 @@ import (
 type Service interface {
 	Create(ctx context.Context, in CreateProjectInput) (*domain.Project, error)
 	List(ctx context.Context, userID uuid.UUID, page pagination.Query) ([]domain.Project, pagination.Meta, error)
+	// GetByID lấy chi tiết một dự án. Không có thì trả ProjectNotFound.
+	GetByID(ctx context.Context, projectID uuid.UUID) (*domain.Project, error)
+	// Stats đếm tài liệu/thành viên/chunk cho nhiều dự án trong một truy vấn.
+	Stats(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error)
 	Update(ctx context.Context, in UpdateProjectInput) (*domain.Project, error)
 	Delete(ctx context.Context, in DeleteProjectInput) error
 	CreateVersion(ctx context.Context, in CreateVersionInput) (*domain.ProjectVersion, error)
 	ListVersions(ctx context.Context, projectID uuid.UUID, page pagination.Query) ([]domain.ProjectVersion, pagination.Meta, error)
 
-	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error)
+	ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error)
 	InviteMember(ctx context.Context, in InviteMemberInput) (*domain.ProjectMember, error)
 	ChangeMemberRole(ctx context.Context, in ChangeMemberRoleInput) (*domain.ProjectMember, error)
 	RemoveMember(ctx context.Context, projectID, userID uuid.UUID) error
@@ -355,8 +359,31 @@ func (s *service) Delete(ctx context.Context, in DeleteProjectInput) error {
 	return nil
 }
 
+// GetByID lấy chi tiết một dự án.
+func (s *service) GetByID(ctx context.Context, projectID uuid.UUID) (*domain.Project, error) {
+	p, err := s.projectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		if isRepoErr(err, domain.ErrNotFound) {
+			return nil, domain.ErrProjectNotFound()
+		}
+		return nil, apperr.Database("Lỗi truy vấn dự án").WithCause(err)
+	}
+	return p, nil
+}
+
+// Stats trả về các con số tổng hợp của dự án.
+func (s *service) Stats(
+	ctx context.Context, ids []uuid.UUID,
+) (map[uuid.UUID]domain.ProjectStats, error) {
+	stats, err := s.projectRepo.Stats(ctx, ids)
+	if err != nil {
+		return nil, apperr.Database("Lỗi đếm dữ liệu dự án").WithCause(err)
+	}
+	return stats, nil
+}
+
 // ListMembers liệt kê thành viên (mọi trạng thái) của dự án.
-func (s *service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.ProjectMember, error) {
+func (s *service) ListMembers(ctx context.Context, projectID uuid.UUID) ([]domain.MemberWithUser, error) {
 	members, err := s.memberRepo.ListByProject(ctx, projectID)
 	if err != nil {
 		return nil, apperr.Database("Lỗi truy vấn danh sách thành viên").WithCause(err)

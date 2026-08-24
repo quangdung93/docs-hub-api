@@ -144,9 +144,11 @@ func (i *Infra) initSecurity(cfg *config.Config) error {
 	i.Hasher = hashing.NewHasher(0) // bcrypt default cost
 
 	mgr, err := jwt.NewManager(jwt.Config{
-		Secret:    cfg.JWT.Secret,
-		Issuer:    cfg.JWT.Issuer,
-		AccessTTL: cfg.JWT.AccessTTL,
+		Algorithm:     cfg.JWT.Algorithm,
+		Secret:        cfg.JWT.Secret,
+		PrivateKeyPEM: cfg.JWT.PrivateKey,
+		Issuer:        cfg.JWT.Issuer,
+		AccessTTL:     cfg.JWT.AccessTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("khởi tạo JWT manager: %w", err)

@@ -25,6 +25,9 @@ func (f *fakeProjectRepo) Create(_ context.Context, p *domain.Project) error {
 	f.created = p
 	return f.createErr
 }
+func (*fakeProjectRepo) Stats(context.Context, []uuid.UUID) (map[uuid.UUID]domain.ProjectStats, error) {
+	return nil, nil
+}
 func (*fakeProjectRepo) Update(context.Context, *domain.Project) error { return nil }
 func (*fakeProjectRepo) FindByID(context.Context, uuid.UUID) (*domain.Project, error) {
 	return nil, domain.ErrNotFound
@@ -46,7 +49,7 @@ func (f *fakeMemberRepo) FindByProjectAndUser(context.Context, uuid.UUID, uuid.U
 	}
 	return f.member, nil
 }
-func (*fakeMemberRepo) ListByProject(context.Context, uuid.UUID) ([]domain.ProjectMember, error) {
+func (*fakeMemberRepo) ListByProject(context.Context, uuid.UUID) ([]domain.MemberWithUser, error) {
 	return nil, nil
 }
 func (*fakeMemberRepo) UpdateRole(context.Context, uuid.UUID, uuid.UUID, domain.Role) error {
@@ -105,8 +108,19 @@ func (*fakeRAG) FindDocumentByName(context.Context, string, string) (*port.RAGDo
 func (*fakeRAG) StartParsing(context.Context, string, []string) error    { return nil }
 func (*fakeRAG) StopParsing(context.Context, string, []string) error     { return nil }
 func (*fakeRAG) DeleteDocuments(context.Context, string, []string) error { return nil }
+func (*fakeRAG) UpdateDocumentMetadata(context.Context, string, []string, map[string]string) error {
+	return nil
+}
 func (*fakeRAG) Retrieve(context.Context, port.RAGRetrievalRequest) (port.RAGRetrievalResult, error) {
 	return port.RAGRetrievalResult{}, nil
+}
+func (*fakeRAG) CreateChat(context.Context, string, []string) (port.RAGChat, error) {
+	return port.RAGChat{}, nil
+}
+func (*fakeRAG) FindChatByName(context.Context, string) (*port.RAGChat, error) { return nil, nil }
+func (*fakeRAG) UpdateChatDatasets(context.Context, string, []string) error    { return nil }
+func (*fakeRAG) CompleteChat(context.Context, port.RAGChatCompletionRequest) (port.RAGChatCompletionResult, error) {
+	return port.RAGChatCompletionResult{}, nil
 }
 
 func newIntegratedService(projectRepo *fakeProjectRepo, memberRepo *fakeMemberRepo, versions *fakeVersionRepo, rag port.RAGClient) Service {

@@ -10,7 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/quangdung93/docs-hub-api/internal/common/port"
+	"github.com/quangdung93/docs-hub-api/internal/common/tokenrevoke"
+	"github.com/quangdung93/docs-hub-api/pkg/logger"
 
 	"github.com/quangdung93/docs-hub-api/internal/module/auth/domain"
 	"github.com/quangdung93/docs-hub-api/pkg/jwt"
@@ -44,8 +49,9 @@ type AuthUseCase interface {
 	// Refresh đổi refresh token còn hiệu lực lấy cặp token mới. Refresh token cũ
 	// bị thu hồi ngay (xoay vòng) — dùng lại lần hai sẽ thất bại.
 	Refresh(ctx context.Context, refreshToken string) (*domain.User, TokenPair, error)
-	// Logout thu hồi session. refreshToken rỗng nghĩa là thu hồi MỌI session của user.
-	Logout(ctx context.Context, userID uuid.UUID, refreshToken string) error
+	// Logout thu hồi session VÀ vô hiệu access token đang dùng.
+	// refreshToken rỗng nghĩa là thu hồi MỌI session của user.
+	Logout(ctx context.Context, userID uuid.UUID, refreshToken, accessToken string) error
 	GetMe(ctx context.Context, userID string) (*domain.User, error)
 }
 
@@ -55,6 +61,9 @@ type authUseCase struct {
 	jwtManager  *jwt.Manager
 	accessTTL   time.Duration
 	refreshTTL  time.Duration
+	// revoked lưu access token đã logout. Có thể nil (chưa bật Redis) —
+	// khi đó logout chỉ thu hồi session, access token sống tới lúc hết hạn.
+	revoked port.Cache
 }
 
 // NewAuthUseCase tạo usecase. accessTTL/refreshTTL lấy từ config, không hardcode
@@ -64,6 +73,7 @@ func NewAuthUseCase(
 	sr domain.SessionRepository,
 	jm *jwt.Manager,
 	accessTTL, refreshTTL time.Duration,
+	revoked port.Cache,
 ) AuthUseCase {
 	return &authUseCase{
 		userRepo:    ur,
@@ -71,6 +81,7 @@ func NewAuthUseCase(
 		jwtManager:  jm,
 		accessTTL:   accessTTL,
 		refreshTTL:  refreshTTL,
+		revoked:     revoked,
 	}
 }
 
@@ -133,11 +144,36 @@ func (u *authUseCase) Refresh(ctx context.Context, refreshToken string) (*domain
 	return user, pair, nil
 }
 
-func (u *authUseCase) Logout(ctx context.Context, userID uuid.UUID, refreshToken string) error {
+func (u *authUseCase) Logout(ctx context.Context, userID uuid.UUID, refreshToken, accessToken string) error {
+	u.revokeAccessToken(ctx, accessToken)
+
 	if refreshToken != "" {
 		return u.sessionRepo.Delete(ctx, refreshToken)
 	}
 	return u.sessionRepo.DeleteByUserID(ctx, userID)
+}
+
+// revokeAccessToken ghi token vào danh sách chặn, hết hạn cùng lúc với token.
+//
+// Lỗi ở đây KHÔNG làm hỏng logout: session đã bị xóa nên refresh token mất
+// hiệu lực, phần tệ nhất còn lại chỉ là access token sống nốt thời gian ngắn
+// còn lại của nó.
+func (u *authUseCase) revokeAccessToken(ctx context.Context, accessToken string) {
+	if u.revoked == nil || accessToken == "" {
+		return
+	}
+	claims, err := u.jwtManager.Verify(accessToken)
+	if err != nil {
+		return // token hỏng hoặc đã hết hạn thì không cần chặn nữa
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return
+	}
+	if err := u.revoked.Set(ctx, tokenrevoke.Key(accessToken), "1", ttl); err != nil {
+		logger.FromContext(ctx).Error("không ghi được access token vào danh sách thu hồi",
+			zap.Error(err))
+	}
 }
 
 func (u *authUseCase) GetMe(ctx context.Context, userID string) (*domain.User, error) {

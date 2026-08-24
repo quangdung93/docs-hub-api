@@ -45,6 +45,13 @@ func setupRouterWithRoles(
 	t *testing.T, svc usecase.Service, memberRepo domain.ProjectMemberRepository, userID string, roles ...string,
 ) *gin.Engine {
 	t.Helper()
+	// Mọi endpoint trả ProjectResponse đều gọi Stats để lấy các counter.
+	// Khai ở đây một lần thay vì lặp ở từng test; Maybe() để test nào không
+	// chạm tới cũng không bị coi là thiếu kỳ vọng.
+	if m, ok := svc.(*ucmocks.MockService); ok {
+		m.EXPECT().Stats(mock.Anything, mock.Anything).
+			Return(map[uuid.UUID]domain.ProjectStats{}, nil).Maybe()
+	}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID(), middleware.ErrorHandler())
@@ -448,13 +455,59 @@ func TestCompleteAvatarUpload_NotUploaded_Returns200Business(t *testing.T) {
 	require.Equal(t, "AVATAR_NOT_UPLOADED", errObj["code"])
 }
 
+// --- GetByID (mục #9) + counters (mục #10) ---
+
+func TestGetByID_Success_Returns200(t *testing.T) {
+	userID, projectID := uuid.New(), uuid.New()
+	p := domain.NewProject(userID, "Dự án A", "mô tả", domain.ProjectSettings{})
+	p.ID = projectID
+
+	svc := ucmocks.NewMockService(t)
+	svc.EXPECT().GetByID(mock.Anything, projectID).Return(p, nil)
+	svc.EXPECT().AvatarURL(mock.Anything, mock.Anything).Return("", nil)
+	// Ghi đè kỳ vọng mặc định để kiểm tra counter ra đúng số.
+	svc.EXPECT().Stats(mock.Anything, []uuid.UUID{projectID}).
+		Return(map[uuid.UUID]domain.ProjectStats{
+			projectID: {DocumentCount: 7, MemberCount: 3, ChunkCount: 42},
+		}, nil)
+
+	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(),
+		http.MethodGet, "/internal/api/v1/projects/"+projectID.String(), nil)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	data := decodeEnvelope(t, w.Body.Bytes())["data"].(map[string]any)
+	require.Equal(t, "Dự án A", data["name"])
+	require.Equal(t, float64(7), data["document_count"])
+	require.Equal(t, float64(3), data["member_count"])
+	require.Equal(t, float64(42), data["chunk_count"])
+}
+
+func TestGetByID_IDKhongHopLe_Returns400(t *testing.T) {
+	r := setupRouter(t, ucmocks.NewMockService(t),
+		domainmocks.NewMockProjectMemberRepository(t), uuid.New().String())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(),
+		http.MethodGet, "/internal/api/v1/projects/khong-phai-uuid", nil)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 // --- Members ---
 
 func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	userID, projectID := uuid.New(), uuid.New()
 	svc := ucmocks.NewMockService(t)
 	svc.EXPECT().ListMembers(mock.Anything, projectID).
-		Return([]domain.ProjectMember{*domain.NewInvite(projectID, uuid.New(), domain.RoleViewer)}, nil)
+		Return([]domain.MemberWithUser{{
+			ProjectMember: *domain.NewInvite(projectID, uuid.New(), domain.RoleViewer),
+			FullName:      "Nguyễn Văn A",
+			Email:         "a@example.com",
+		}}, nil)
 
 	r := setupRouter(t, svc, domainmocks.NewMockProjectMemberRepository(t), userID.String())
 
@@ -463,6 +516,15 @@ func TestListMembers_ViewerAllowed_Returns200(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+
+	// Mục #11 báo cáo API: phải kèm sẵn tên và email, để client khỏi gọi
+	// GET /users/{id} cho từng thành viên.
+	env := decodeEnvelope(t, w.Body.Bytes())
+	data := env["data"].([]any)
+	require.Len(t, data, 1)
+	user := data[0].(map[string]any)["user"].(map[string]any)
+	require.Equal(t, "Nguyễn Văn A", user["full_name"])
+	require.Equal(t, "a@example.com", user["email"])
 }
 
 func TestInviteMember_Owner_Returns201(t *testing.T) {

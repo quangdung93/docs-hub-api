@@ -6,8 +6,9 @@ import (
 	context "context"
 	io "io"
 
-	port "github.com/quangdung93/docs-hub-api/internal/common/port"
 	mock "github.com/stretchr/testify/mock"
+
+	port "github.com/quangdung93/docs-hub-api/internal/common/port"
 
 	time "time"
 )
@@ -23,26 +24,6 @@ type MockObjectStore_Expecter struct {
 
 func (_m *MockObjectStore) EXPECT() *MockObjectStore_Expecter {
 	return &MockObjectStore_Expecter{mock: &_m.Mock}
-}
-
-func (_m *MockObjectStore) GetReader(ctx context.Context, key string) (io.ReadCloser, error) {
-	ret := _m.Called(ctx, key)
-	var reader io.ReadCloser
-	if ret.Get(0) != nil {
-		reader = ret.Get(0).(io.ReadCloser)
-	}
-	return reader, ret.Error(1)
-}
-
-func (_m *MockObjectStore) PutReader(
-	ctx context.Context, key string, reader io.Reader, size int64, contentType string,
-) (port.StoredObject, error) {
-	ret := _m.Called(ctx, key, reader, size, contentType)
-	var object port.StoredObject
-	if ret.Get(0) != nil {
-		object = ret.Get(0).(port.StoredObject)
-	}
-	return object, ret.Error(1)
 }
 
 // Delete provides a mock function with given fields: ctx, key
@@ -147,6 +128,65 @@ func (_c *MockObjectStore_Get_Call) Return(_a0 []byte, _a1 error) *MockObjectSto
 }
 
 func (_c *MockObjectStore_Get_Call) RunAndReturn(run func(context.Context, string) ([]byte, error)) *MockObjectStore_Get_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetReader provides a mock function with given fields: ctx, key
+func (_m *MockObjectStore) GetReader(ctx context.Context, key string) (io.ReadCloser, error) {
+	ret := _m.Called(ctx, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetReader")
+	}
+
+	var r0 io.ReadCloser
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (io.ReadCloser, error)); ok {
+		return rf(ctx, key)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) io.ReadCloser); ok {
+		r0 = rf(ctx, key)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(io.ReadCloser)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockObjectStore_GetReader_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReader'
+type MockObjectStore_GetReader_Call struct {
+	*mock.Call
+}
+
+// GetReader is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+func (_e *MockObjectStore_Expecter) GetReader(ctx interface{}, key interface{}) *MockObjectStore_GetReader_Call {
+	return &MockObjectStore_GetReader_Call{Call: _e.mock.On("GetReader", ctx, key)}
+}
+
+func (_c *MockObjectStore_GetReader_Call) Run(run func(ctx context.Context, key string)) *MockObjectStore_GetReader_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockObjectStore_GetReader_Call) Return(_a0 io.ReadCloser, _a1 error) *MockObjectStore_GetReader_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockObjectStore_GetReader_Call) RunAndReturn(run func(context.Context, string) (io.ReadCloser, error)) *MockObjectStore_GetReader_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -322,6 +362,66 @@ func (_c *MockObjectStore_Put_Call) Return(_a0 port.StoredObject, _a1 error) *Mo
 }
 
 func (_c *MockObjectStore_Put_Call) RunAndReturn(run func(context.Context, string, []byte, string) (port.StoredObject, error)) *MockObjectStore_Put_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PutReader provides a mock function with given fields: ctx, key, reader, size, contentType
+func (_m *MockObjectStore) PutReader(ctx context.Context, key string, reader io.Reader, size int64, contentType string) (port.StoredObject, error) {
+	ret := _m.Called(ctx, key, reader, size, contentType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PutReader")
+	}
+
+	var r0 port.StoredObject
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, io.Reader, int64, string) (port.StoredObject, error)); ok {
+		return rf(ctx, key, reader, size, contentType)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, io.Reader, int64, string) port.StoredObject); ok {
+		r0 = rf(ctx, key, reader, size, contentType)
+	} else {
+		r0 = ret.Get(0).(port.StoredObject)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, io.Reader, int64, string) error); ok {
+		r1 = rf(ctx, key, reader, size, contentType)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockObjectStore_PutReader_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PutReader'
+type MockObjectStore_PutReader_Call struct {
+	*mock.Call
+}
+
+// PutReader is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+//   - reader io.Reader
+//   - size int64
+//   - contentType string
+func (_e *MockObjectStore_Expecter) PutReader(ctx interface{}, key interface{}, reader interface{}, size interface{}, contentType interface{}) *MockObjectStore_PutReader_Call {
+	return &MockObjectStore_PutReader_Call{Call: _e.mock.On("PutReader", ctx, key, reader, size, contentType)}
+}
+
+func (_c *MockObjectStore_PutReader_Call) Run(run func(ctx context.Context, key string, reader io.Reader, size int64, contentType string)) *MockObjectStore_PutReader_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(io.Reader), args[3].(int64), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *MockObjectStore_PutReader_Call) Return(_a0 port.StoredObject, _a1 error) *MockObjectStore_PutReader_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockObjectStore_PutReader_Call) RunAndReturn(run func(context.Context, string, io.Reader, int64, string) (port.StoredObject, error)) *MockObjectStore_PutReader_Call {
 	_c.Call.Return(run)
 	return _c
 }

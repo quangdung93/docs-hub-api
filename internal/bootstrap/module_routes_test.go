@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	chathttp "github.com/quangdung93/docs-hub-api/internal/module/chat/delivery/http"
 	documenthttp "github.com/quangdung93/docs-hub-api/internal/module/document/delivery/http"
 	projecthttp "github.com/quangdung93/docs-hub-api/internal/module/project/delivery/http"
 	retrievalhttp "github.com/quangdung93/docs-hub-api/internal/module/retrieval/delivery/http"
@@ -22,5 +23,6 @@ func TestProjectModuleRoutes_KhongXungDotWildcard(t *testing.T) {
 		projecthttp.Register(internal, nil, nil)
 		documenthttp.Register(internal, nil)
 		retrievalhttp.Register(internal, nil)
+		chathttp.Register(internal, nil)
 	})
 }

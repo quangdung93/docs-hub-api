@@ -46,6 +46,16 @@ func Load(configPath string) (*Config, error) {
 	// ENV override: APP_POSTGRES_PASSWORD -> postgres.password
 	v.SetEnvPrefix(envPrefix)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// jwt.private_key KHÔNG có trong file yaml (là secret, không ghi vào repo),
+	// mà AutomaticEnv chỉ áp dụng cho khóa viper đã biết — nên phải bind tay,
+	// nếu không thì đặt APP_JWT_PRIVATE_KEY cũng vô tác dụng.
+	//
+	// Cố tình KHÔNG thêm khóa rỗng vào 5 file config: từng có sự cố production
+	// vì config.ec2.yaml thiếu một khối bắt buộc mà không test nào chạm tới.
+	if err := v.BindEnv("jwt.private_key"); err != nil {
+		return nil, fmt.Errorf("bind ENV jwt.private_key: %w", err)
+	}
 	v.AutomaticEnv()
 
 	var cfg Config
@@ -86,6 +96,9 @@ func checkSafety(cfg *Config) error {
 	// Ở môi trường thật, JWT HS256 bắt buộc phải có secret (thường từ ENV).
 	if cfg.JWT.Algorithm == "HS256" && cfg.JWT.Secret == "" {
 		return fmt.Errorf("thiếu jwt.secret (đặt qua ENV %s_JWT_SECRET)", envPrefix)
+	}
+	if cfg.JWT.Algorithm == "RS256" && strings.TrimSpace(cfg.JWT.PrivateKey) == "" {
+		return fmt.Errorf("thiếu jwt.private_key cho RS256 (đặt qua ENV %s_JWT_PRIVATE_KEY)", envPrefix)
 	}
 	if cfg.Storage.Driver == "filesystem" && strings.TrimSpace(cfg.Storage.Filesystem.Root) == "" {
 		return fmt.Errorf("thiếu storage.filesystem.root")
@@ -154,6 +167,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("telemetry.sample_ratio", 1.0)
 	v.SetDefault("local_ai.base_url", "http://127.0.0.1:8081")
+	v.SetDefault("local_ai.chat_model", "")
 	v.SetDefault("local_ai.embedding_model", "")
 	v.SetDefault("local_ai.embedding_dimension", 0)
 	v.SetDefault("local_ai.timeout", "30s")

@@ -14,7 +14,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576
+  max_body_bytes: 57671680 # 55 MiB, gồm multipart overhead cho giới hạn file 50 MiB
   shutdown_timeout: 15s
   enable_pprof: false
   enable_swagger: true # tiện thử API qua http://<ip-ec2>:8080/swagger/index.html
@@ -59,6 +59,12 @@ minio:
   bucket: document-hub
   use_ssl: false
   region: us-east-1
+  # Host mà trình duyệt gọi tới khi upload/tải bằng presigned URL. nginx trên
+  # máy nhận HTTPS ở đây rồi proxy về 127.0.0.1:9000 — MinIO vẫn không mở cổng
+  # ra internet. Bỏ trống thì URL bị ký theo "minio:9000" và client ngoài không
+  # dùng được.
+  public_endpoint: storage.docshub.io.vn
+  public_use_ssl: true
 
 project:
   avatar_max_bytes: 5242880 # 5 MiB — TẠM THỜI, chờ team chốt lại
@@ -100,3 +106,12 @@ timeout:
   redis: 2s
   mq: 3s
   external: 5s
+
+ragflow:
+  enabled: true
+  base_url: https://ragflow.io.vn
+  dataset_prefix: docs_hub_ec2
+  timeout: 30s
+  upload_timeout: 2m
+  poll_interval: 3s
+  max_poll_duration: 15m

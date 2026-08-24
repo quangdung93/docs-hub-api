@@ -5,6 +5,7 @@ import (
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth"
+	"github.com/quangdung93/docs-hub-api/internal/module/chat"
 	"github.com/quangdung93/docs-hub-api/internal/module/document"
 	"github.com/quangdung93/docs-hub-api/internal/module/project"
 	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
@@ -38,6 +39,7 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 			// Cookie Secure chỉ bật khi KHÔNG phải local — local chạy HTTP nên
 			// bật Secure sẽ khiến trình duyệt bỏ qua cookie.
 			SecureCookie: !cfg.App.IsLocal(),
+			Cache:        infra.Cache,
 		}),
 		project.New(project.Deps{
 			DB:                 infra.DB,
@@ -58,8 +60,11 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 		}))
 	}
 	if infra.RAG != nil {
-		modules = append(modules, retrieval.New(retrieval.Deps{
+		retrievalModule := retrieval.New(retrieval.Deps{
 			DB: infra.DB, RAG: infra.RAG, BypassACL: cfg.App.IsLocal(),
+		})
+		modules = append(modules, retrievalModule, chat.New(chat.Deps{
+			DB: infra.DB, RAG: infra.RAG, Clock: infra.clock(),
 		}))
 	}
 	return modules

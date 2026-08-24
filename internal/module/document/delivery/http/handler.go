@@ -60,19 +60,19 @@ type RetryResponse struct {
 
 // Upload godoc
 // @Summary Upload tài liệu mới
-// @Description Upload multipart trực tiếp. Phải truyền đúng một project_version_id hoặc change_request_id.
+// @Description Upload multipart trực tiếp. Phải truyền đúng một project_version_id hoặc change_request_id. Giới hạn file upload tối đa là <= 50 MB (50 MiB).
 // @Tags documents
 // @Security BearerAuth
 // @Accept multipart/form-data
 // @Produce json
 // @Param id path string true "Project ID" format(uuid)
-// @Param file formData file true "File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX"
+// @Param file formData file true "File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX (tối đa 50 MB)"
 // @Param title formData string true "Tiêu đề document mới"
 // @Param description formData string false "Mô tả"
 // @Param document_id formData string false "Document ID nếu thêm revision" format(uuid)
 // @Param project_version_id formData string false "Project version ID" format(uuid)
 // @Param change_request_id formData string false "Change request ID" format(uuid)
-// @Param size_bytes formData integer false "Kích thước khai báo để đối chiếu"
+// @Param size_bytes formData integer false "Kích thước khai báo để đối chiếu (<= 50 MB)"
 // @Param sha256 formData string true "SHA-256 dạng hex, 64 ký tự"
 // @Success 202 {object} response.Envelope{data=UploadResponse}
 // @Failure 400 {object} response.Envelope

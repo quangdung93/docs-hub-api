@@ -44,14 +44,34 @@ Script cài Docker + compose plugin, thêm user vào group `docker`, và tạo s
 
 ## 3. Cấu hình secret
 
+### Deploy bằng GitHub Actions
+
+Vào repository **Settings → Secrets and variables → Actions** và tạo các
+Repository Secrets sau:
+
+- `APP_POSTGRES_PASSWORD`
+- `APP_REDIS_PASSWORD` (có thể để trống nếu Redis không dùng password)
+- `APP_RABBITMQ_PASSWORD`
+- `APP_MINIO_SECRET_KEY`
+- `APP_JWT_SECRET`
+- `APP_RAGFLOW_API_KEY`
+
+Pipeline truyền trực tiếp các secret này cho Docker Compose; không đọc hay tạo
+`.env.ec2` trên runner. Bước kiểm tra đầu deploy sẽ báo chính xác secret nào
+đang thiếu trước khi pull image.
+
+### Chạy/deploy thủ công trên EC2
+
 ```bash
 cp .env.ec2.example .env.ec2
 vi .env.ec2
 ```
 
 Bắt buộc điền: `APP_POSTGRES_PASSWORD`, `APP_RABBITMQ_PASSWORD`,
-`APP_MINIO_SECRET_KEY` (≥8 ký tự), `APP_JWT_SECRET`. Thiếu biến nào compose sẽ
-báo đúng tên biến đó và dừng trước khi build.
+`APP_MINIO_SECRET_KEY` (≥8 ký tự), `APP_JWT_SECRET` và
+`APP_RAGFLOW_API_KEY`. Thiếu biến nào compose sẽ báo đúng tên biến đó và dừng
+trước khi build. `APP_RAGFLOW_BASE_URL` mặc định là `https://ragflow.io.vn`;
+đổi lại trong `.env.ec2` nếu production dùng instance khác.
 
 Sinh secret: `openssl rand -base64 32`.
 
@@ -110,8 +130,9 @@ bash deployments/ec2/setup-runner.sh https://github.com/<owner>/docs-hub-api <TO
 Deploy tay một tag cũ để rollback: Actions → deploy → **Run workflow** → điền
 `image_tag` bằng SHA muốn quay lại.
 
-Không cần secret nào ngoài `GITHUB_TOKEN` có sẵn: runner nằm trong máy nên
-không cần SSH key, và GHCR đăng nhập bằng chính token của workflow.
+Runner nằm trong máy nên không cần SSH key, và GHCR đăng nhập bằng
+`GITHUB_TOKEN` của workflow. Secret ứng dụng được quản lý bằng GitHub Actions
+Secrets như mô tả ở mục 3.
 
 ## Lưu ý khác biệt so với local
 

@@ -39,6 +39,8 @@ type ragWork struct {
 	ProjectName      string  `gorm:"column:project_name"`
 	DatasetID        *string `gorm:"column:ragflow_dataset_id"`
 	RemoteDocumentID *string `gorm:"column:ragflow_document_id"`
+	ProjectVersionID *string `gorm:"column:project_version_id"`
+	ChangeRequestID  *string `gorm:"column:change_request_id"`
 	ObjectKey        string  `gorm:"column:object_key"`
 	FileName         string  `gorm:"column:file_name"`
 	MediaType        string  `gorm:"column:media_type"`
@@ -166,7 +168,8 @@ func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
 	}
 	var w ragWork
 	const sql = `SELECT r.id AS revision_id,r.document_id,r.project_id,p.name AS project_name,
-		p.ragflow_dataset_id,r.ragflow_document_id,r.object_key,r.file_name,r.media_type
+		p.ragflow_dataset_id,r.ragflow_document_id,r.project_version_id,r.change_request_id,
+		r.object_key,r.file_name,r.media_type
 		FROM document_revisions r JOIN projects p ON p.id=r.project_id
 		WHERE r.id=? AND p.deleted_at IS NULL`
 	if err = p.db.WithContext(ctx).Raw(sql, claimed.DocumentRevisionID).Scan(&w).Error; err != nil {
@@ -221,6 +224,17 @@ func (p *RAGFlowProcessor) process(ctx context.Context, w *ragWork) error {
 		}); err != nil {
 			return err
 		}
+	}
+	metadata := map[string]string{"docs_hub_revision_id": w.RevisionID}
+	if scopeID := value(w.ProjectVersionID); scopeID != "" {
+		metadata["docs_hub_scope_id"] = scopeID
+		metadata["docs_hub_scope_type"] = "version"
+	} else if scopeID := value(w.ChangeRequestID); scopeID != "" {
+		metadata["docs_hub_scope_id"] = scopeID
+		metadata["docs_hub_scope_type"] = "change_request"
+	}
+	if err = p.rag.UpdateDocumentMetadata(ctx, datasetID, []string{remoteID}, metadata); err != nil {
+		return fmt.Errorf("cập nhật RAGFlow document metadata: %w", err)
 	}
 	remote, err := p.rag.GetDocument(ctx, datasetID, remoteID)
 	if err != nil {
