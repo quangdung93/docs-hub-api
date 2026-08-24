@@ -123,6 +123,26 @@ jobs:
       - name: Đăng nhập GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      # Volume postgres_data chỉ nhận password ở lần init đầu tiên. Nếu secret
+      # trên GitHub lệch với password đã init, healthcheck `pg_isready` vẫn
+      # xanh (nó không xác thực) và lỗi chỉ lộ ra ở migrate dưới dạng khó đọc.
+      # Kiểm tra đăng nhập trước để báo đúng nguyên nhân.
+      - name: Kiểm tra đăng nhập Postgres
+        run: |
+          docker compose -f deployments/ec2/docker-compose.yml up -d postgres
+          for i in $(seq 1 30); do
+            if docker compose -f deployments/ec2/docker-compose.yml exec -T \
+                 -e PGPASSWORD="$APP_POSTGRES_PASSWORD" postgres \
+                 psql -U app -d document_hub -c 'SELECT 1' >/dev/null 2>&1; then
+              echo "✅ Postgres chấp nhận APP_POSTGRES_PASSWORD (sau ${i} lần thử)"
+              exit 0
+            fi
+            sleep 2
+          done
+          printf '::error::Postgres từ chối APP_POSTGRES_PASSWORD — nhiều khả năng secret lệch với password đã init trong volume postgres_data\n'
+          docker compose -f deployments/ec2/docker-compose.yml logs --tail 30 postgres
+          exit 1
+
       - name: Kéo image mới
         env:
           API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}

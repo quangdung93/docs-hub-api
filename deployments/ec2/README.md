@@ -60,6 +60,26 @@ Pipeline truyền trực tiếp các secret này cho Docker Compose; không đ�
 `.env.ec2` trên runner. Bước kiểm tra đầu deploy sẽ báo chính xác secret nào
 đang thiếu trước khi pull image.
 
+`APP_REDIS_PASSWORD` không bắt buộc vì Redis trong `docker-compose.yml` chạy
+không `requirepass`; chỉ điền khi nào bật password cho Redis.
+
+> **Quan trọng khi EC2 đã từng chạy stack thủ công.** Volume `postgres_data`
+> chỉ nhận `POSTGRES_PASSWORD` ở lần init đầu tiên, và `pg_isready` không xác
+> thực nên healthcheck vẫn xanh dù password sai. Vì vậy `APP_POSTGRES_PASSWORD`
+> trên GitHub phải **trùng đúng** giá trị đã dùng lần đầu — lấy lại từ
+> `.env.ec2` trên máy EC2, đừng sinh mới. Bước "Kiểm tra đăng nhập Postgres"
+> trong pipeline sẽ dừng sớm và báo rõ nếu hai giá trị lệch nhau. Muốn đổi
+> password thật sự thì `ALTER USER app PASSWORD '<mới>'` trong Postgres (hoặc
+> xoá volume, chấp nhận mất dữ liệu) rồi mới cập nhật secret.
+
+Đặt secret bằng CLI:
+
+```bash
+gh secret set APP_POSTGRES_PASSWORD --repo <owner>/<repo>
+# lặp lại cho APP_RABBITMQ_PASSWORD, APP_MINIO_SECRET_KEY,
+# APP_JWT_SECRET, APP_RAGFLOW_API_KEY
+```
+
 ### Chạy/deploy thủ công trên EC2
 
 ```bash
