@@ -50,8 +50,10 @@ vi .env.ec2
 ```
 
 Bắt buộc điền: `APP_POSTGRES_PASSWORD`, `APP_RABBITMQ_PASSWORD`,
-`APP_MINIO_SECRET_KEY` (≥8 ký tự), `APP_JWT_SECRET`. Thiếu biến nào compose sẽ
-báo đúng tên biến đó và dừng trước khi build.
+`APP_MINIO_SECRET_KEY` (≥8 ký tự), `APP_JWT_SECRET` và
+`APP_RAGFLOW_API_KEY`. Thiếu biến nào compose sẽ báo đúng tên biến đó và dừng
+trước khi build. `APP_RAGFLOW_BASE_URL` mặc định là `https://ragflow.io.vn`;
+đổi lại trong `.env.ec2` nếu production dùng instance khác.
 
 Sinh secret: `openssl rand -base64 32`.
 

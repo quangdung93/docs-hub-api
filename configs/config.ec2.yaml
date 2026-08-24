@@ -106,3 +106,12 @@ timeout:
   redis: 2s
   mq: 3s
   external: 5s
+
+ragflow:
+  enabled: true
+  base_url: https://ragflow.io.vn
+  dataset_prefix: docs_hub_ec2
+  timeout: 30s
+  upload_timeout: 2m
+  poll_interval: 3s
+  max_poll_duration: 15m
