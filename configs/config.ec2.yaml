@@ -14,7 +14,7 @@ app:
 http:
   api_port: 8080
   admin_port: 9090
-  max_body_bytes: 1048576
+  max_body_bytes: 57671680 # 55 MiB, gồm multipart overhead cho giới hạn file 50 MiB
   shutdown_timeout: 15s
   enable_pprof: false
   enable_swagger: true # tiện thử API qua http://<ip-ec2>:8080/swagger/index.html
