@@ -332,6 +332,7 @@ func (s *Service) validate(ctx context.Context, pid uuid.UUID, scope domain.Scop
 		return apperr.BadRequest("Phải chọn đúng một version hoặc change request")
 	}
 	ok, err := s.repo.ScopeExists(ctx, pid, scope)
+
 	if err != nil {
 		return apperr.Internal("Không thể kiểm tra scope").WithCause(err)
 	}
