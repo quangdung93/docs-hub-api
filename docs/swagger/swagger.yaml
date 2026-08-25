@@ -218,8 +218,6 @@ definitions:
         type: string
       project_version_id:
         type: string
-      sha256:
-        type: string
       size_bytes:
         minimum: 1
         type: integer
@@ -229,7 +227,6 @@ definitions:
     required:
     - file_name
     - media_type
-    - sha256
     - size_bytes
     type: object
   http.ProjectSettingsRequest:
@@ -1066,11 +1063,6 @@ paths:
         in: formData
         name: size_bytes
         type: integer
-      - description: SHA-256 dạng hex, 64 ký tự
-        in: formData
-        name: sha256
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -1337,11 +1329,6 @@ paths:
         in: formData
         name: size_bytes
         type: integer
-      - description: SHA-256 dạng hex, 64 ký tự
-        in: formData
-        name: sha256
-        required: true
-        type: string
       produces:
       - application/json
       responses:

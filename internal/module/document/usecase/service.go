@@ -62,17 +62,17 @@ func New(repo domain.Repository, tx port.TxManager, store port.ObjectStore, cloc
 }
 
 type UploadInput struct {
-	ProjectID, DocumentID                           uuid.UUID
-	Scope                                           domain.Scope
-	Title, Description, FileName, MediaType, SHA256 string
-	SizeBytes                                       int64
-	Reader                                          io.Reader
+	ProjectID, DocumentID                   uuid.UUID
+	Scope                                   domain.Scope
+	Title, Description, FileName, MediaType string
+	SizeBytes                               int64
+	Reader                                  io.Reader
 }
 type PresignInput struct {
-	ProjectID, DocumentID                           uuid.UUID
-	Scope                                           domain.Scope
-	Title, Description, FileName, MediaType, SHA256 string
-	SizeBytes                                       int64
+	ProjectID, DocumentID                   uuid.UUID
+	Scope                                   domain.Scope
+	Title, Description, FileName, MediaType string
+	SizeBytes                               int64
 }
 type PresignResult struct {
 	UploadID  uuid.UUID `json:"upload_id"`
@@ -93,7 +93,7 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 	if len([]rune(in.Title)) > 255 {
 		return nil, nil, apperr.BadRequest("Title không được vượt quá 255 ký tự")
 	}
-	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes, in.SHA256); err != nil {
+	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes); err != nil {
 		return nil, nil, err
 	}
 	if in.Reader == nil {
@@ -113,10 +113,7 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 		_ = s.store.Delete(ctx, key)
 		return nil, nil, apperr.BadRequest("Kích thước file thực tế không khớp")
 	}
-	if hex.EncodeToString(hasher.Sum(nil)) != strings.ToLower(in.SHA256) {
-		_ = s.store.Delete(ctx, key)
-		return nil, nil, apperr.BadRequest("SHA-256 file không khớp")
-	}
+	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
 	var d *domain.Document
 	var rev *domain.Revision
 	err = s.tx.Do(ctx, func(txctx context.Context) error {
@@ -125,7 +122,7 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 			DocumentID: in.DocumentID, RevisionID: rid, ProjectID: in.ProjectID,
 			ActorID: actor, Scope: in.Scope, Title: in.Title, Description: in.Description,
 			FileName: safeName(in.FileName), MediaType: in.MediaType,
-			SHA256: strings.ToLower(in.SHA256), ObjectKey: stored.Key, SizeBytes: stored.Size,
+			SHA256: actualSHA256, ObjectKey: stored.Key, SizeBytes: stored.Size,
 		}
 		d, rev, e = s.repo.CreateRevision(txctx, params)
 		if e != nil {
@@ -150,7 +147,7 @@ func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult,
 	if len([]rune(in.Title)) > 255 {
 		return nil, apperr.BadRequest("Title không được vượt quá 255 ký tự")
 	}
-	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes, in.SHA256); err != nil {
+	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes); err != nil {
 		return nil, err
 	}
 	if in.DocumentID == uuid.Nil {
@@ -160,7 +157,7 @@ func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult,
 		ID: uuid.New(), ProjectID: in.ProjectID, DocumentID: in.DocumentID,
 		RevisionID: uuid.New(), CreatedBy: actor, Scope: in.Scope,
 		Title: in.Title, Description: in.Description, FileName: safeName(in.FileName),
-		MediaType: in.MediaType, SizeBytes: in.SizeBytes, SHA256: strings.ToLower(in.SHA256),
+		MediaType: in.MediaType, SizeBytes: in.SizeBytes,
 		Status: "pending", ExpiresAt: s.clock.Now().Add(15 * time.Minute),
 	}
 	u.ObjectKey = objectKey(u.ProjectID, u.DocumentID, u.RevisionID, u.FileName)
@@ -237,9 +234,7 @@ func (s *Service) verifyObject(ctx context.Context, u *domain.Upload) error {
 	if _, err = io.Copy(hash, buffered); err != nil {
 		return apperr.Internal("Không thể kiểm tra checksum").WithCause(err)
 	}
-	if hex.EncodeToString(hash.Sum(nil)) != u.SHA256 {
-		return apperr.BadRequest("SHA-256 object không khớp")
-	}
+	u.SHA256 = hex.EncodeToString(hash.Sum(nil))
 	return nil
 }
 
@@ -327,7 +322,7 @@ func (s *Service) authorize(ctx context.Context, pid uuid.UUID, write bool) (uui
 	}
 	return uid, nil
 }
-func (s *Service) validate(ctx context.Context, pid uuid.UUID, scope domain.Scope, name, mime string, size int64, hash string) error {
+func (s *Service) validate(ctx context.Context, pid uuid.UUID, scope domain.Scope, name, mime string, size int64) error {
 	if !scope.Valid() {
 		return apperr.BadRequest("Phải chọn đúng một version hoặc change request")
 	}
@@ -354,12 +349,6 @@ func (s *Service) validate(ctx context.Context, pid uuid.UUID, scope domain.Scop
 	}
 	if size > maxUploadSize {
 		return apperr.NewBusiness(errcode.FileTooLarge, "File vượt quá 50 MiB", false)
-	}
-	if len(hash) != 64 {
-		return apperr.BadRequest("SHA-256 không hợp lệ")
-	}
-	if _, err := hex.DecodeString(hash); err != nil {
-		return apperr.BadRequest("SHA-256 không hợp lệ")
 	}
 	return nil
 }

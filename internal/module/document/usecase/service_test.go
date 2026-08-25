@@ -3,10 +3,7 @@ package usecase
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -81,8 +78,8 @@ func (*fakeStore) Get(context.Context, string) ([]byte, error) { return nil, nil
 func (f *fakeStore) GetReader(context.Context, string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(f.data)), nil
 }
-func (*fakeStore) Stat(context.Context, string) (port.StoredObject, error) {
-	return port.StoredObject{}, nil
+func (f *fakeStore) Stat(context.Context, string) (port.StoredObject, error) {
+	return port.StoredObject{Size: int64(len(f.data))}, nil
 }
 func (f *fakeStore) PresignedPutURL(context.Context, string, time.Duration) (string, error) {
 	return "", f.presignErr
@@ -106,12 +103,11 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 	store := &fakeStore{}
 	svc := New(repo, fakeTx{}, store, fakeClock{})
 	data := []byte("noi dung tai lieu")
-	sum := sha256.Sum256(data)
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
 	input := UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "Tai lieu",
 		FileName: "../../yeu cau.md", MediaType: mimeMarkdown, SizeBytes: int64(len(data)),
-		SHA256: hex.EncodeToString(sum[:]), Reader: bytes.NewReader(data),
+		Reader: bytes.NewReader(data),
 	}
 	d, r, err := svc.Upload(ctx, input)
 	require.NoError(t, err)
@@ -121,6 +117,7 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 	require.Contains(t, repo.created.ObjectKey, "projects/"+pid.String()+"/documents/")
 	require.NotContains(t, repo.created.ObjectKey, "..")
 	require.Equal(t, data, store.data)
+	require.Equal(t, "7ae5326a1eec0c66c7c5567308167187d9bad2eecd4712d7f7cedad8a1565b64", repo.created.SHA256)
 }
 
 func TestUpload_ViewerBiTuChoi(t *testing.T) {
@@ -143,25 +140,6 @@ func TestAuthorize_LocalBypassKhongCanProjectMembership(t *testing.T) {
 	require.Equal(t, actor, got)
 }
 
-func TestUpload_ChecksumSaiXoaObject(t *testing.T) {
-	actor, pid, vid := uuid.New(), uuid.New(), uuid.New()
-	repo := &fakeRepo{role: "editor", scope: true}
-	store := &fakeStore{}
-	svc := New(repo, fakeTx{}, store, fakeClock{})
-	data := []byte("abc")
-	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-	input := UploadInput{
-		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
-		FileName: "x.txt", MediaType: mimeTextPlain, SizeBytes: 3,
-		SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		Reader: bytes.NewReader(data),
-	}
-	_, _, err := svc.Upload(ctx, input)
-	require.Error(t, err)
-	require.NotEmpty(t, store.deleted)
-	require.Nil(t, repo.created)
-}
-
 func TestUpload_KichThuocLuuTruSaiXoaObject(t *testing.T) {
 	actor, pid, vid := uuid.New(), uuid.New(), uuid.New()
 	repo := &fakeRepo{role: "editor", scope: true}
@@ -169,12 +147,11 @@ func TestUpload_KichThuocLuuTruSaiXoaObject(t *testing.T) {
 	store := &fakeStore{size: &wrongSize}
 	svc := New(repo, fakeTx{}, store, fakeClock{})
 	data := []byte("abc")
-	sum := sha256.Sum256(data)
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
 	_, _, err := svc.Upload(ctx, UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
 		FileName: "x.txt", MediaType: mimeTextPlain, SizeBytes: 3,
-		SHA256: hex.EncodeToString(sum[:]), Reader: bytes.NewReader(data),
+		Reader: bytes.NewReader(data),
 	})
 	require.Error(t, err)
 	require.NotEmpty(t, store.deleted)
@@ -188,7 +165,7 @@ func TestValidate_TuChoiExtensionKhongKhopMIME(t *testing.T) {
 	_, _, err := svc.Upload(ctx, UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
 		FileName: "x.txt", MediaType: "application/pdf", SizeBytes: 3,
-		SHA256: strings.Repeat("a", 64), Reader: bytes.NewReader([]byte("abc")),
+		Reader: bytes.NewReader([]byte("abc")),
 	})
 	require.Error(t, err)
 	require.Nil(t, svc.repo.(*fakeRepo).created)
@@ -217,11 +194,22 @@ func TestPresign_FilesystemYeuCauDungMultipart(t *testing.T) {
 	_, err := svc.Presign(ctx, PresignInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
 		FileName: "x.txt", MediaType: mimeTextPlain, SizeBytes: 3,
-		SHA256: strings.Repeat("a", 64),
 	})
 	var technical *apperr.TechnicalError
 	require.ErrorAs(t, err, &technical)
 	require.Equal(t, 400, technical.HTTPStatus)
+}
+
+func TestVerifyObject_TuTinhSHA256(t *testing.T) {
+	upload := &domain.Upload{
+		FileName: "x.txt", MediaType: mimeTextPlain, SizeBytes: 3, ObjectKey: "x.txt",
+	}
+	svc := New(nil, nil, &fakeStore{data: []byte("abc")}, fakeClock{})
+
+	err := svc.verifyObject(context.Background(), upload)
+
+	require.NoError(t, err)
+	require.Equal(t, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", upload.SHA256)
 }
 
 func TestDownload_DocFileQuaObjectStore(t *testing.T) {

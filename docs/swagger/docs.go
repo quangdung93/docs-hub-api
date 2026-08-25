@@ -762,13 +762,6 @@ const docTemplate = `{
                         "description": "Kích thước khai báo để đối chiếu (\u003c= 50 MB)",
                         "name": "size_bytes",
                         "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "SHA-256 dạng hex, 64 ký tự",
-                        "name": "sha256",
-                        "in": "formData",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -1227,13 +1220,6 @@ const docTemplate = `{
                         "description": "Kích thước khai báo",
                         "name": "size_bytes",
                         "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "SHA-256 dạng hex, 64 ký tự",
-                        "name": "sha256",
-                        "in": "formData",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -2721,7 +2707,6 @@ const docTemplate = `{
             "required": [
                 "file_name",
                 "media_type",
-                "sha256",
                 "size_bytes"
             ],
             "properties": {
@@ -2741,9 +2726,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "project_version_id": {
-                    "type": "string"
-                },
-                "sha256": {
                     "type": "string"
                 },
                 "size_bytes": {

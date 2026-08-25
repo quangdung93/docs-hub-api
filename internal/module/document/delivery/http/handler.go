@@ -29,7 +29,6 @@ type PresignRequest struct {
 	FileName         string `json:"file_name" binding:"required"`
 	MediaType        string `json:"media_type" binding:"required"`
 	SizeBytes        int64  `json:"size_bytes" binding:"required,min=1"`
-	SHA256           string `json:"sha256" binding:"required"`
 	ProjectVersionID string `json:"project_version_id"`
 	ChangeRequestID  string `json:"change_request_id"`
 }
@@ -73,7 +72,6 @@ type RetryResponse struct {
 // @Param project_version_id formData string false "Project version ID" format(uuid)
 // @Param change_request_id formData string false "Change request ID" format(uuid)
 // @Param size_bytes formData integer false "Kích thước khai báo để đối chiếu (<= 50 MB)"
-// @Param sha256 formData string true "SHA-256 dạng hex, 64 ký tự"
 // @Success 202 {object} response.Envelope{data=UploadResponse}
 // @Failure 400 {object} response.Envelope
 // @Failure 401 {object} response.Envelope
@@ -129,7 +127,7 @@ func (h *Handler) upload(c *gin.Context, pathDocumentID uuid.UUID) {
 		ProjectID: pid, DocumentID: did, Scope: scope,
 		Title: c.PostForm("title"), Description: c.PostForm("description"),
 		FileName: fh.Filename, MediaType: mediaType, SizeBytes: size,
-		SHA256: c.PostForm("sha256"), Reader: reader,
+		Reader: reader,
 	}
 	d, r, err := h.svc.Upload(c.Request.Context(), input)
 	if err != nil {
@@ -175,7 +173,7 @@ func (h *Handler) Presign(c *gin.Context) {
 	input := usecase.PresignInput{
 		ProjectID: pid, DocumentID: did, Scope: scope,
 		Title: req.Title, Description: req.Description, FileName: req.FileName,
-		MediaType: req.MediaType, SizeBytes: req.SizeBytes, SHA256: req.SHA256,
+		MediaType: req.MediaType, SizeBytes: req.SizeBytes,
 	}
 	out, err := h.svc.Presign(c.Request.Context(), input)
 	if err != nil {
@@ -322,7 +320,6 @@ func (h *Handler) Update(c *gin.Context) {
 // @Param project_version_id formData string false "Project version ID" format(uuid)
 // @Param change_request_id formData string false "Change request ID" format(uuid)
 // @Param size_bytes formData integer false "Kích thước khai báo"
-// @Param sha256 formData string true "SHA-256 dạng hex, 64 ký tự"
 // @Success 202 {object} response.Envelope{data=UploadResponse}
 // @Failure 400 {object} response.Envelope
 // @Failure 401 {object} response.Envelope

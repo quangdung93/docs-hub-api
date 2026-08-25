@@ -165,7 +165,7 @@ func (r *Repository) CompleteUpload(ctx context.Context, u *domain.Upload) (*dom
 		return nil, nil, err
 	}
 	now := time.Now().UTC()
-	updates := map[string]any{"status": "completed", "completed_at": now}
+	updates := map[string]any{"status": "completed", "completed_at": now, "sha256": u.SHA256}
 	if err := db.Model(&uploadModel{}).
 		Where("id=? AND status='completing'", u.ID).Updates(updates).Error; err != nil {
 		return nil, nil, err
