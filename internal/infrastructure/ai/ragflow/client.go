@@ -24,6 +24,11 @@ import (
 
 const maxResponseBytes = 8 << 20
 
+// codeNotOwned là mã RAGFlow trả khi tên không thuộc sở hữu của user hiện tại.
+// RAGFlow dùng CHUNG mã này cho cả "không tồn tại" lẫn "của người khác" — đã
+// kiểm chứng bằng một tên tự bịa ra, vẫn trả đúng mã này.
+const codeNotOwned = 102
+
 type Client struct {
 	baseURL string
 	apiKey  string
@@ -94,6 +99,17 @@ func (c *Client) FindDatasetByName(ctx context.Context, name string) (*port.RAGD
 	var env envelope
 	endpoint := "/api/v1/datasets?page=1&page_size=30&name=" + url.QueryEscape(name)
 	if err := c.doEnvelope(ctx, http.MethodGet, endpoint, nil, &env); err != nil {
+		// RAGFlow trả codeNotOwned cho MỌI tên dataset user không sở hữu, kể cả
+		// tên chưa từng tồn tại. Với caller thì cả hai đều là "không tìm thấy",
+		// nên phải trả nil để nhánh tạo mới chạy được — giữ nguyên lỗi ở đây thì
+		// KHÔNG project nào tạo được dataset lần đầu.
+		//
+		// Endpoint datasets không nhận tham số keywords (trả code=101) nên không
+		// dùng được cách đã xử lý ở FindDocumentByName.
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.Code == codeNotOwned {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var rows []struct {

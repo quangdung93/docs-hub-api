@@ -192,3 +192,39 @@ func TestClient_FindDocumentByName_LocExactNameTuKeywords(t *testing.T) {
 	require.NotNil(t, document)
 	require.Equal(t, "doc-exact", document.ID)
 }
+
+// TestClient_FindDatasetByName_CoiCodeNotOwnedLaKhongTimThay chốt lỗi đã gặp
+// thật trên production: RAGFlow trả code=102 "lacks permission" cho MỌI tên
+// dataset user không sở hữu, kể cả tên chưa từng tồn tại. Coi đó là lỗi thì
+// nhánh tạo dataset không bao giờ chạy, và mọi tài liệu kẹt ở trạng thái lỗi.
+func TestClient_FindDatasetByName_CoiCodeNotOwnedLaKhongTimThay(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"code":102,"message":"User 'u1' lacks permission for dataset 'ds_moi'"}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key", time.Second, time.Second)
+	dataset, err := client.FindDatasetByName(context.Background(), "ds_moi")
+
+	require.NoError(t, err, "code=102 phải hiểu là chưa có, không phải lỗi")
+	require.Nil(t, dataset)
+}
+
+// TestClient_FindDatasetByName_LoiKhacVanBaoLoi: chỉ codeNotOwned mới được bỏ
+// qua; lỗi xác thực hay lỗi hệ thống vẫn phải nổi lên.
+func TestClient_FindDatasetByName_LoiKhacVanBaoLoi(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"code":401,"message":"Unauthorized"}`)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key", time.Second, time.Second)
+	_, err := client.FindDatasetByName(context.Background(), "ds_moi")
+
+	require.Error(t, err, "khóa sai mà nuốt lỗi thì worker im lặng tạo dataset hỏng")
+}
