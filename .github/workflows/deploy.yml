@@ -171,10 +171,8 @@ jobs:
       - name: Log worker ingestion
         if: always()
         run: |
-          docker compose -f deployments/ec2/docker-compose.yml \r
-            ps worker
-          docker compose -f deployments/ec2/docker-compose.yml \r
-            logs --tail 30 worker
+          docker compose -f deployments/ec2/docker-compose.yml ps worker
+          docker compose -f deployments/ec2/docker-compose.yml logs --tail 30 worker
 
       # Tạo tài khoản admin đầu tiên. Bắt buộc vì API tạo user nằm sau lớp xác
       # thực — không thể tạo user đầu tiên qua HTTP. seedAdmin idempotent nên
