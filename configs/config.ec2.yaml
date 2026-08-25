@@ -80,7 +80,10 @@ jwt:
 # Thêm domain/IP thật của bạn vào đây khi có frontend gọi tới.
 # Không dùng "*" chung với allow_credentials=true — trình duyệt sẽ từ chối.
 cors:
-  allowed_origins: ["https://docshub.io.vn"]
+  # FE production chạy ở mobix.asia; docshub.io.vn vẫn còn sống nên giữ lại.
+  # CORS chỉ xét origin (scheme + host + port), KHÔNG xét đường dẫn — nên khai
+  # báo mobix.asia là mọi trang trên tên miền đó đều gọi được API kèm cookie.
+  allowed_origins: ["https://docshub.io.vn", "https://mobix.asia"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   allowed_headers: ["Origin", "Content-Type", "Authorization", "X-Request-ID"]
   allow_credentials: true
