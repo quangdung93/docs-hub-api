@@ -128,7 +128,7 @@ jobs:
           API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}
         run: |
           docker compose -f deployments/ec2/docker-compose.yml \
-            pull migrate api
+            pull migrate api worker
 
       - name: Chạy migration rồi khởi động API
         id: deploy_up
@@ -136,7 +136,7 @@ jobs:
           API_IMAGE: ${{ env.IMAGE }}:${{ needs.build-push.outputs.tag }}
         run: |
           docker compose -f deployments/ec2/docker-compose.yml \
-            up -d migrate api
+            up -d migrate api worker
 
       # Khi migrate hỏng, `compose up -d` chỉ báo "exit 1" mà nuốt mất stderr
       # của container — không có bước này thì không biết hỏng vì lý do gì.
@@ -164,6 +164,17 @@ jobs:
           docker compose -f deployments/ec2/docker-compose.yml \
             logs --tail 50 api
           exit 1
+
+      # Worker ingestion không có endpoint health nên bước readyz ở trên không
+      # nói gì về nó. In log để deploy nào cũng thấy ngay nó sống hay chết —
+      # không có bước này thì worker chết âm thầm mà pipeline vẫn xanh.
+      - name: Log worker ingestion
+        if: always()
+        run: |
+          docker compose -f deployments/ec2/docker-compose.yml \r
+            ps worker
+          docker compose -f deployments/ec2/docker-compose.yml \r
+            logs --tail 30 worker
 
       # Tạo tài khoản admin đầu tiên. Bắt buộc vì API tạo user nằm sau lớp xác
       # thực — không thể tạo user đầu tiên qua HTTP. seedAdmin idempotent nên
