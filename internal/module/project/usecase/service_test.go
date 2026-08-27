@@ -18,6 +18,7 @@ import (
 
 type fakeProjectRepo struct {
 	created   *domain.Project
+	found     *domain.Project
 	createErr error
 }
 
@@ -29,7 +30,11 @@ func (*fakeProjectRepo) Stats(context.Context, []uuid.UUID) (map[uuid.UUID]domai
 	return nil, nil
 }
 func (*fakeProjectRepo) Update(context.Context, *domain.Project) error { return nil }
-func (*fakeProjectRepo) FindByID(context.Context, uuid.UUID) (*domain.Project, error) {
+
+func (f *fakeProjectRepo) FindByID(context.Context, uuid.UUID) (*domain.Project, error) {
+	if f.found != nil {
+		return f.found, nil
+	}
 	return nil, domain.ErrNotFound
 }
 func (*fakeProjectRepo) ListForUser(context.Context, uuid.UUID, pagination.Query) ([]domain.Project, int64, error) {
@@ -127,6 +132,19 @@ func newIntegratedService(projectRepo *fakeProjectRepo, memberRepo *fakeMemberRe
 	return NewService(Deps{ProjectRepo: projectRepo, MemberRepo: memberRepo, VersionRepo: versions,
 		Tx: fakeTx{}, Clock: fixedClock{now: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 		RAG: rag, DatasetPrefix: "docs hub_local"})
+}
+
+func TestGetByID_TuChoiActorKhongPhaiThanhVien(t *testing.T) {
+	actorID, projectID := uuid.New(), uuid.New()
+	svc := newIntegratedService(
+		&fakeProjectRepo{found: &domain.Project{ID: projectID}}, &fakeMemberRepo{}, &fakeVersionRepo{}, nil,
+	)
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actorID.String()})
+
+	_, err := svc.GetByID(ctx, projectID)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "AUTH_403")
 }
 
 func TestCreate_TaoProjectVaDatasetRAGFlow(t *testing.T) {

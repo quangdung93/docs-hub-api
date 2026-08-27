@@ -18,14 +18,20 @@ type Deps struct {
 	Clock port.Clock
 }
 
-type Module struct{ handler *chathttp.Handler }
+type Module struct {
+	handler *chathttp.Handler
+	service *chatuc.Service
+}
 
 func New(deps Deps) *Module {
 	repo := repository.New(deps.DB)
 	scopeRepo := retrievalrepo.New(deps.DB)
 	service := chatuc.New(repo, scopeRepo, deps.RAG, deps.Clock)
-	return &Module{handler: chathttp.New(service)}
+	return &Module{handler: chathttp.New(service), service: service}
 }
+
+// Service trả application usecase để MCP dùng lại ACL và citation.
+func (m *Module) Service() *chatuc.Service { return m.service }
 
 func (*Module) Name() string { return "chat" }
 

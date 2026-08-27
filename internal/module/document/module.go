@@ -18,12 +18,18 @@ type Deps struct {
 	Clock            port.Clock
 	BypassProjectACL bool
 }
-type Module struct{ handler *dochttp.Handler }
+type Module struct {
+	handler *dochttp.Handler
+	service *usecase.Service
+}
 
 func New(d Deps) *Module {
 	repo := repository.New(d.DB)
 	service := usecase.New(repo, d.Tx, d.Store, d.Clock, usecase.WithProjectACLBypass(d.BypassProjectACL))
-	return &Module{handler: dochttp.New(service)}
+	return &Module{handler: dochttp.New(service), service: service}
 }
+
+// Service trả application usecase để MCP dùng lại ACL tài liệu.
+func (m *Module) Service() *usecase.Service                   { return m.service }
 func (*Module) Name() string                                  { return "document" }
 func (m *Module) RegisterRoutes(internal, _ *gin.RouterGroup) { dochttp.Register(internal, m.handler) }

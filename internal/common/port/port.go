@@ -13,6 +13,22 @@ import (
 	"time"
 )
 
+// AuditEvent là bản ghi hành động bảo mật/nghiệp vụ dùng chung giữa delivery adapter.
+type AuditEvent struct {
+	ActorUserID string
+	ProjectID   string
+	Action      string
+	EntityType  string
+	EntityID    string
+	RequestID   string
+	Metadata    map[string]any
+}
+
+// Auditor ghi audit bền vững; caller không phụ thuộc database cụ thể.
+type Auditor interface {
+	Record(ctx context.Context, event AuditEvent) error
+}
+
 // TxManager trừu tượng hóa transaction. Usecase gọi Do và chạy toàn bộ thao tác
 // trong callback; implementation nhét handle transaction vào context để các
 // repository tự động tham gia (usecase không bao giờ thấy *gorm.DB).

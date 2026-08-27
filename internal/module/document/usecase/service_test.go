@@ -212,6 +212,24 @@ func TestVerifyObject_TuTinhSHA256(t *testing.T) {
 	require.Equal(t, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", upload.SHA256)
 }
 
+func TestCanonicalSource_ChiMoRevisionReadyCoQuyen(t *testing.T) {
+	actor, projectID, documentID, revisionID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	repo := &fakeRepo{role: "viewer", revision: &domain.Revision{
+		ID: revisionID, DocumentID: documentID, ProjectID: projectID,
+		Status: "ready", CanonicalTextKey: "canonical.txt",
+	}}
+	store := &fakeStore{data: []byte("dong 1\ndong 2")}
+	svc := New(repo, fakeTx{}, store, fakeClock{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
+
+	_, reader, err := svc.CanonicalSource(ctx, projectID, documentID, revisionID)
+	require.NoError(t, err)
+	defer reader.Close()
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "dong 1\ndong 2", string(content))
+}
+
 func TestDownload_DocFileQuaObjectStore(t *testing.T) {
 	actor, pid, did, rid := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	revision := &domain.Revision{ID: rid, DocumentID: did, ProjectID: pid, ObjectKey: "object.txt", SizeBytes: 3}

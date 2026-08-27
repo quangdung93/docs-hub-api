@@ -46,6 +46,7 @@ type Revision struct {
 	MediaType         string     `json:"media_type"`
 	SHA256            string     `json:"sha256"`
 	ObjectKey         string     `json:"-"`
+	CanonicalTextKey  string     `json:"-"`
 	Status            string     `json:"status"`
 	SizeBytes         int64      `json:"size_bytes"`
 	ErrorCode         string     `json:"error_code,omitempty"`

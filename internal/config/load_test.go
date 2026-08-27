@@ -76,6 +76,30 @@ func TestLoad_RAGFlowFromEnvironment(t *testing.T) {
 	require.Equal(t, "ragflow-secret", cfg.RAGFlow.APIKey)
 }
 
+func TestLoad_MCPRequiresRAGFlow(t *testing.T) {
+	t.Setenv("APP_MCP_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_ENABLED", "false")
+
+	_, err := config.Load(localConfigPath(t))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mcp.enabled=true yêu cầu ragflow.enabled=true")
+}
+
+func TestLoad_MCPFromEnvironment(t *testing.T) {
+	t.Setenv("APP_MCP_ENABLED", "true")
+	t.Setenv("APP_MCP_REQUESTS_PER_WINDOW", "12")
+	t.Setenv("APP_RAGFLOW_ENABLED", "true")
+	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")
+	t.Setenv("APP_RAGFLOW_API_KEY", "ragflow-secret")
+
+	cfg, err := config.Load(localConfigPath(t))
+
+	require.NoError(t, err)
+	require.True(t, cfg.MCP.Enabled)
+	require.Equal(t, 12, cfg.MCP.RequestsPerWindow)
+}
+
 func TestLoad_RejectsHandlerTimeoutShorterThanRAGFlow(t *testing.T) {
 	t.Setenv("APP_RAGFLOW_ENABLED", "true")
 	t.Setenv("APP_RAGFLOW_BASE_URL", "http://ragflow.test:9380")

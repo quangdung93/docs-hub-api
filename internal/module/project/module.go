@@ -33,6 +33,7 @@ type Deps struct {
 type Module struct {
 	handler    *projecthttp.Handler
 	memberRepo domain.ProjectMemberRepository
+	service    usecase.Service
 }
 
 // New dựng toàn bộ chuỗi phụ thuộc của module project.
@@ -55,8 +56,12 @@ func New(d Deps) *Module {
 	return &Module{
 		handler:    projecthttp.NewHandler(svc),
 		memberRepo: memberRepo,
+		service:    svc,
 	}
 }
+
+// Service trả application usecase để delivery adapter khác dùng lại ACL.
+func (m *Module) Service() usecase.Service { return m.service }
 
 // Name trả về tên module (dùng khi log).
 func (m *Module) Name() string { return "project" }

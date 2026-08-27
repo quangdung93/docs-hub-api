@@ -30,19 +30,19 @@ type documentModel struct {
 func (documentModel) TableName() string { return "documents" }
 
 type revisionModel struct {
-	ID, DocumentID, ProjectID         string
-	ProjectVersionID, ChangeRequestID *string
-	RevisionNo                        int
-	FileName, MediaType               string
-	SizeBytes                         int64
-	SHA256, ObjectKey, Status         string
-	ErrorCode, ErrorDetail            string     `gorm:"column:error_detail_sanitized"`
-	RAGFlowDocumentID                 *string    `gorm:"column:ragflow_document_id"`
-	RAGFlowSyncStatus                 string     `gorm:"column:ragflow_sync_status"`
-	RAGFlowLastError                  string     `gorm:"column:ragflow_last_error"`
-	RAGFlowSyncedAt                   *time.Time `gorm:"column:ragflow_synced_at"`
-	CreatedBy                         string
-	CreatedAt, UpdatedAt              time.Time
+	ID, DocumentID, ProjectID                   string
+	ProjectVersionID, ChangeRequestID           *string
+	RevisionNo                                  int
+	FileName, MediaType                         string
+	SizeBytes                                   int64
+	SHA256, ObjectKey, CanonicalTextKey, Status string
+	ErrorCode, ErrorDetail                      string     `gorm:"column:error_detail_sanitized"`
+	RAGFlowDocumentID                           *string    `gorm:"column:ragflow_document_id"`
+	RAGFlowSyncStatus                           string     `gorm:"column:ragflow_sync_status"`
+	RAGFlowLastError                            string     `gorm:"column:ragflow_last_error"`
+	RAGFlowSyncedAt                             *time.Time `gorm:"column:ragflow_synced_at"`
+	CreatedBy                                   string
+	CreatedAt, UpdatedAt                        time.Time
 }
 
 func (revisionModel) TableName() string { return "document_revisions" }
@@ -310,7 +310,8 @@ func toRevision(m revisionModel) *domain.Revision {
 		ProjectID: uuid.MustParse(m.ProjectID), CreatedBy: uuid.MustParse(m.CreatedBy),
 		Scope:      domain.Scope{VersionID: ptrID(m.ProjectVersionID), ChangeRequestID: ptrID(m.ChangeRequestID)},
 		RevisionNo: m.RevisionNo, FileName: m.FileName, MediaType: m.MediaType,
-		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey, Status: m.Status,
+		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey,
+		CanonicalTextKey: m.CanonicalTextKey, Status: m.Status,
 		ErrorCode: m.ErrorCode, ErrorDetail: m.ErrorDetail, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 		RAGFlowDocumentID: stringOrEmpty(m.RAGFlowDocumentID), RAGFlowSyncStatus: m.RAGFlowSyncStatus,
 		RAGFlowLastError: m.RAGFlowLastError, RAGFlowSyncedAt: m.RAGFlowSyncedAt,

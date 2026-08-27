@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -19,20 +20,24 @@ import (
 //   - /public/api/v1   : không yêu cầu xác thực (health, dev-token, profile công khai...).
 //
 // Theo templates/02, KHÔNG lặp prefix /api/v1 vô nghĩa; ở đây tách rõ internal vs public.
-func registerRoutes(engine *gin.Engine, cfg *config.Config, infra *Infra, modules []Module) error {
+func registerRoutes(
+	engine *gin.Engine, cfg *config.Config, infra *Infra, modules []Module, mcpHandler http.Handler,
+) error {
 	public := engine.Group("/public/api/v1")
 	internal := engine.Group("/internal/api/v1")
+	var authenticated gin.HandlerFunc
 	if cfg.App.IsLocal() {
 		actor, err := loadLocalActor(infra)
 		if err != nil {
 			return err
 		}
-		internal.Use(middleware.LocalActor(actor))
+		authenticated = middleware.LocalActor(actor)
 		infra.Log.Warn("Đã TẮT JWT authentication cho internal API ở local",
 			zap.String("actor_email", actor.Email), zap.String("actor_id", actor.UserID))
 	} else {
-		internal.Use(middleware.Auth(infra.JWT, infra.Cache))
+		authenticated = middleware.Auth(infra.JWT, infra.Cache)
 	}
+	internal.Use(authenticated)
 
 	// JWKS công bố khóa CÔNG KHAI để dịch vụ khác tự verify chữ ký token mà
 	// không cần biết khóa riêng. Chỉ có ý nghĩa với RS256 — HS256 dùng secret
@@ -56,6 +61,12 @@ func registerRoutes(engine *gin.Engine, cfg *config.Config, infra *Infra, module
 
 	for _, m := range modules {
 		m.RegisterRoutes(internal, public)
+	}
+	if mcpHandler != nil {
+		mcpGroup := engine.Group("/mcp")
+		mcpGroup.Use(authenticated)
+		mcpGroup.Any("", gin.WrapH(mcpHandler))
+		infra.Log.Info("Đã bật MCP Streamable HTTP tại /mcp")
 	}
 	return nil
 }

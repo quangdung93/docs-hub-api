@@ -11,6 +11,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/ai/ragflow"
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/audit"
 	rediscache "github.com/quangdung93/docs-hub-api/internal/infrastructure/cache/redis"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/mq"
@@ -38,6 +39,7 @@ type Infra struct {
 	RAG         port.RAGClient
 	Hasher      *hashing.Hasher
 	JWT         *jwt.Manager
+	Auditor     port.Auditor
 
 	Checkers []port.HealthChecker
 }
@@ -90,6 +92,7 @@ func (i *Infra) initPostgres(cfg *config.Config, log *zap.Logger) error {
 	}
 	i.DB = db
 	i.Tx = postgres.NewTxManager(db)
+	i.Auditor = audit.NewPostgreSQL(db)
 	i.Checkers = append(i.Checkers, postgres.NewHealthChecker(db))
 	return nil
 }

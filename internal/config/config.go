@@ -28,6 +28,7 @@ type Config struct {
 	RAGFlow   RAGFlowConfig   `mapstructure:"ragflow"`
 	Ingestion IngestionConfig `mapstructure:"ingestion"`
 	Project   ProjectConfig   `mapstructure:"project" validate:"required"`
+	MCP       MCPConfig       `mapstructure:"mcp"`
 }
 
 // StorageConfig chọn backend lưu tài liệu gốc.
@@ -69,6 +70,15 @@ type IngestionConfig struct {
 	ChunkLines   int           `mapstructure:"chunk_lines"`
 	OverlapLines int           `mapstructure:"overlap_lines"`
 	BatchSize    int           `mapstructure:"batch_size"`
+}
+
+// MCPConfig cấu hình cổng Streamable HTTP read-only dành cho AI client.
+type MCPConfig struct {
+	Enabled           bool          `mapstructure:"enabled"`
+	RequestsPerWindow int           `mapstructure:"requests_per_window" validate:"min=1"`
+	Window            time.Duration `mapstructure:"window" validate:"required"`
+	MaxSourceLines    int           `mapstructure:"max_source_lines" validate:"min=1,max=1000"`
+	MaxExcerptChars   int           `mapstructure:"max_excerpt_chars" validate:"min=1024,max=262144"`
 }
 
 // Environment là các môi trường được hỗ trợ.

@@ -134,6 +134,9 @@ func checkSafety(cfg *Config) error {
 			return fmt.Errorf("production yêu cầu ragflow.base_url dùng HTTPS")
 		}
 	}
+	if cfg.MCP.Enabled && !cfg.RAGFlow.Enabled {
+		return fmt.Errorf("mcp.enabled=true yêu cầu ragflow.enabled=true cho search/ask tools")
+	}
 
 	return nil
 }
@@ -183,6 +186,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ingestion.chunk_lines", 80)
 	v.SetDefault("ingestion.overlap_lines", 10)
 	v.SetDefault("ingestion.batch_size", 16)
+	v.SetDefault("mcp.enabled", false)
+	v.SetDefault("mcp.requests_per_window", 30)
+	v.SetDefault("mcp.window", "1m")
+	v.SetDefault("mcp.max_source_lines", 200)
+	v.SetDefault("mcp.max_excerpt_chars", 65536)
 
 	v.SetDefault("timeout.read_header", "5s")
 	v.SetDefault("timeout.read", "15s")

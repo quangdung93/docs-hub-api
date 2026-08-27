@@ -361,6 +361,9 @@ func (s *service) Delete(ctx context.Context, in DeleteProjectInput) error {
 
 // GetByID lấy chi tiết một dự án.
 func (s *service) GetByID(ctx context.Context, projectID uuid.UUID) (*domain.Project, error) {
+	if _, err := s.authorizeProject(ctx, projectID, false); err != nil {
+		return nil, err
+	}
 	p, err := s.projectRepo.FindByID(ctx, projectID)
 	if err != nil {
 		if isRepoErr(err, domain.ErrNotFound) {

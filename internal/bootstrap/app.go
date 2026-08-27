@@ -44,14 +44,14 @@ func Run(ctx context.Context, cfg *config.Config, log *zap.Logger) error {
 	}
 
 	// 3) Module nghiệp vụ.
-	modules := buildModules(cfg, infra)
+	modules, mcpHandler := buildModules(cfg, infra)
 
 	// 4) Engine + route.
 	extra := buildGlobalInfraMiddleware(cfg, infra)
 	engine := httpserver.NewAPIEngine(httpserver.EngineDeps{
 		Config: cfg, Logger: log, Metrics: metrics, Extra: extra,
 	})
-	if err = registerRoutes(engine, cfg, infra, modules); err != nil {
+	if err = registerRoutes(engine, cfg, infra, modules, mcpHandler); err != nil {
 		return fmt.Errorf("đăng ký route: %w", err)
 	}
 	registerSwagger(engine, cfg)

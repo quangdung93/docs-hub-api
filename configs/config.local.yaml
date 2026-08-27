@@ -119,3 +119,10 @@ ingestion:
   chunk_lines: 80
   overlap_lines: 10
   batch_size: 16
+
+mcp:
+  enabled: false
+  requests_per_window: 30
+  window: 1m
+  max_source_lines: 200
+  max_excerpt_chars: 65536

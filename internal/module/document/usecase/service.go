@@ -294,6 +294,24 @@ func (s *Service) Download(ctx context.Context, pid, did, rid uuid.UUID) (*domai
 	}
 	return r, reader, nil
 }
+
+// CanonicalSource mở bản text chuẩn hóa dùng cho citation sau khi kiểm tra ACL.
+func (s *Service) CanonicalSource(
+	ctx context.Context, pid, did, rid uuid.UUID,
+) (*domain.Revision, io.ReadCloser, error) {
+	r, err := s.Status(ctx, pid, did, rid)
+	if err != nil {
+		return nil, nil, err
+	}
+	if r.CanonicalTextKey == "" || r.Status != "ready" {
+		return nil, nil, apperr.BadRequest("Nguồn canonical của revision chưa sẵn sàng")
+	}
+	reader, err := s.store.GetReader(ctx, r.CanonicalTextKey)
+	if err != nil {
+		return nil, nil, apperr.Internal("Không thể mở nguồn canonical").WithCause(err)
+	}
+	return r, reader, nil
+}
 func (s *Service) Delete(ctx context.Context, pid, did uuid.UUID) error {
 	actor, err := s.authorize(ctx, pid, true)
 	if err != nil {

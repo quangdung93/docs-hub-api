@@ -1,12 +1,15 @@
 package bootstrap
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/quangdung93/docs-hub-api/internal/config"
 	"github.com/quangdung93/docs-hub-api/internal/module/auth"
 	"github.com/quangdung93/docs-hub-api/internal/module/chat"
 	"github.com/quangdung93/docs-hub-api/internal/module/document"
+	"github.com/quangdung93/docs-hub-api/internal/module/mcpserver"
 	"github.com/quangdung93/docs-hub-api/internal/module/project"
 	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
@@ -21,7 +24,12 @@ type Module interface {
 
 // buildModules dựng danh sách module từ hạ tầng. Đây là nơi DUY NHẤT bootstrap
 // biết về từng feature cụ thể.
-func buildModules(cfg *config.Config, infra *Infra) []Module {
+func buildModules(cfg *config.Config, infra *Infra) ([]Module, http.Handler) {
+	projectModule := project.New(project.Deps{
+		DB: infra.DB, Tx: infra.Tx, Clock: infra.clock(), RAG: infra.RAG,
+		DatasetPrefix: cfg.RAGFlow.DatasetPrefix, ObjectStore: infra.ObjectStore,
+		AvatarMaxBytes: cfg.Project.AvatarMaxBytes, AvatarPresignedTTL: cfg.Project.AvatarPresignedTTL,
+	})
 	modules := []Module{
 		user.New(user.Deps{
 			DB:        infra.DB,
@@ -41,31 +49,36 @@ func buildModules(cfg *config.Config, infra *Infra) []Module {
 			SecureCookie: !cfg.App.IsLocal(),
 			Cache:        infra.Cache,
 		}),
-		project.New(project.Deps{
-			DB:                 infra.DB,
-			Tx:                 infra.Tx,
-			Clock:              infra.clock(),
-			RAG:                infra.RAG,
-			DatasetPrefix:      cfg.RAGFlow.DatasetPrefix,
-			ObjectStore:        infra.ObjectStore,
-			AvatarMaxBytes:     cfg.Project.AvatarMaxBytes,
-			AvatarPresignedTTL: cfg.Project.AvatarPresignedTTL,
-		}),
+		projectModule,
 		// file.New(...), notification.New(...), tenant.New(...) — tương lai.
 	}
+	var documentModule *document.Module
 	if infra.ObjectStore != nil {
-		modules = append(modules, document.New(document.Deps{
+		documentModule = document.New(document.Deps{
 			DB: infra.DB, Tx: infra.Tx, Store: infra.ObjectStore, Clock: infra.clock(),
 			BypassProjectACL: cfg.App.IsLocal(),
-		}))
+		})
+		modules = append(modules, documentModule)
 	}
+	var retrievalModule *retrieval.Module
+	var chatModule *chat.Module
 	if infra.RAG != nil {
-		retrievalModule := retrieval.New(retrieval.Deps{
+		retrievalModule = retrieval.New(retrieval.Deps{
 			DB: infra.DB, RAG: infra.RAG, BypassACL: cfg.App.IsLocal(),
 		})
-		modules = append(modules, retrievalModule, chat.New(chat.Deps{
+		chatModule = chat.New(chat.Deps{
 			DB: infra.DB, RAG: infra.RAG, Clock: infra.clock(),
-		}))
+		})
+		modules = append(modules, retrievalModule, chatModule)
 	}
-	return modules
+	if !cfg.MCP.Enabled {
+		return modules, nil
+	}
+	mcpModule := mcpserver.New(mcpserver.Deps{
+		Projects: projectModule.Service(), Retrieval: retrievalModule.Service(), Chat: chatModule.Service(),
+		Documents: documentModule.Service(), Cache: infra.Cache, Auditor: infra.Auditor,
+		RequestsPerWindow: cfg.MCP.RequestsPerWindow, Window: cfg.MCP.Window,
+		MaxSourceLines: cfg.MCP.MaxSourceLines, MaxExcerptChars: cfg.MCP.MaxExcerptChars,
+	})
+	return modules, mcpModule.Handler()
 }

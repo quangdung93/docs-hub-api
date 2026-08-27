@@ -106,3 +106,10 @@ ragflow:
   upload_timeout: 2m
   poll_interval: 3s
   max_poll_duration: 15m
+
+mcp:
+  enabled: false
+  requests_per_window: 30
+  window: 1m
+  max_source_lines: 200
+  max_excerpt_chars: 65536
