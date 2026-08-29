@@ -71,9 +71,11 @@ func (integrationEmbedder) Embed(_ context.Context, texts []string) ([][]float32
 }
 
 func TestProcessor_UploadDenChunks(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_DSN")
+	// TEST_POSTGRES_DSN chứ không phải TEST_DATABASE_DSN: cả hai CI đều đặt tên
+	// trước, nên suốt thời gian qua test này luôn bị Skip, chưa từng chạy lần nào.
+	dsn := os.Getenv("TEST_POSTGRES_DSN")
 	if dsn == "" {
-		t.Skip("thiếu TEST_DATABASE_DSN")
+		t.Skip("cần TEST_POSTGRES_DSN để chạy test này")
 	}
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
@@ -88,8 +90,8 @@ func TestProcessor_UploadDenChunks(t *testing.T) {
 		userID, userID.String()+"@test.local", "Integration", "hash").Error)
 	require.NoError(t, db.Exec(`INSERT INTO projects(id,code,name,owner_id) VALUES(?,?,?,?)`,
 		projectID, "it-"+projectID.String(), "Integration", userID).Error)
-	require.NoError(t, db.Exec(`INSERT INTO project_members(project_id,user_id,role) VALUES(?,?,'owner')`,
-		projectID, userID).Error)
+	require.NoError(t, db.Exec(`INSERT INTO project_members(id,project_id,user_id,role) VALUES(?,?,?,'owner')`,
+		uuid.New(), projectID, userID).Error)
 	require.NoError(t, db.Exec(`INSERT INTO project_versions(id,project_id,label,sequence_no,status,created_by)
 		VALUES(?,?,?,1,'draft',?)`, versionID, projectID, "v1", userID).Error)
 	require.NoError(t, db.Exec(`INSERT INTO documents(id,project_id,title,document_key,created_by)

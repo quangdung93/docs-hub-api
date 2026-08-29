@@ -2,6 +2,7 @@ package ingestion
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,10 @@ type ragWork struct {
 	ObjectKey        string  `gorm:"column:object_key"`
 	FileName         string  `gorm:"column:file_name"`
 	MediaType        string  `gorm:"column:media_type"`
+	// Attempt/MaxAttempts lấy từ ingestion_jobs để biết còn lượt thử lại không.
+	// claim đã tăng attempt trước khi trả về, nên Attempt là số lượt ĐÃ dùng.
+	Attempt     int `gorm:"column:attempt"`
+	MaxAttempts int `gorm:"column:max_attempts"`
 }
 
 func (p *RAGFlowProcessor) ProcessNext(ctx context.Context) (bool, error) {
@@ -134,6 +139,10 @@ func (p *RAGFlowProcessor) processCleanup(ctx context.Context) (bool, error) {
 }
 
 func (p *RAGFlowProcessor) failCleanup(ctx context.Context, w cleanupWork, cause error) {
+	// Cùng lý do như fail: ctx của công việc có thể đã bị huỷ vì SIGTERM, dùng
+	// lại thì không ghi được gì và event kẹt mãi ở 'processing'.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbWriteTimeout)
+	defer cancel()
 	status := "pending"
 	if w.Attempt >= 5 {
 		status = "failed"
@@ -148,6 +157,8 @@ func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
 	var claimed struct {
 		JobID              string `gorm:"column:job_id"`
 		DocumentRevisionID string `gorm:"column:document_revision_id"`
+		Attempt            int    `gorm:"column:attempt"`
+		MaxAttempts        int    `gorm:"column:max_attempts"`
 	}
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		const sql = `WITH next AS (
@@ -157,7 +168,7 @@ func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
 		) UPDATE ingestion_jobs j
 		SET status='running',attempt=attempt+1,updated_at=now()
 		FROM next WHERE j.id=next.id
-		RETURNING j.id AS job_id,j.document_revision_id`
+		RETURNING j.id AS job_id,j.document_revision_id,j.attempt,j.max_attempts`
 		return tx.Raw(sql).Scan(&claimed).Error
 	})
 	if err != nil {
@@ -179,6 +190,9 @@ func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
 		return nil, fmt.Errorf("revision %s không tồn tại", claimed.DocumentRevisionID)
 	}
 	w.JobID = claimed.JobID
+	// Gán SAU khi Scan: câu SELECT revision không trả hai cột này nên Scan sẽ
+	// để chúng ở giá trị zero, ghi đè mất giá trị lấy từ ingestion_jobs.
+	w.Attempt, w.MaxAttempts = claimed.Attempt, claimed.MaxAttempts
 	return &w, nil
 }
 
@@ -292,7 +306,8 @@ func (p *RAGFlowProcessor) ensureDataset(ctx context.Context, w *ragWork) (strin
 			return "", fmt.Errorf("đọc RAGFlow dataset mapping: %w", err)
 		}
 		if current != dataset.ID {
-			return "", fmt.Errorf("project đã map tới RAGFlow dataset khác")
+			// Vĩnh viễn: mâu thuẫn dữ liệu, phải người sửa chứ thử lại vô ích.
+			return "", permanent(errors.New("project đã map tới RAGFlow dataset khác"))
 		}
 	}
 	return dataset.ID, nil
@@ -309,7 +324,10 @@ func (p *RAGFlowProcessor) waitReady(ctx context.Context, datasetID, documentID 
 			return fmt.Errorf("đọc trạng thái RAGFlow document: %w", err)
 		}
 		if document.Failed() {
-			return fmt.Errorf("RAGFlow parse thất bại: %s", sanitizeDetail(document.ProgressMsg))
+			// Vĩnh viễn: RAGFlow đã đọc xong file và từ chối nó. Lần chạy sau
+			// cũng hỏng y hệt (ví dụ DOCX tham chiếu ảnh không có trong gói
+			// zip), nên thử lại chỉ tốn công.
+			return permanent(fmt.Errorf("RAGFlow parse thất bại: %s", sanitizeDetail(document.ProgressMsg)))
 		}
 		if document.Ready() {
 			return nil
@@ -329,8 +347,21 @@ func (p *RAGFlowProcessor) updateRevision(ctx context.Context, revisionID string
 	return nil
 }
 
+// fail quyết định số phận của một job vừa hỏng: xếp lại hàng đợi hay đánh hỏng
+// hẳn. Lỗi tạm thời (timeout, mạng, 5xx, ctx bị huỷ do SIGTERM lúc deploy) mà
+// còn lượt thì trả job về 'pending' kèm backoff; chỉ đánh 'failed' khi lỗi là
+// vĩnh viễn hoặc đã hết max_attempts.
 func (p *RAGFlowProcessor) fail(ctx context.Context, w *ragWork, cause error) {
+	// Ghi bằng ctx TÁCH RỜI: khi worker nhận SIGTERM thì ctx của công việc đã bị
+	// huỷ, dùng lại nó thì GORM từ chối chạy, lỗi bị nuốt và job kẹt mãi ở
+	// 'running' — mà claim chỉ nhặt 'pending', tức là kẹt vĩnh viễn và im lặng.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbWriteTimeout)
+	defer cancel()
 	detail := sanitizeDetail(cause.Error())
+	if retryable(cause) && w.Attempt < w.MaxAttempts {
+		p.retryLater(ctx, w, detail)
+		return
+	}
 	_ = p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		_ = tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
 			"status": "failed", "ragflow_sync_status": "failed", "ragflow_last_error": detail,
@@ -338,6 +369,24 @@ func (p *RAGFlowProcessor) fail(ctx context.Context, w *ragWork, cause error) {
 		}).Error
 		return tx.Table("ingestion_jobs").Where("id=?", w.JobID).
 			Updates(map[string]any{"status": "failed", "last_error": detail, "updated_at": time.Now().UTC()}).Error
+	})
+}
+
+// retryLater trả job về hàng đợi kèm backoff luỹ thừa, cùng cách failCleanup đã
+// làm cho nhánh dọn dẹp. Revision GIỮ NGUYÊN trạng thái đang xử lý — người dùng
+// không nên thấy tài liệu báo hỏng chỉ vì một lượt thử trượt; chỉ ghi lại lỗi
+// gần nhất để còn quan sát được.
+func (p *RAGFlowProcessor) retryLater(ctx context.Context, w *ragWork, detail string) {
+	now := time.Now().UTC()
+	backoff := time.Duration(1<<min(w.Attempt, 6)) * time.Second
+	_ = p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		_ = tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
+			"ragflow_last_error": detail, "updated_at": now,
+		}).Error
+		return tx.Table("ingestion_jobs").Where("id=?", w.JobID).Updates(map[string]any{
+			"status": "pending", "last_error": detail,
+			"available_at": now.Add(backoff), "updated_at": now,
+		}).Error
 	})
 }
 

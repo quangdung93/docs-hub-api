@@ -57,6 +57,12 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("RAGFlow lỗi: http=%d code=%d message=%s", e.HTTPStatus, e.Code, e.Message)
 }
 
+// IsRetryable phơi cờ Retryable ra dưới dạng phương thức để tầng gọi phân loại
+// lỗi mà KHÔNG phải import package hạ tầng này: bên ingestion chỉ cần khai một
+// interface nhỏ `interface{ IsRetryable() bool }` rồi errors.As — cùng lối với
+// net.Error phơi Timeout().
+func (e *APIError) IsRetryable() bool { return e.Retryable }
+
 type envelope struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`
