@@ -165,6 +165,21 @@ jobs:
             logs --tail 50 api
           exit 1
 
+      # Không gửi token: 401 chứng minh route MCP đã được mount và auth vẫn bảo vệ.
+      - name: Kiểm tra MCP đã bật và yêu cầu xác thực
+        run: |
+          status=$(curl -sS -o /tmp/mcp-smoke-response -w '%{http_code}' \
+            -X POST http://localhost:8080/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"deploy-smoke","version":"1.0"}}}')
+          if [[ "$status" != "401" ]]; then
+            echo "::error::MCP smoke test mong đợi HTTP 401 nhưng nhận $status"
+            cat /tmp/mcp-smoke-response
+            exit 1
+          fi
+          echo "✅ MCP đã bật và Bearer JWT đang được yêu cầu"
+
       # Worker ingestion không có endpoint health nên bước readyz ở trên không
       # nói gì về nó. In log để deploy nào cũng thấy ngay nó sống hay chết —
       # không có bước này thì worker chết âm thầm mà pipeline vẫn xanh.
