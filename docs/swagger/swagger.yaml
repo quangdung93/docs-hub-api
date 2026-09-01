@@ -307,6 +307,31 @@ definitions:
         example: queued
         type: string
     type: object
+  http.UATReportRequest:
+    properties:
+      account_test:
+        type: string
+      change_request_id:
+        type: string
+      due_date:
+        type: string
+      format:
+        enum:
+        - xlsx
+        - pdf
+        example: xlsx
+        type: string
+      pm:
+        type: string
+      po:
+        type: string
+      project_version_id:
+        type: string
+      scope_test:
+        type: string
+      start_date:
+        type: string
+    type: object
   http.UpdateProjectRequest:
     properties:
       description:
@@ -1280,6 +1305,50 @@ paths:
       security:
       - BearerAuth: []
       summary: Xem file revision inline
+      tags:
+      - documents
+  /internal/api/v1/projects/{id}/documents/uat-report:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Điền tài liệu trong phạm vi đã chọn (version, change request,
+        hoặc để trống cả hai = toàn dự án) vào template UAT Report chuẩn ISC.
+        Chỉ thành viên quyền editor trở lên mới xuất được. format: "xlsx" (mặc định) hoặc "pdf".
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: PO/PM/phạm vi/định dạng UAT — có thể bỏ trống toàn bộ
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/http.UATReportRequest'
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xuất UAT Report theo template chuẩn ISC
       tags:
       - documents
   /internal/api/v1/projects/{id}/documents/uploads:
