@@ -23,13 +23,6 @@ type Scope struct {
 
 func (s Scope) Valid() bool { return (s.VersionID == nil) != (s.ChangeRequestID == nil) }
 
-// ScopeKindVersion và ScopeKindChangeRequest là giá trị "kind" mà ScopeMeta
-// trả về — dùng chung giữa repository và usecase để tránh lặp magic string.
-const (
-	ScopeKindVersion       = "version"
-	ScopeKindChangeRequest = "change_request"
-)
-
 type Document struct {
 	ID          uuid.UUID `json:"id"`
 	ProjectID   uuid.UUID `json:"project_id"`
@@ -79,17 +72,6 @@ type Filter struct {
 	VersionID, ChangeRequestID *uuid.UUID
 }
 
-// UATItem là 1 dòng trong sheet Report 1_Module của UAT Report — tài liệu
-// (document) cùng revision mới nhất khớp scope được chọn khi export.
-type UATItem struct {
-	DocumentID uuid.UUID
-	Title      string
-	FileName   string
-	RevisionNo int
-	Status     string
-	UpdatedAt  time.Time
-}
-
 type CreateRevisionParams struct {
 	DocumentID, RevisionID, ProjectID, ActorID                 uuid.UUID
 	Scope                                                      Scope
@@ -110,11 +92,4 @@ type Repository interface {
 	Update(ctx context.Context, projectID, documentID uuid.UUID, title, description string, version int) (*Document, error)
 	Retry(ctx context.Context, projectID, documentID, revisionID, actorID uuid.UUID) error
 	SoftDelete(ctx context.Context, projectID, documentID, actorID uuid.UUID) error
-
-	// ProjectMeta trả tên và code của project — dùng điền sheet Summary của UAT Report.
-	ProjectMeta(ctx context.Context, projectID uuid.UUID) (name, code string, err error)
-	// ScopeMeta trả nhãn hiển thị và loại scope ("version"/"change_request"/"" nếu là toàn dự án).
-	ScopeMeta(ctx context.Context, projectID uuid.UUID, scope Scope) (label, kind string, err error)
-	// UATItems liệt kê tài liệu (kèm revision mới nhất) khớp scope, dùng điền sheet Report 1_Module.
-	UATItems(ctx context.Context, projectID uuid.UUID, scope Scope) ([]UATItem, error)
 }

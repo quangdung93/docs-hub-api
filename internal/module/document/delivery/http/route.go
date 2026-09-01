@@ -7,7 +7,6 @@ func Register(rg *gin.RouterGroup, h *Handler) {
 	p.POST("/uploads", h.Upload)
 	p.POST("/uploads/presign", h.Presign)
 	p.POST("/uploads/:upload_id/complete", h.Complete)
-	p.POST("/uat-report", h.UATReport)
 	p.GET("", h.List)
 	p.GET("/:document_id", h.Detail)
 	p.PATCH("/:document_id", h.Update)

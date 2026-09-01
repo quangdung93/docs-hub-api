@@ -682,70 +682,6 @@
                 }
             }
         },
-        "/internal/api/v1/projects/{id}/documents/uat-report": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Điền tài liệu trong phạm vi đã chọn (version, change request,\nhoặc để trống cả hai = toàn dự án) vào template UAT Report chuẩn ISC.\nChỉ thành viên quyền editor trở lên mới xuất được. format: \"xlsx\" (mặc định) hoặc \"pdf\".",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/octet-stream"
-                ],
-                "tags": [
-                    "documents"
-                ],
-                "summary": "Xuất UAT Report theo template chuẩn ISC",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "format": "uuid",
-                        "description": "Project ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "PO/PM/phạm vi/định dạng UAT — có thể bỏ trống toàn bộ",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/http.UATReportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/response.Envelope"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.Envelope"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.Envelope"
-                        }
-                    }
-                }
-            }
-        },
         "/internal/api/v1/projects/{id}/documents/uploads": {
             "post": {
                 "security": [
@@ -2909,43 +2845,6 @@
                 "status": {
                     "type": "string",
                     "example": "queued"
-                }
-            }
-        },
-        "http.UATReportRequest": {
-            "type": "object",
-            "properties": {
-                "account_test": {
-                    "type": "string"
-                },
-                "change_request_id": {
-                    "type": "string"
-                },
-                "due_date": {
-                    "type": "string"
-                },
-                "format": {
-                    "type": "string",
-                    "enum": [
-                        "xlsx",
-                        "pdf"
-                    ],
-                    "example": "xlsx"
-                },
-                "pm": {
-                    "type": "string"
-                },
-                "po": {
-                    "type": "string"
-                },
-                "project_version_id": {
-                    "type": "string"
-                },
-                "scope_test": {
-                    "type": "string"
-                },
-                "start_date": {
-                    "type": "string"
                 }
             }
         },

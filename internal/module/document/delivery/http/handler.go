@@ -3,11 +3,9 @@ package http
 
 import (
 	"bufio"
-	"bytes"
 	"mime"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -439,68 +437,6 @@ func (h *Handler) serveFile(c *gin.Context, attachment bool) {
 		"X-Content-Type-Options": "nosniff",
 	}
 	c.DataFromReader(http.StatusOK, revision.SizeBytes, revision.MediaType, reader, header)
-}
-
-// UATReportRequest là body xuất UAT Report. Bỏ trống cả project_version_id
-// và change_request_id nghĩa là lấy toàn bộ tài liệu của project.
-type UATReportRequest struct {
-	ProjectVersionID string     `json:"project_version_id"`
-	ChangeRequestID  string     `json:"change_request_id"`
-	Format           string     `json:"format" example:"xlsx" enums:"xlsx,pdf"`
-	PO               string     `json:"po"`
-	PM               string     `json:"pm"`
-	AccountTest      string     `json:"account_test"`
-	ScopeTest        string     `json:"scope_test"`
-	StartDate        *time.Time `json:"start_date"`
-	DueDate          *time.Time `json:"due_date"`
-}
-
-// UATReport godoc
-// @Summary Xuất UAT Report theo template chuẩn ISC
-// @Description Điền tài liệu trong phạm vi đã chọn (version, change request,
-// @Description hoặc để trống cả hai = toàn dự án) vào template UAT Report chuẩn ISC.
-// @Description Chỉ thành viên quyền editor trở lên mới xuất được. format: "xlsx" (mặc định) hoặc "pdf".
-// @Tags documents
-// @Security BearerAuth
-// @Accept json
-// @Produce application/octet-stream
-// @Param id path string true "Project ID" format(uuid)
-// @Param body body UATReportRequest false "PO/PM/phạm vi/định dạng UAT — có thể bỏ trống toàn bộ"
-// @Success 200 {file} binary
-// @Failure 400 {object} response.Envelope
-// @Failure 401 {object} response.Envelope
-// @Failure 403 {object} response.Envelope
-// @Router /internal/api/v1/projects/{id}/documents/uat-report [post]
-func (h *Handler) UATReport(c *gin.Context) {
-	pid, ok := pathID(c, "id")
-	if !ok {
-		return
-	}
-	var req UATReportRequest
-	if c.Request.ContentLength > 0 {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			fail(c, apperr.BadRequest("Dữ liệu không hợp lệ"))
-			return
-		}
-	}
-	scope, ok := scopeIDs(c, req.ProjectVersionID, req.ChangeRequestID)
-	if !ok {
-		return
-	}
-	result, err := h.svc.ExportUATReport(c.Request.Context(), usecase.UATReportInput{
-		ProjectID: pid, Scope: scope, Format: req.Format, PO: req.PO, PM: req.PM,
-		AccountTest: req.AccountTest, ScopeTest: req.ScopeTest,
-		StartDate: req.StartDate, DueDate: req.DueDate,
-	})
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	header := map[string]string{
-		"Content-Disposition":    mime.FormatMediaType("attachment", map[string]string{"filename": result.FileName}),
-		"X-Content-Type-Options": "nosniff",
-	}
-	c.DataFromReader(http.StatusOK, int64(len(result.Content)), result.ContentType, bytes.NewReader(result.Content), header)
 }
 
 // Delete godoc

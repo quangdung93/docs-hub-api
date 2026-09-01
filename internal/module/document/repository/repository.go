@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,9 +69,9 @@ func (r *Repository) ScopeExists(ctx context.Context, projectID uuid.UUID, s dom
 	var count int64
 	q := postgres.DBFrom(ctx, r.db)
 	if s.VersionID != nil {
-		q = q.Table("project_versions").Where(whereProjectAndID, projectID, *s.VersionID)
+		q = q.Table("project_versions").Where("project_id=? AND id=?", projectID, *s.VersionID)
 	} else {
-		q = q.Table("change_requests").Where(whereProjectAndID, projectID, *s.ChangeRequestID)
+		q = q.Table("change_requests").Where("project_id=? AND id=?", projectID, *s.ChangeRequestID)
 	}
 	if err := q.Count(&count).Error; err != nil {
 		return false, err
@@ -274,77 +273,6 @@ func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) 
 	}
 	return postgres.DBFrom(ctx, r.db).Table("audit_logs").Create(audit).Error
 }
-func (r *Repository) ProjectMeta(ctx context.Context, pid uuid.UUID) (string, string, error) {
-	var m struct{ Name, Code string }
-	err := postgres.DBFrom(ctx, r.db).Table("projects").Select("name,code").
-		Where("id=? AND deleted_at IS NULL", pid).Take(&m).Error
-	if err != nil {
-		return "", "", mapErr(err)
-	}
-	return m.Name, m.Code, nil
-}
-
-const whereProjectAndID = "project_id=? AND id=?"
-
-func (r *Repository) ScopeMeta(ctx context.Context, pid uuid.UUID, s domain.Scope) (string, string, error) {
-	switch {
-	case s.VersionID != nil:
-		var m struct{ Label string }
-		err := postgres.DBFrom(ctx, r.db).Table("project_versions").Select("label").
-			Where(whereProjectAndID, pid, *s.VersionID).Take(&m).Error
-		if err != nil {
-			return "", "", mapErr(err)
-		}
-		return m.Label, domain.ScopeKindVersion, nil
-	case s.ChangeRequestID != nil:
-		var m struct{ Title string }
-		err := postgres.DBFrom(ctx, r.db).Table("change_requests").Select("title").
-			Where(whereProjectAndID, pid, *s.ChangeRequestID).Take(&m).Error
-		if err != nil {
-			return "", "", mapErr(err)
-		}
-		return m.Title, domain.ScopeKindChangeRequest, nil
-	default:
-		return "Toàn bộ tài liệu dự án", "", nil
-	}
-}
-
-// UATItems lấy revision mới nhất của mỗi document khớp scope (DISTINCT ON theo
-// document_id, sắp theo revision_no giảm dần) rồi sắp lại theo tiêu đề cho ổn định.
-func (r *Repository) UATItems(ctx context.Context, pid uuid.UUID, s domain.Scope) ([]domain.UATItem, error) {
-	// pgx dùng extended query protocol nên cần ép kiểu ::uuid tường minh —
-	// nếu không, tham số chỉ xuất hiện trong vế "? IS NULL" (không có cột nào
-	// để suy kiểu) sẽ lỗi "could not determine data type of parameter" (42P18).
-	const q = `SELECT DISTINCT ON (d.id) d.id AS document_id, d.title, r.file_name, r.revision_no, r.status, r.updated_at
-		FROM documents d JOIN document_revisions r ON r.document_id = d.id
-		WHERE d.project_id = ? AND d.deleted_at IS NULL
-			AND (?::uuid IS NULL OR r.project_version_id = ?::uuid)
-			AND (?::uuid IS NULL OR r.change_request_id = ?::uuid)
-		ORDER BY d.id, r.revision_no DESC`
-	var rows []struct {
-		DocumentID string
-		Title      string
-		FileName   string
-		RevisionNo int
-		Status     string
-		UpdatedAt  time.Time
-	}
-	err := postgres.DBFrom(ctx, r.db).Raw(q, pid, s.VersionID, s.VersionID, s.ChangeRequestID, s.ChangeRequestID).
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.UATItem, len(rows))
-	for i, row := range rows {
-		out[i] = domain.UATItem{
-			DocumentID: uuid.MustParse(row.DocumentID), Title: row.Title, FileName: row.FileName,
-			RevisionNo: row.RevisionNo, Status: row.Status, UpdatedAt: row.UpdatedAt,
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
-	return out, nil
-}
-
 func setScope(m *revisionModel, s domain.Scope) {
 	if s.VersionID != nil {
 		x := s.VersionID.String()

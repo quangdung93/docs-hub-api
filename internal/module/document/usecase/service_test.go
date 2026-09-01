@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +22,6 @@ type fakeRepo struct {
 	scope    bool
 	created  *domain.CreateRevisionParams
 	revision *domain.Revision
-	uatItems []domain.UATItem
 }
 
 func (f *fakeRepo) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
@@ -57,15 +55,6 @@ func (*fakeRepo) Update(context.Context, uuid.UUID, uuid.UUID, string, string, i
 }
 func (*fakeRepo) Retry(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error { return nil }
 func (*fakeRepo) SoftDelete(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error       { return nil }
-func (*fakeRepo) ProjectMeta(context.Context, uuid.UUID) (string, string, error) {
-	return "Demo Project", "DEMO", nil
-}
-func (*fakeRepo) ScopeMeta(context.Context, uuid.UUID, domain.Scope) (string, string, error) {
-	return "Toàn bộ tài liệu dự án", "", nil
-}
-func (f *fakeRepo) UATItems(context.Context, uuid.UUID, domain.Scope) ([]domain.UATItem, error) {
-	return f.uatItems, nil
-}
 
 type fakeStore struct {
 	data       []byte
@@ -255,56 +244,4 @@ func TestDownload_DocFileQuaObjectStore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, revision, gotRevision)
 	require.Equal(t, "abc", string(data))
-}
-
-func TestExportUATReport_ViewerBiTuChoi(t *testing.T) {
-	actor, pid := uuid.New(), uuid.New()
-	svc := New(&fakeRepo{role: "viewer"}, fakeTx{}, &fakeStore{}, fakeClock{})
-	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-
-	_, err := svc.ExportUATReport(ctx, UATReportInput{ProjectID: pid})
-	var technical *apperr.TechnicalError
-	require.ErrorAs(t, err, &technical)
-	require.Equal(t, 403, technical.HTTPStatus)
-}
-
-func TestExportUATReport_EditorXuatDuocCaXLSXVaPDF(t *testing.T) {
-	actor, pid := uuid.New(), uuid.New()
-	items := []domain.UATItem{{Title: "URD v1.0", FileName: "urd.docx", RevisionNo: 1, Status: "ready"}}
-	svc := New(&fakeRepo{role: "editor", uatItems: items}, fakeTx{}, &fakeStore{}, fakeClock{})
-	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-
-	xlsx, err := svc.ExportUATReport(ctx, UATReportInput{ProjectID: pid})
-	require.NoError(t, err)
-	require.True(t, strings.HasSuffix(xlsx.FileName, ".xlsx"))
-	require.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx.ContentType)
-	require.NotEmpty(t, xlsx.Content)
-
-	pdf, err := svc.ExportUATReport(ctx, UATReportInput{ProjectID: pid, Format: UATFormatPDF})
-	require.NoError(t, err)
-	require.True(t, strings.HasSuffix(pdf.FileName, ".pdf"))
-	require.Equal(t, "application/pdf", pdf.ContentType)
-	require.True(t, bytes.HasPrefix(pdf.Content, []byte("%PDF")))
-}
-
-func TestExportUATReport_DinhDangKhongHopLe(t *testing.T) {
-	actor, pid := uuid.New(), uuid.New()
-	svc := New(&fakeRepo{role: "owner", uatItems: []domain.UATItem{{Title: "x"}}}, fakeTx{}, &fakeStore{}, fakeClock{})
-	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-
-	_, err := svc.ExportUATReport(ctx, UATReportInput{ProjectID: pid, Format: "docx"})
-	var technical *apperr.TechnicalError
-	require.ErrorAs(t, err, &technical)
-	require.Equal(t, 400, technical.HTTPStatus)
-}
-
-func TestExportUATReport_KhongCoTaiLieuTraLoi400(t *testing.T) {
-	actor, pid := uuid.New(), uuid.New()
-	svc := New(&fakeRepo{role: "owner"}, fakeTx{}, &fakeStore{}, fakeClock{})
-	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-
-	_, err := svc.ExportUATReport(ctx, UATReportInput{ProjectID: pid})
-	var technical *apperr.TechnicalError
-	require.ErrorAs(t, err, &technical)
-	require.Equal(t, 400, technical.HTTPStatus)
 }
