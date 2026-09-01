@@ -7,8 +7,8 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"github.com/quangdung93/docs-hub-api/internal/module/document/assets"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/domain"
-	uattemplate "github.com/quangdung93/docs-hub-api/template"
 )
 
 const (
@@ -31,7 +31,7 @@ type uatWorkbookInput struct {
 // xlsx hoàn chỉnh. Không đụng tới Cover/Report2_Process/Guideline — giữ
 // nguyên như template gốc.
 func buildUATWorkbook(in uatWorkbookInput) ([]byte, error) {
-	f, err := excelize.OpenReader(bytes.NewReader(uattemplate.UATReportXLSX))
+	f, err := excelize.OpenReader(bytes.NewReader(assets.UATReportXLSX))
 	if err != nil {
 		return nil, fmt.Errorf("mở template UAT: %w", err)
 	}

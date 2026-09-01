@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-pdf/fpdf"
 
-	uattemplate "github.com/quangdung93/docs-hub-api/template"
+	"github.com/quangdung93/docs-hub-api/internal/module/document/assets"
 )
 
 const (
@@ -21,8 +21,8 @@ func buildUATPDF(in uatWorkbookInput) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	// Font registry nằm trên từng *Fpdf instance, không dùng chung được giữa
 	// các request — phải đăng ký lại (không nặng: chỉ parse bytes đã nhúng sẵn).
-	pdf.AddUTF8FontFromBytes(uatPDFFontFamily, "", uattemplate.PDFFontRegular)
-	pdf.AddUTF8FontFromBytes(uatPDFFontFamily, "B", uattemplate.PDFFontBold)
+	pdf.AddUTF8FontFromBytes(uatPDFFontFamily, "", assets.PDFFontRegular)
+	pdf.AddUTF8FontFromBytes(uatPDFFontFamily, "B", assets.PDFFontBold)
 	pdf.SetMargins(15, 15, 15)
 	pdf.SetAutoPageBreak(true, 15)
 	pdf.AddPage()

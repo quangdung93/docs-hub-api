@@ -1,6 +1,7 @@
-// Package template nhúng các file mẫu (template) tài liệu chuẩn ISC vào binary
-// để không phụ thuộc đường dẫn đĩa lúc chạy — xem ADR liên quan tới UAT Report.
-package template
+// Package assets nhúng tài nguyên tĩnh (template, font) mà module document
+// cần lúc chạy vào binary — chỉ dùng nội bộ module này nên đặt dưới internal/
+// thay vì một package top-level dùng chung.
+package assets
 
 import _ "embed"
 
@@ -13,7 +14,7 @@ var UATReportXLSX []byte
 
 // PDFFontRegular và PDFFontBold là font DejaVu Sans nhúng sẵn để sinh UAT
 // Report bản PDF — font PDF built-in (Helvetica/Arial) không có dấu tiếng
-// Việt, DejaVu Sans thì có đầy đủ. Xem template/fonts/LICENSE.txt.
+// Việt, DejaVu Sans thì có đầy đủ. Xem fonts/LICENSE.txt.
 //
 //go:embed "fonts/DejaVuSans.ttf"
 var PDFFontRegular []byte
