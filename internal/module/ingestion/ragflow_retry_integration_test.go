@@ -26,6 +26,11 @@ type ragStub struct {
 	// SIGTERM ập tới ĐÚNG LÚC đang chờ RAGFlow — huỷ ctx sớm hơn thì claim đã
 	// hỏng trước và job không bao giờ được nhặt, tức là không tái hiện đúng cảnh.
 	onGetDocument func()
+	// deletedDataset/deletedIDs ghi lại lời gọi DeleteDocuments. Nhánh cleanup
+	// chỉ kiểm chứng được bằng cách hỏi "RAGFlow CÓ được yêu cầu xoá không";
+	// nhìn trạng thái trong DB là chưa đủ, vì lỗi cũ đánh 'succeeded' mà không xoá.
+	deletedDataset string
+	deletedIDs     []string
 }
 
 func (*ragStub) Health(context.Context) error { return nil }
@@ -37,9 +42,13 @@ func (s *ragStub) FindDatasetByName(context.Context, string) (*port.RAGDataset, 
 }
 func (*ragStub) UpdateDataset(context.Context, string, string, string) error { return nil }
 func (*ragStub) DeleteDatasets(context.Context, []string) error              { return nil }
-func (*ragStub) DeleteDocuments(context.Context, string, []string) error     { return nil }
-func (*ragStub) StartParsing(context.Context, string, []string) error        { return nil }
-func (*ragStub) StopParsing(context.Context, string, []string) error         { return nil }
+func (s *ragStub) DeleteDocuments(_ context.Context, datasetID string, ids []string) error {
+	s.deletedDataset = datasetID
+	s.deletedIDs = append(s.deletedIDs, ids...)
+	return nil
+}
+func (*ragStub) StartParsing(context.Context, string, []string) error { return nil }
+func (*ragStub) StopParsing(context.Context, string, []string) error  { return nil }
 func (*ragStub) UpdateDocumentMetadata(context.Context, string, []string, map[string]string) error {
 	return nil
 }

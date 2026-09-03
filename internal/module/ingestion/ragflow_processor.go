@@ -104,10 +104,20 @@ func (p *RAGFlowProcessor) processCleanup(ctx context.Context) (bool, error) {
 	w := cleanupWork{EventID: claimed.EventID, DocumentID: claimed.AggregateID, Attempt: claimed.Attempt}
 	const mappingSQL = `SELECT d.project_id,p.ragflow_dataset_id AS dataset_id
 		FROM documents d JOIN projects p ON p.id=d.project_id WHERE d.id=?`
-	if err = p.db.WithContext(ctx).Raw(mappingSQL, w.DocumentID).Scan(&w).Error; err != nil {
+	// Scan vào struct PHỤ, không vào thẳng w: GORM ghi đè TOÀN BỘ struct đích, nên
+	// những trường câu SELECT không trả về sẽ bị xoá trắng. Scan thẳng vào w thì
+	// EventID/DocumentID/Attempt vừa gán ở trên hoá rỗng, mọi lệnh phía sau chạy
+	// với chuỗi rỗng và Postgres từ chối vì cột là uuid — lỗi lại bị nuốt trong
+	// failCleanup, để event kẹt vĩnh viễn ở 'processing'. Cùng lớp lỗi với claim.
+	var mapping struct {
+		ProjectID string `gorm:"column:project_id"`
+		DatasetID string `gorm:"column:dataset_id"`
+	}
+	if err = p.db.WithContext(ctx).Raw(mappingSQL, w.DocumentID).Scan(&mapping).Error; err != nil {
 		p.failCleanup(ctx, w, err)
 		return true, err
 	}
+	w.ProjectID, w.DatasetID = mapping.ProjectID, mapping.DatasetID
 	var documentIDs []string
 	if err = p.db.WithContext(ctx).Table("document_revisions").Where("document_id=? AND ragflow_document_id IS NOT NULL", w.DocumentID).
 		Pluck("ragflow_document_id", &documentIDs).Error; err != nil {
