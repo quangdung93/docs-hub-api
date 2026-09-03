@@ -67,6 +67,77 @@ func TestBuildUATWorkbook_FillsSummaryAndModuleRows(t *testing.T) {
 	require.Equal(t, "2", no2)
 }
 
+// Template chuẩn ISC mang sẵn dữ liệu mẫu của một dự án khác. Không dọn thì
+// báo cáo xuất ra lẫn thông tin người khác — mentor đã phản ánh chuyện này.
+func TestBuildUATWorkbook_DonDuLieuMauCuaTemplate(t *testing.T) {
+	f := moWorkbook(t, uatWorkbookInput{
+		ProjectName: "Docs Hub",
+		Items:       []domain.UATItem{{DocumentID: uuid.New(), Title: "URD", FileName: "urd.docx", RevisionNo: 1}},
+	})
+	defer f.Close()
+
+	// D6 (Account Test): template có sẵn "1. HuongTTT38 - ISC". Không truyền
+	// account_test thì phải TRỐNG, không được để lộ tên người của dự án khác.
+	account, err := f.GetCellValue(uatSheetSummary, "D6")
+	require.NoError(t, err)
+	require.Empty(t, account, "D6 phải trống khi không truyền account_test")
+
+	// K4/K5: ngày test Round 1 của dự án mẫu (16/10/2025 - 20/10/2025), lưu
+	// dạng số serial nên nhìn qua tưởng mã số — dễ bị đọc nhầm là ngày thật.
+	for _, cell := range []string{"K4", "K5"} {
+		v, cellErr := f.GetCellValue(uatSheetModule, cell)
+		require.NoError(t, cellErr)
+		require.Empty(t, v, "%s phải trống, đây là ngày mẫu của template", cell)
+	}
+
+	// Report2 _Process: dọn test case mẫu nhưng GIỮ tiêu đề cột, vì sheet này
+	// vẫn được giữ lại cho người dùng tự điền.
+	tieuDe, err := f.GetCellValue(uatSheetProcess, "A1")
+	require.NoError(t, err)
+	require.Equal(t, "STT", tieuDe, "phải giữ nguyên tiêu đề cột")
+	for _, cell := range []string{"B2", "B3", "C3", "D3", "E3", "F3", "G3", "G4"} {
+		v, cellErr := f.GetCellValue(uatSheetProcess, cell)
+		require.NoError(t, cellErr)
+		require.Empty(t, v, "%s là test case mẫu, phải dọn", cell)
+	}
+}
+
+// Dọn dữ liệu mẫu KHÔNG được đụng tới phần khung của biểu mẫu.
+func TestBuildUATWorkbook_GiuNguyenKhungBieuMau(t *testing.T) {
+	f := moWorkbook(t, uatWorkbookInput{
+		ProjectName: "Docs Hub", AccountTest: "1. QA-ISC",
+		Items: []domain.UATItem{{DocumentID: uuid.New(), Title: "URD", FileName: "urd.docx", RevisionNo: 1}},
+	})
+	defer f.Close()
+
+	require.Equal(t, []string{"Cover", "Summary", "Report 1_Module", "Report2 _Process", "Guideline"},
+		f.GetSheetList(), "không được thêm hay bớt sheet nào")
+
+	// Công thức thống kê phải còn nguyên — dọn ô mà xoá nhầm là hỏng báo cáo.
+	congThuc, err := f.GetCellFormula(uatSheetModule, "E4")
+	require.NoError(t, err)
+	require.Contains(t, congThuc, "COUNTIF")
+
+	// Truyền account_test thì D6 mang giá trị người dùng, không phải mẫu.
+	account, err := f.GetCellValue(uatSheetSummary, "D6")
+	require.NoError(t, err)
+	require.Equal(t, "1. QA-ISC", account)
+
+	// Guideline là hướng dẫn chính thức của ISC, không được dọn.
+	huongDan, err := f.GetCellValue("Guideline", "C2")
+	require.NoError(t, err)
+	require.Contains(t, huongDan, "Hướng dẫn sử dụng Template UAT")
+}
+
+func moWorkbook(t *testing.T, in uatWorkbookInput) *excelize.File {
+	t.Helper()
+	content, err := buildUATWorkbook(in)
+	require.NoError(t, err)
+	f, err := excelize.OpenReader(bytes.NewReader(content))
+	require.NoError(t, err)
+	return f
+}
+
 func TestFormatUATDate_NilIsTBD(t *testing.T) {
 	require.Equal(t, "TBD", formatUATDate(nil))
 	d := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
