@@ -1,0 +1,7 @@
+DejaVu Sans (Regular + Bold) — vendored để nhúng vào PDF UAT Report (hỗ trợ
+đầy đủ dấu tiếng Việt trong font PDF chuẩn, các font PDF built-in chỉ hỗ trợ
+Latin-1).
+
+Giấy phép: DejaVu Fonts License (dựa trên Bitstream Vera License) — tự do sử
+dụng, chỉnh sửa, và phân phối lại kể cả nhúng vào phần mềm, không yêu cầu
+attribution runtime. Chi tiết: https://dejavu-fonts.github.io/License.html
