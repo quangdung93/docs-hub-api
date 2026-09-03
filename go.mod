@@ -34,6 +34,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.53.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.12
 	gorm.io/plugin/opentelemetry v0.1.6
