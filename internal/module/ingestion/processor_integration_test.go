@@ -7,14 +7,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
 )
@@ -71,14 +68,10 @@ func (integrationEmbedder) Embed(_ context.Context, texts []string) ([][]float32
 }
 
 func TestProcessor_UploadDenChunks(t *testing.T) {
-	// TEST_POSTGRES_DSN chứ không phải TEST_DATABASE_DSN: cả hai CI đều đặt tên
-	// trước, nên suốt thời gian qua test này luôn bị Skip, chưa từng chạy lần nào.
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("cần TEST_POSTGRES_DSN để chạy test này")
-	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
+	// Dùng chung database đã migrate với test cleanup/retry. Trước đây test này
+	// đọc TEST_DATABASE_DSN — cái tên không CI nào đặt — nên luôn bị Skip và chưa
+	// từng chạy lần nào.
+	db := openTestDB(t)
 
 	userID, projectID := uuid.New(), uuid.New()
 	versionID, documentID := uuid.New(), uuid.New()

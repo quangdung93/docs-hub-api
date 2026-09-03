@@ -5,13 +5,11 @@ package ingestion
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
@@ -80,17 +78,6 @@ type jobState struct {
 	Status      string
 	Attempt     int
 	AvailableAt time.Time `gorm:"column:available_at"`
-}
-
-func openTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("cần TEST_POSTGRES_DSN để chạy test này")
-	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	return db
 }
 
 // seedJob dựng đủ dữ liệu cho MỘT job và trả về (jobID, revisionID).
