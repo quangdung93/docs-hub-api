@@ -17,6 +17,13 @@ http:
 log:
   level: info
   encoding: json
+  # output: stdout (mặc định). Đổi thành "file" hoặc "both" để ghi log ra file:
+  output: both
+  file_path: ./logs/app.log
+  max_size_mb: 100
+  max_backups: 7
+  max_age_days: 30
+  compress: true
 
 postgres:
   host: postgres

@@ -51,10 +51,16 @@ func run() error {
 	}
 
 	log, err := logger.New(logger.Options{
-		Level:    cfg.Log.Level,
-		Encoding: cfg.Log.Encoding,
-		AppName:  cfg.App.Name,
-		Env:      string(cfg.App.Env),
+		Level:      cfg.Log.Level,
+		Encoding:   cfg.Log.Encoding,
+		AppName:    cfg.App.Name,
+		Env:        string(cfg.App.Env),
+		Output:     cfg.Log.Output,
+		FilePath:   cfg.Log.FilePath,
+		MaxSizeMB:  cfg.Log.MaxSizeMB,
+		MaxBackups: cfg.Log.MaxBackups,
+		MaxAgeDays: cfg.Log.MaxAgeDays,
+		Compress:   cfg.Log.Compress,
 	})
 	if err != nil {
 		return fmt.Errorf("khởi tạo logger: %w", err)

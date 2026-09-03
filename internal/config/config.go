@@ -120,6 +120,18 @@ type HTTPConfig struct {
 type LogConfig struct {
 	Level    string `mapstructure:"level"    validate:"required,oneof=debug info warn error"`
 	Encoding string `mapstructure:"encoding" validate:"required,oneof=json console"`
+	// Output: stdout (mặc định, giữ hành vi cũ) | file | both.
+	Output string `mapstructure:"output" validate:"omitempty,oneof=stdout file both"`
+	// FilePath là đường dẫn file log, bắt buộc khi Output là file/both.
+	FilePath string `mapstructure:"file_path" validate:"required_if=Output file,required_if=Output both"`
+	// MaxSizeMB là dung lượng tối đa (MB) trước khi xoay file.
+	MaxSizeMB int `mapstructure:"max_size_mb"`
+	// MaxBackups là số file cũ tối đa được giữ lại.
+	MaxBackups int `mapstructure:"max_backups"`
+	// MaxAgeDays là số ngày tối đa giữ file cũ trước khi xóa.
+	MaxAgeDays int `mapstructure:"max_age_days"`
+	// Compress bật nén (gzip) các file log đã xoay.
+	Compress bool `mapstructure:"compress"`
 }
 
 // PostgresConfig cấu hình kết nối PostgreSQL (có pgvector) qua GORM.

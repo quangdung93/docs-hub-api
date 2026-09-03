@@ -18,6 +18,14 @@ type Options struct {
 	Encoding string // json | console
 	AppName  string
 	Env      string
+
+	// Output chọn đích ghi log: "" hoặc "stdout" (mặc định) | "file" | "both".
+	Output     string
+	FilePath   string
+	MaxSizeMB  int
+	MaxBackups int
+	MaxAgeDays int
+	Compress   bool
 }
 
 // New tạo *zap.Logger theo Options. Trả lỗi nếu level/encoding không hợp lệ.
@@ -52,7 +60,7 @@ func New(opts Options) (*zap.Logger, error) {
 		return nil, fmt.Errorf("log encoding không hợp lệ %q", opts.Encoding)
 	}
 
-	core := zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(stdout())), level)
+	core := zapcore.NewCore(encoder, zapcore.Lock(zapcore.AddSync(resolveWriter(opts))), level)
 
 	base := zap.New(core,
 		zap.AddCaller(),
