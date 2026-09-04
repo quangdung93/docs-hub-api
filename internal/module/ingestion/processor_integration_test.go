@@ -7,14 +7,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
 )
@@ -71,12 +68,10 @@ func (integrationEmbedder) Embed(_ context.Context, texts []string) ([][]float32
 }
 
 func TestProcessor_UploadDenChunks(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_DSN")
-	if dsn == "" {
-		t.Skip("thiếu TEST_DATABASE_DSN")
-	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
+	// Dùng chung database đã migrate với test cleanup/retry. Trước đây test này
+	// đọc TEST_DATABASE_DSN — cái tên không CI nào đặt — nên luôn bị Skip và chưa
+	// từng chạy lần nào.
+	db := openTestDB(t)
 
 	userID, projectID := uuid.New(), uuid.New()
 	versionID, documentID := uuid.New(), uuid.New()
@@ -88,8 +83,8 @@ func TestProcessor_UploadDenChunks(t *testing.T) {
 		userID, userID.String()+"@test.local", "Integration", "hash").Error)
 	require.NoError(t, db.Exec(`INSERT INTO projects(id,code,name,owner_id) VALUES(?,?,?,?)`,
 		projectID, "it-"+projectID.String(), "Integration", userID).Error)
-	require.NoError(t, db.Exec(`INSERT INTO project_members(project_id,user_id,role) VALUES(?,?,'owner')`,
-		projectID, userID).Error)
+	require.NoError(t, db.Exec(`INSERT INTO project_members(id,project_id,user_id,role) VALUES(?,?,?,'owner')`,
+		uuid.New(), projectID, userID).Error)
 	require.NoError(t, db.Exec(`INSERT INTO project_versions(id,project_id,label,sequence_no,status,created_by)
 		VALUES(?,?,?,1,'draft',?)`, versionID, projectID, "v1", userID).Error)
 	require.NoError(t, db.Exec(`INSERT INTO documents(id,project_id,title,document_key,created_by)
