@@ -65,6 +65,7 @@ func run() error { //nolint:lll
 		processor = ingestion.NewRAGFlowProcessor(db, store, ragClient, ingestion.RAGFlowProcessorConfig{
 			PollInterval: cfg.RAGFlow.PollInterval, MaxPollDuration: cfg.RAGFlow.MaxPollDuration,
 			DatasetPrefix: cfg.RAGFlow.DatasetPrefix,
+			MaxAttempts:   cfg.Ingestion.MaxAttempts, RetryBackoffCap: cfg.Ingestion.RetryBackoffCap,
 		})
 		log.Info("ingestion worker dùng RAGFlow", zap.String("base_url", cfg.RAGFlow.BaseURL))
 	} else {

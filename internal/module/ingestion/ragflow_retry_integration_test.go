@@ -86,7 +86,9 @@ type jobState struct {
 // liệu của họ. Tham số attempt là số lượt ĐÃ dùng trước lượt này; claim sẽ +1.
 func seedJob(t *testing.T, db *gorm.DB, attempt int) (string, string) {
 	t.Helper()
-	// Khớp DEFAULT của cột max_attempts trong migration 000007.
+	// Vẫn ghi cột max_attempts để khớp DEFAULT của migration 000007, NHƯNG worker
+	// không còn đọc nó — ngân sách thử lại nay lấy từ config (xem retryBudget).
+	// Cố tình để 3 ở đây: nếu ai lỡ đọc lại cột này thì test ngân sách sẽ đỏ.
 	const maxAttempts = 3
 	userID, projectID := uuid.New(), uuid.New()
 	versionID, documentID := uuid.New(), uuid.New()
@@ -119,11 +121,23 @@ func seedJob(t *testing.T, db *gorm.DB, attempt int) (string, string) {
 	return jobID.String(), revisionID.String()
 }
 
+// runOnce chạy một lượt với ngân sách 3 lượt — giữ nguyên ý nghĩa của các test
+// đã có từ trước, khi ngân sách còn là DEFAULT 3 của cột trong bảng.
 func runOnce(ctx context.Context, t *testing.T, db *gorm.DB, cause error, onGetDocument func()) {
+	t.Helper()
+	runOnceWithBudget(ctx, t, db, cause, onGetDocument, 3, time.Minute)
+}
+
+func runOnceWithBudget(ctx context.Context, t *testing.T, db *gorm.DB, cause error,
+	onGetDocument func(), maxAttempts int, backoffCap time.Duration,
+) {
 	t.Helper()
 	p := NewRAGFlowProcessor(db, &integrationStore{objects: map[string][]byte{}},
 		&ragStub{getDocumentErr: cause, datasetID: "ds-fixture", onGetDocument: onGetDocument},
-		RAGFlowProcessorConfig{PollInterval: time.Millisecond, MaxPollDuration: time.Second})
+		RAGFlowProcessorConfig{
+			PollInterval: time.Millisecond, MaxPollDuration: time.Second,
+			MaxAttempts: maxAttempts, RetryBackoffCap: backoffCap,
+		})
 	_, _ = p.ProcessNext(ctx)
 }
 
@@ -180,6 +194,23 @@ func TestRAGFlowRetry_HetLuotThiHong(t *testing.T) {
 
 	require.Equal(t, "failed", readJob(t, db, jobID).Status)
 	require.Equal(t, "failed", readRevisionStatus(t, db, revisionID))
+}
+
+// Đây là sự cố ngày 2026-09-04: RAGFlow chết ~1 giờ, mà ngân sách chỉ 3 lượt
+// (~15 giây) nên mọi tài liệu upload trong lúc đó đều chết hẳn. Nới ngân sách
+// bằng config phải cứu được, KỂ CẢ khi cột max_attempts trong bảng vẫn là 3 —
+// nếu worker còn đọc cột đó thì test này đỏ.
+func TestRAGFlowRetry_NganSachTheoConfigChuKhongTheoCot(t *testing.T) {
+	db := openTestDB(t)
+	jobID, revisionID := seedJob(t, db, 3) // đã dùng 3 lượt = bằng cột max_attempts
+
+	runOnceWithBudget(context.Background(), t, db, context.DeadlineExceeded, nil, 15, time.Minute)
+
+	state := readJob(t, db, jobID)
+	require.Equal(t, "pending", state.Status,
+		"còn ngân sách theo config thì phải xếp lại hàng đợi, không được đánh hỏng")
+	require.Equal(t, 4, state.Attempt, "claim phải nhặt được job dù attempt đã bằng cột max_attempts")
+	require.Equal(t, "processing", readRevisionStatus(t, db, revisionID))
 }
 
 // Ca deploy: worker nhận SIGTERM giữa lúc chờ RAGFlow nên ctx công việc bị huỷ.
