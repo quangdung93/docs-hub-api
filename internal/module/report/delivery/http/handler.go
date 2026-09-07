@@ -15,24 +15,28 @@ type Handler struct{ svc *usecase.Service }
 
 func New(svc *usecase.Service) *Handler { return &Handler{svc: svc} }
 
-// GenerateRequest là body xuất báo cáo — theo SRS v1.1 chỉ cần chọn loại báo
-// cáo và định dạng, không còn chọn version/change request (luôn lấy nội dung
-// tài liệu mới nhất tại thời điểm xuất).
+// GenerateRequest là body xuất báo cáo. ProjectVersionID/ChangeRequestID tùy
+// chọn — chỉ được điền đúng 1 trong 2, để trống cả hai = lấy toàn bộ tài liệu
+// mới nhất của project.
 type GenerateRequest struct {
-	ReportType string `json:"report_type" binding:"required" example:"uat" enums:"uat,planning,testcase"`
-	Format     string `json:"format" example:"xlsx" enums:"xlsx,pdf"`
+	ReportType       string `json:"report_type" binding:"required" example:"uat" enums:"uat,planning,testcase"`
+	Format           string `json:"format" example:"xlsx" enums:"xlsx,pdf"`
+	ProjectVersionID string `json:"project_version_id"`
+	ChangeRequestID  string `json:"change_request_id"`
 }
 
 // Generate godoc
 // @Summary Xuất báo cáo dự án (UAT Report / Project Planning / Testcase)
 // @Description Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại
-// @Description đã chọn (uat, planning, testcase). Chỉ Editor trở lên được xuất.
+// @Description đã chọn (uat, planning, testcase), giới hạn theo project_version_id
+// @Description hoặc change_request_id nếu có (để trống cả hai = toàn bộ tài liệu mới
+// @Description nhất). Chỉ Editor trở lên được xuất.
 // @Tags reports
 // @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path string true "Project ID"
-// @Param body body GenerateRequest true "Loại báo cáo và định dạng"
+// @Param body body GenerateRequest true "Loại báo cáo, định dạng và phạm vi tùy chọn"
 // @Success 201 {object} usecase.GenerateResult
 // @Router /projects/{id}/reports [post]
 func (h *Handler) Generate(c *gin.Context) {
@@ -45,8 +49,19 @@ func (h *Handler) Generate(c *gin.Context) {
 		fail(c, apperr.BadRequest("Body không hợp lệ"))
 		return
 	}
+	versionID, ok := optionalIDPtr(req.ProjectVersionID)
+	if !ok {
+		fail(c, apperr.BadRequest("project_version_id không hợp lệ"))
+		return
+	}
+	changeRequestID, ok := optionalIDPtr(req.ChangeRequestID)
+	if !ok {
+		fail(c, apperr.BadRequest("change_request_id không hợp lệ"))
+		return
+	}
 	result, err := h.svc.Generate(c.Request.Context(), usecase.GenerateInput{
 		ProjectID: pid, ReportType: req.ReportType, Format: req.Format,
+		VersionID: versionID, ChangeRequestID: changeRequestID,
 	})
 	if err != nil {
 		fail(c, err)
@@ -79,6 +94,19 @@ func (h *Handler) History(c *gin.Context) {
 		return
 	}
 	response.OKPaged(c, items, meta)
+}
+
+// optionalIDPtr parse UUID tùy chọn — rỗng trả (nil, true); sai định dạng trả
+// (nil, false) để caller tự báo lỗi phù hợp field.
+func optionalIDPtr(raw string) (*uuid.UUID, bool) {
+	if raw == "" {
+		return nil, true
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return nil, false
+	}
+	return &id, true
 }
 
 func pathID(c *gin.Context, name string) (uuid.UUID, bool) {

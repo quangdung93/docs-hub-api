@@ -17,6 +17,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
 	"github.com/quangdung93/docs-hub-api/internal/common/port"
 	"github.com/quangdung93/docs-hub-api/internal/module/report/domain"
+	retrievaldomain "github.com/quangdung93/docs-hub-api/internal/module/retrieval/domain"
 )
 
 // maxUATItems giới hạn số dòng report UAT — template chừa sẵn dòng 12..200 cho
@@ -27,8 +28,21 @@ const maxUATItems = 188
 
 const downloadURLTTL = 15 * time.Minute
 
+// scopeMetadataKey PHẢI khớp với chat/usecase/service.go (cùng gắn/lọc
+// metadata trên CÙNG tập document RAGFlow của project).
+const scopeMetadataKey = "docs_hub_scope_id"
+
+// ScopeRepository giải quyết version/change_request thành phạm vi tài liệu cụ
+// thể — implement bởi retrieval/repository.New(db) (tái dùng y hệt module chat,
+// xem chat/module.go), không viết SQL mới.
+type ScopeRepository interface {
+	ResolveScope(ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope) ([]retrievaldomain.ResolvedScope, error)
+	RevisionRefs(ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope) ([]retrievaldomain.RevisionRef, error)
+}
+
 type Service struct {
 	repo             domain.Repository
+	scopeRepo        ScopeRepository
 	tx               port.TxManager
 	rag              port.RAGClient
 	store            port.ObjectStore
@@ -45,22 +59,25 @@ func WithProjectACLBypass(enabled bool) Option {
 }
 
 func New(
-	repo domain.Repository, tx port.TxManager, rag port.RAGClient, store port.ObjectStore,
-	clock port.Clock, options ...Option,
+	repo domain.Repository, scopeRepo ScopeRepository, tx port.TxManager, rag port.RAGClient,
+	store port.ObjectStore, clock port.Clock, options ...Option,
 ) *Service {
-	service := &Service{repo: repo, tx: tx, rag: rag, store: store, clock: clock}
+	service := &Service{repo: repo, scopeRepo: scopeRepo, tx: tx, rag: rag, store: store, clock: clock}
 	for _, option := range options {
 		option(service)
 	}
 	return service
 }
 
-// GenerateInput là tham số xuất báo cáo. Theo SRS v1.1: không còn chọn version/
-// change request — luôn lấy nội dung tài liệu mới nhất tại thời điểm xuất.
+// GenerateInput là tham số xuất báo cáo. VersionID/ChangeRequestID để trống
+// (nil cả hai) = lấy toàn bộ tài liệu mới nhất của project; chỉ được chọn
+// đúng 1 trong 2, không hỗ trợ chọn nhiều version/CR cùng lúc.
 type GenerateInput struct {
-	ProjectID  uuid.UUID
-	ReportType string
-	Format     string
+	ProjectID       uuid.UUID
+	ReportType      string
+	Format          string
+	VersionID       *uuid.UUID
+	ChangeRequestID *uuid.UUID
 }
 
 type GenerateResult struct {
@@ -70,8 +87,8 @@ type GenerateResult struct {
 
 // Generate sinh báo cáo dự án (UAT Report — tiêu chí nghiệm thu, Project
 // Planning, hoặc Testcase Report — SRS v1.1 mục IX/X) bằng cách nhờ RAGFlow
-// tổng hợp nội dung tài liệu dự án, điền vào template chuẩn ISC tương ứng,
-// lưu file + lịch sử.
+// tổng hợp nội dung tài liệu dự án (toàn bộ hoặc giới hạn theo version/change
+// request), điền vào template chuẩn ISC tương ứng, lưu file + lịch sử.
 //
 // BR SRS: "Chỉ Editor trở lên được phép xuất báo cáo" — authorize(..., write=true).
 func (s *Service) Generate(ctx context.Context, in GenerateInput) (*GenerateResult, error) {
@@ -83,26 +100,79 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*GenerateResu
 	if err != nil {
 		return nil, err
 	}
+	scope, err := buildScope(in)
+	if err != nil {
+		return nil, err
+	}
+	resolved, refs, err := s.resolveScope(ctx, in.ProjectID, scope)
+	if err != nil {
+		return nil, err
+	}
+	if len(refs) == 0 {
+		return nil, apperr.BadRequest("Không có tài liệu nào trong phạm vi đã chọn")
+	}
 	reportID := uuid.New()
-	content, contentType, items, err := s.generateContent(ctx, in.ProjectID, in.ReportType, format, reportID)
+	content, contentType, items, err := s.generateContent(
+		ctx, in.ProjectID, in.ReportType, format, reportID, scope, refs, resolved)
 	if err != nil {
 		return nil, err
 	}
 	return s.persistReport(ctx, in.ProjectID, actorID, reportID, in.ReportType, format, contentType, content, items)
 }
 
+// buildScope dựng scope từ input — đúng 1 trong VersionID/ChangeRequestID
+// hoặc để trống cả hai (toàn bộ project). Dùng retrievaldomain.Scope với mảng
+// 1 phần tử để tái dùng nguyên ResolveScope/RevisionRefs của module retrieval,
+// dù report chỉ cho chọn 1 giá trị/lần gọi (không multi-select như /search).
+func buildScope(in GenerateInput) (retrievaldomain.Scope, error) {
+	switch {
+	case in.VersionID != nil && in.ChangeRequestID != nil:
+		return retrievaldomain.Scope{}, apperr.BadRequest("Chỉ chọn version hoặc change request, không thể cả hai")
+	case in.VersionID != nil:
+		return retrievaldomain.Scope{Mode: retrievaldomain.ScopeVersions, VersionIDs: []uuid.UUID{*in.VersionID}}, nil
+	case in.ChangeRequestID != nil:
+		return retrievaldomain.Scope{
+			Mode: retrievaldomain.ScopeChangeRequests, ChangeRequestIDs: []uuid.UUID{*in.ChangeRequestID},
+		}, nil
+	default:
+		return retrievaldomain.Scope{Mode: retrievaldomain.ScopeAll}, nil
+	}
+}
+
+// resolveScope kiểm tra version/change request thuộc đúng project rồi lấy
+// danh sách revision khớp scope — copy-adapt từ chat/usecase/service.go
+// (resolveScope), lỗi NotFound nếu ID không resolve được.
+func (s *Service) resolveScope(
+	ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope,
+) ([]retrievaldomain.ResolvedScope, []retrievaldomain.RevisionRef, error) {
+	resolved, err := s.scopeRepo.ResolveScope(ctx, projectID, scope)
+	if err != nil {
+		return nil, nil, apperr.Database("Không thể kiểm tra scope").WithCause(err)
+	}
+	expected := len(scope.VersionIDs) + len(scope.ChangeRequestIDs)
+	if scope.Mode != retrievaldomain.ScopeAll && len(resolved) != expected {
+		return nil, nil, apperr.NotFound(errcode.NotFound, "Không tìm thấy version hoặc change request")
+	}
+	refs, err := s.scopeRepo.RevisionRefs(ctx, projectID, scope)
+	if err != nil {
+		return nil, nil, apperr.Database("Không thể đọc revision mapping").WithCause(err)
+	}
+	return resolved, refs, nil
+}
+
 // generateContent điều phối theo report_type: nhờ RAGFlow tổng hợp nội dung
 // rồi render ra file — mỗi loại có prompt/schema/template riêng.
 func (s *Service) generateContent(
 	ctx context.Context, projectID uuid.UUID, reportType, format string, reportID uuid.UUID,
+	scope retrievaldomain.Scope, refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
 ) ([]byte, string, []domain.ReportItem, error) {
 	switch reportType {
 	case domain.ReportTypeUAT:
-		return s.generateUATContent(ctx, projectID, format, reportID)
+		return s.generateUATContent(ctx, projectID, format, reportID, scope, refs, resolved)
 	case domain.ReportTypePlanning:
-		return s.generatePlanningContent(ctx, projectID, format, reportID)
+		return s.generatePlanningContent(ctx, projectID, format, reportID, scope, refs, resolved)
 	case domain.ReportTypeTestcase:
-		return s.generateTestcaseContent(ctx, projectID, format, reportID)
+		return s.generateTestcaseContent(ctx, projectID, format, reportID, scope, refs, resolved)
 	default:
 		return nil, "", nil, apperr.BadRequest("Loại báo cáo không hợp lệ (hỗ trợ: uat, planning, testcase)")
 	}
@@ -110,12 +180,13 @@ func (s *Service) generateContent(
 
 func (s *Service) generateUATContent(
 	ctx context.Context, projectID uuid.UUID, format string, reportID uuid.UUID,
+	scope retrievaldomain.Scope, refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
 ) ([]byte, string, []domain.ReportItem, error) {
-	projectName, items, err := s.fetchUATItems(ctx, projectID)
+	title, items, err := s.fetchUATItems(ctx, projectID, scope, refs, resolved)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	content, contentType, err := renderUATContent(format, uatContentInput{ProjectName: projectName, Items: items})
+	content, contentType, err := renderUATContent(format, uatContentInput{ProjectName: title, Items: items})
 	if err != nil {
 		return nil, "", nil, apperr.Internal("Không thể tạo file report").WithCause(err)
 	}
@@ -124,13 +195,14 @@ func (s *Service) generateUATContent(
 
 func (s *Service) generatePlanningContent(
 	ctx context.Context, projectID uuid.UUID, format string, reportID uuid.UUID,
+	scope retrievaldomain.Scope, refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
 ) ([]byte, string, []domain.ReportItem, error) {
-	projectName, milestones, err := s.fetchPlanningMilestones(ctx, projectID)
+	title, milestones, err := s.fetchPlanningMilestones(ctx, projectID, scope, refs, resolved)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	content, contentType, err := renderPlanningContent(format,
-		planningContentInput{ProjectName: projectName, Milestones: milestones})
+		planningContentInput{ProjectName: title, Milestones: milestones})
 	if err != nil {
 		return nil, "", nil, apperr.Internal("Không thể tạo file report").WithCause(err)
 	}
@@ -139,13 +211,14 @@ func (s *Service) generatePlanningContent(
 
 func (s *Service) generateTestcaseContent(
 	ctx context.Context, projectID uuid.UUID, format string, reportID uuid.UUID,
+	scope retrievaldomain.Scope, refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
 ) ([]byte, string, []domain.ReportItem, error) {
-	projectName, items, err := s.fetchTestcaseItems(ctx, projectID)
+	title, items, err := s.fetchTestcaseItems(ctx, projectID, scope, refs, resolved)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	content, contentType, err := renderTestcaseContent(format,
-		testcaseContentInput{ProjectName: projectName, Items: items})
+		testcaseContentInput{ProjectName: title, Items: items})
 	if err != nil {
 		return nil, "", nil, apperr.Internal("Không thể tạo file report").WithCause(err)
 	}
@@ -153,9 +226,12 @@ func (s *Service) generateTestcaseContent(
 }
 
 // fetchUATItems nhờ RAGFlow tổng hợp User Story/Acceptance Criteria trong tài
-// liệu dự án thành danh sách test case UAT.
-func (s *Service) fetchUATItems(ctx context.Context, projectID uuid.UUID) (string, []uatRAGItem, error) {
-	projectName, raw, err := s.completeChat(ctx, projectID, func(name string) string {
+// liệu dự án (giới hạn theo scope nếu có) thành danh sách test case UAT.
+func (s *Service) fetchUATItems(
+	ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope,
+	refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
+) (string, []uatRAGItem, error) {
+	title, raw, err := s.completeChat(ctx, projectID, scope, refs, resolved, func(name string) string {
 		return uatPrompt(name, maxUATItems)
 	})
 	if err != nil {
@@ -171,13 +247,16 @@ func (s *Service) fetchUATItems(ctx context.Context, projectID uuid.UUID) (strin
 	if len(items) > maxUATItems {
 		items = items[:maxUATItems]
 	}
-	return projectName, items, nil
+	return title, items, nil
 }
 
 // fetchPlanningMilestones nhờ RAGFlow tổng hợp tài liệu dự án thành kế hoạch
 // triển khai theo milestone (Project Planning).
-func (s *Service) fetchPlanningMilestones(ctx context.Context, projectID uuid.UUID) (string, []planningRAGMilestone, error) {
-	projectName, raw, err := s.completeChat(ctx, projectID, planningPrompt)
+func (s *Service) fetchPlanningMilestones(
+	ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope,
+	refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
+) (string, []planningRAGMilestone, error) {
+	title, raw, err := s.completeChat(ctx, projectID, scope, refs, resolved, planningPrompt)
 	if err != nil {
 		return "", nil, err
 	}
@@ -191,13 +270,16 @@ func (s *Service) fetchPlanningMilestones(ctx context.Context, projectID uuid.UU
 	if len(milestones) > maxPlanningMilestones {
 		milestones = milestones[:maxPlanningMilestones]
 	}
-	return projectName, milestones, nil
+	return title, milestones, nil
 }
 
 // fetchTestcaseItems nhờ RAGFlow sinh danh sách test case chi tiết từ User
 // Story/Acceptance Criteria trong tài liệu dự án.
-func (s *Service) fetchTestcaseItems(ctx context.Context, projectID uuid.UUID) (string, []testcaseRAGItem, error) {
-	projectName, raw, err := s.completeChat(ctx, projectID, func(name string) string {
+func (s *Service) fetchTestcaseItems(
+	ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope,
+	refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
+) (string, []testcaseRAGItem, error) {
+	title, raw, err := s.completeChat(ctx, projectID, scope, refs, resolved, func(name string) string {
 		return testcasePrompt(name, maxTestcaseItems)
 	})
 	if err != nil {
@@ -213,14 +295,18 @@ func (s *Service) fetchTestcaseItems(ctx context.Context, projectID uuid.UUID) (
 	if len(items) > maxTestcaseItems {
 		items = items[:maxTestcaseItems]
 	}
-	return projectName, items, nil
+	return title, items, nil
 }
 
-// completeChat gói chung phần lấy project metadata + RAGFlow dataset/chat +
-// gọi CompleteChat — 3 loại report chỉ khác nhau ở prompt (buildPrompt nhận
-// projectName để build prompt SAU khi đã biết tên dự án).
+// completeChat gói chung phần lấy project metadata + đồng bộ scope metadata +
+// RAGFlow dataset/chat + gọi CompleteChat — 3 loại report chỉ khác nhau ở
+// prompt (buildPrompt nhận TÊN DỰ ÁN THÔ, không phải title đã ghép scope —
+// tránh làm rối câu hỏi gửi cho LLM). Trả về title (đã ghép nhãn scope, dùng
+// để hiển thị trong file report) + nội dung LLM trả lời.
 func (s *Service) completeChat(
-	ctx context.Context, projectID uuid.UUID, buildPrompt func(projectName string) string,
+	ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope,
+	refs []retrievaldomain.RevisionRef, resolved []retrievaldomain.ResolvedScope,
+	buildPrompt func(projectName string) string,
 ) (string, string, error) {
 	projectName, _, err := s.repo.ProjectMeta(ctx, projectID)
 	if err != nil {
@@ -233,18 +319,75 @@ func (s *Service) completeChat(
 	if datasetID == "" {
 		return "", "", apperr.External("Project chưa được đồng bộ sang RAGFlow")
 	}
+	if scope.Mode != retrievaldomain.ScopeAll {
+		if err = s.syncScopeMetadata(ctx, datasetID, refs); err != nil {
+			return "", "", apperr.External("Không thể đồng bộ scope metadata sang RAGFlow").WithCause(err)
+		}
+	}
 	chatID, err := s.ensureChat(ctx, projectID, datasetID)
 	if err != nil {
 		return "", "", apperr.External("Không thể chuẩn bị RAGFlow chat assistant").WithCause(err)
 	}
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
-		ChatID:   chatID,
-		Messages: []port.RAGChatMessage{{Role: "user", Content: buildPrompt(projectName)}},
+		ChatID: chatID, Messages: []port.RAGChatMessage{{Role: "user", Content: buildPrompt(projectName)}},
+		MetadataLogic: "or", MetadataConditions: scopeConditions(scope),
 	})
 	if err != nil {
 		return "", "", apperr.External("RAGFlow chat không khả dụng").WithCause(err)
 	}
-	return projectName, result.Content, nil
+	return reportTitle(projectName, resolved), result.Content, nil
+}
+
+// syncScopeMetadata gắn docs_hub_scope_id/docs_hub_scope_type lên document
+// RAGFlow khớp scope — copy-adapt từ chat/usecase/service.go (syncScopeMetadata),
+// CHUNG cơ chế với tính năng hỏi-đáp trên cùng tập document.
+func (s *Service) syncScopeMetadata(
+	ctx context.Context, datasetID string, refs []retrievaldomain.RevisionRef,
+) error {
+	type group struct {
+		scope retrievaldomain.ResolvedScope
+		ids   []string
+	}
+	groups := make(map[uuid.UUID]*group)
+	for _, ref := range refs {
+		item := groups[ref.Scope.ID]
+		if item == nil {
+			item = &group{scope: ref.Scope}
+			groups[ref.Scope.ID] = item
+		}
+		item.ids = append(item.ids, ref.RAGFlowDocumentID)
+	}
+	for _, item := range groups {
+		if err := s.rag.UpdateDocumentMetadata(ctx, datasetID, item.ids, map[string]string{
+			scopeMetadataKey: item.scope.ID.String(), "docs_hub_scope_type": item.scope.Type,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func scopeConditions(scope retrievaldomain.Scope) []port.RAGMetadataCondition {
+	if scope.Mode == retrievaldomain.ScopeAll {
+		return nil
+	}
+	ids := append([]uuid.UUID(nil), scope.VersionIDs...)
+	ids = append(ids, scope.ChangeRequestIDs...)
+	out := make([]port.RAGMetadataCondition, len(ids))
+	for i, id := range ids {
+		out[i] = port.RAGMetadataCondition{Name: scopeMetadataKey, Operator: "is", Value: id.String()}
+	}
+	return out
+}
+
+// reportTitle ghép tên project với nhãn scope (vd "Demo Project - v1.0.0") để
+// hiển thị trong file report — giữ hành vi rõ ràng như UAT export cũ của
+// module document. Không có scope (resolved rỗng) → chỉ tên project.
+func reportTitle(projectName string, resolved []retrievaldomain.ResolvedScope) string {
+	if len(resolved) == 0 {
+		return projectName
+	}
+	return fmt.Sprintf("%s - %s", projectName, resolved[0].Label)
 }
 
 // persistReport lưu file đã render lên ObjectStore, ghi lịch sử (transaction)

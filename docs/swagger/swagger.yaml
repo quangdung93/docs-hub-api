@@ -193,11 +193,15 @@ definitions:
     type: object
   http.GenerateRequest:
     properties:
+      change_request_id:
+        type: string
       format:
         enum:
         - xlsx
         - pdf
         example: xlsx
+        type: string
+      project_version_id:
         type: string
       report_type:
         enum:
@@ -2001,14 +2005,16 @@ paths:
       - application/json
       description: |-
         Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại
-        đã chọn (uat, planning, testcase). Chỉ Editor trở lên được xuất.
+        đã chọn (uat, planning, testcase), giới hạn theo project_version_id
+        hoặc change_request_id nếu có (để trống cả hai = toàn bộ tài liệu mới
+        nhất). Chỉ Editor trở lên được xuất.
       parameters:
       - description: Project ID
         in: path
         name: id
         required: true
         type: string
-      - description: Loại báo cáo và định dạng
+      - description: Loại báo cáo, định dạng và phạm vi tùy chọn
         in: body
         name: body
         required: true
