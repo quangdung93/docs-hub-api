@@ -56,10 +56,10 @@ type planningRAGResponse struct {
 	Milestones []planningRAGMilestone `json:"milestones"`
 }
 
-// parsePlanningMilestones giải mã JSON RAGFlow trả về, gỡ code fence phòng khi
-// LLM vẫn bọc markdown dù prompt đã yêu cầu không làm vậy.
+// parsePlanningMilestones giải mã JSON RAGFlow trả về, gỡ code fence lẫn chú
+// thích trích dẫn [ID:n] trước khi parse (xem sanitizeRAGContent).
 func parsePlanningMilestones(content string) ([]planningRAGMilestone, error) {
-	trimmed := stripCodeFence(content)
+	trimmed := sanitizeRAGContent(content)
 	var response planningRAGResponse
 	if err := json.Unmarshal([]byte(trimmed), &response); err != nil {
 		return nil, fmt.Errorf("decode JSON planning milestones: %w", err)
