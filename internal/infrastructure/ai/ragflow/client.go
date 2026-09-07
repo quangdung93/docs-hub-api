@@ -353,7 +353,7 @@ func (c *Client) CompleteChat(
 	for i, message := range in.Messages {
 		messages[i] = map[string]string{"role": message.Role, "content": message.Content}
 	}
-	extra := map[string]any{"reference": true}
+	extra := map[string]any{"reference": in.WantReference}
 	if len(in.MetadataConditions) > 0 {
 		conditions := make([]map[string]string, len(in.MetadataConditions))
 		for i, condition := range in.MetadataConditions {

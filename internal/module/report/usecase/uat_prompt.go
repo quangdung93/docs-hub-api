@@ -22,6 +22,7 @@ markdown code fence:
 "source":"tên tài liệu nguồn"}]}
 
 Yêu cầu:
+- Trả lời bằng tiếng Việt.
 - Tối đa %d dòng, ưu tiên các chức năng quan trọng nhất nếu tài liệu có nhiều hơn.
 - Nếu không tìm thấy User Story/AC nào, trả về {"items":[]}.
 - steps và expected phải cụ thể, dựa trên nội dung THẬT của tài liệu, không bịa đặt.`

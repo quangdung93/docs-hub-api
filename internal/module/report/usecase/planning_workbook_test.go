@@ -90,3 +90,69 @@ func TestBuildPlanningWorkbook_QuaSoMilestoneChiLay5(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "V. Milestone E", header5)
 }
+
+func TestBuildPlanningWorkbook_DonDuLieuMau(t *testing.T) {
+	t.Parallel()
+	raw, err := buildPlanningWorkbook(planningContentInput{ProjectName: "Demo Project"})
+	require.NoError(t, err)
+
+	f, err := excelize.OpenReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Risk: 7 dòng rủi ro ví dụ, đây là khối lớn nhất của Project Plan.
+	for _, cell := range []string{"B16", "C16", "D16", "E16", "E17", "D22", "E22", "G22"} {
+		got, err := f.GetCellValue(planningSheetRisk, cell)
+		require.NoError(t, err)
+		require.Empty(t, got, "Risk!%s còn dữ liệu mẫu", cell)
+	}
+
+	// Objective: lý do đặt target và điều kiện riêng của dự án mẫu.
+	for _, cell := range []string{"I5", "I6", "I7", "I8", "J5", "J8"} {
+		got, err := f.GetCellValue(planningSheetObjective, cell)
+		require.NoError(t, err)
+		require.Empty(t, got, "Objective!%s còn dữ liệu mẫu", cell)
+	}
+
+	// Org Chart: đơn vị stakeholder của dự án mẫu (FTQ, CSOC).
+	for _, cell := range []string{"D16", "D17", "D18"} {
+		got, err := f.GetCellValue(planningSheetOrgChart, cell)
+		require.NoError(t, err)
+		require.Empty(t, got, "Org Chart!%s còn dữ liệu mẫu", cell)
+	}
+
+	revision, err := f.GetCellValue(planningSheetRevision, "G5")
+	require.NoError(t, err)
+	require.Empty(t, revision)
+}
+
+func TestBuildPlanningWorkbook_GiuNguyenKhungBieuMau(t *testing.T) {
+	t.Parallel()
+	raw, err := buildPlanningWorkbook(planningContentInput{ProjectName: "Demo Project"})
+	require.NoError(t, err)
+
+	f, err := excelize.OpenReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Risk!B9:D12 là bảng chú giải (mức ưu tiên -> cách ứng phó được phép),
+	// KHÔNG phải dữ liệu mẫu dù nằm ngay trên bảng rủi ro.
+	chuGiai, err := f.GetCellValue(planningSheetRisk, "D10")
+	require.NoError(t, err)
+	require.Equal(t, "Advoid, Transfer, Reduce", chuGiai)
+
+	// Cột H là công thức TOTAL SCORE, phải còn nguyên sau khi dọn cột B..G.
+	congThuc, err := f.GetCellFormula(planningSheetRisk, "H16")
+	require.NoError(t, err)
+	require.NotEmpty(t, congThuc)
+
+	// Bộ chỉ số chuẩn ISC ở Objective là khung biểu mẫu, giữ nguyên.
+	chiSo, err := f.GetCellValue(planningSheetObjective, "C5")
+	require.NoError(t, err)
+	require.Equal(t, "PCV", chiSo)
+
+	// Bảng vai trò của Org Chart cũng là khung chuẩn ISC.
+	vaiTro, err := f.GetCellValue(planningSheetOrgChart, "E8")
+	require.NoError(t, err)
+	require.Equal(t, "PM", vaiTro)
+}

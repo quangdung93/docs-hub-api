@@ -157,6 +157,9 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
 		ChatID: chatID, Messages: ragMessages(conversation.Messages, input.Question),
 		MetadataLogic: "or", MetadataConditions: scopeConditions(*scope),
+		// Hỏi-đáp CẦN trích dẫn: mapRAGCitations dựng danh sách nguồn từ
+		// result.References để trả về cho người đọc.
+		WantReference: true,
 	})
 	if err != nil {
 		return nil, apperr.External("RAGFlow chat không khả dụng").WithCause(err)

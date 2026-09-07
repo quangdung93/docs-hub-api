@@ -34,7 +34,9 @@ markdown code fence:
 "tasks":[{"name":"tên task","description":"mô tả công việc cụ thể"}]}]}
 
 Yêu cầu:
-- Tối đa 5 milestone, mỗi milestone tối đa 7 task.
+- Trả lời bằng tiếng Việt.
+- Tối đa 5 milestone. Milestone thứ nhất tối đa 7 task, bốn milestone sau mỗi
+  cái tối đa 3 task.
 - Nếu không tìm thấy thông tin kế hoạch nào, trả về {"milestones":[]}.
 - name và description phải cụ thể, dựa trên nội dung THẬT của tài liệu, không bịa đặt.`
 

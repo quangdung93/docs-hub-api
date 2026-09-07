@@ -237,6 +237,9 @@ func (s *Service) fetchUATItems(
 	if err != nil {
 		return "", nil, err
 	}
+	if noDataAnswer(raw) {
+		return "", nil, noDataError(raw)
+	}
 	items, err := parseUATItems(raw)
 	if err != nil {
 		return "", nil, apperr.External("RAGFlow trả nội dung không đúng định dạng JSON mong đợi").WithCause(err)
@@ -259,6 +262,9 @@ func (s *Service) fetchPlanningMilestones(
 	title, raw, err := s.completeChat(ctx, projectID, scope, refs, resolved, planningPrompt)
 	if err != nil {
 		return "", nil, err
+	}
+	if noDataAnswer(raw) {
+		return "", nil, noDataError(raw)
 	}
 	milestones, err := parsePlanningMilestones(raw)
 	if err != nil {
@@ -284,6 +290,9 @@ func (s *Service) fetchTestcaseItems(
 	})
 	if err != nil {
 		return "", nil, err
+	}
+	if noDataAnswer(raw) {
+		return "", nil, noDataError(raw)
 	}
 	items, err := parseTestcaseItems(raw)
 	if err != nil {
@@ -331,6 +340,9 @@ func (s *Service) completeChat(
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
 		ChatID: chatID, Messages: []port.RAGChatMessage{{Role: "user", Content: buildPrompt(projectName)}},
 		MetadataLogic: "or", MetadataConditions: scopeConditions(scope),
+		// Báo cáo KHÔNG cần trích dẫn: luồng này vứt hẳn result.References và chỉ
+		// parse result.Content thành JSON, nên "[ID:n]" chỉ là rác làm hỏng parse.
+		WantReference: false,
 	})
 	if err != nil {
 		return "", "", apperr.External("RAGFlow chat không khả dụng").WithCause(err)
