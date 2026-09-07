@@ -46,10 +46,10 @@ type testcaseRAGResponse struct {
 	Items []testcaseRAGItem `json:"items"`
 }
 
-// parseTestcaseItems giải mã JSON RAGFlow trả về, gỡ code fence phòng khi LLM
-// vẫn bọc markdown dù prompt đã yêu cầu không làm vậy.
+// parseTestcaseItems giải mã JSON RAGFlow trả về, gỡ code fence lẫn chú thích
+// trích dẫn [ID:n] trước khi parse (xem sanitizeRAGContent).
 func parseTestcaseItems(content string) ([]testcaseRAGItem, error) {
-	trimmed := stripCodeFence(content)
+	trimmed := sanitizeRAGContent(content)
 	var response testcaseRAGResponse
 	if err := json.Unmarshal([]byte(trimmed), &response); err != nil {
 		return nil, fmt.Errorf("decode JSON testcase items: %w", err)
