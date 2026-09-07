@@ -2322,6 +2322,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/projects/{id}/reports": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại\nđã chọn (uat, planning, testcase). Chỉ Editor trở lên được xuất.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "summary": "Xuất báo cáo dự án (UAT Report / Project Planning / Testcase)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Loại báo cáo và định dạng",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.GenerateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/usecase.GenerateResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{id}/reports/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "summary": "Lịch sử các lần xuất báo cáo của dự án",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/usecase.HistoryItem"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/public/api/v1/auth/dev-token": {
             "post": {
                 "description": "Chỉ tồn tại khi app.env=local và enable_dev_token=true.",
@@ -2519,6 +2601,29 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "integer"
+                }
+            }
+        },
+        "domain.Report": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "generated_by": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "report_type": {
+                    "type": "string"
                 }
             }
         },
@@ -2721,6 +2826,31 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/domain.Revision"
                     }
+                }
+            }
+        },
+        "http.GenerateRequest": {
+            "type": "object",
+            "required": [
+                "report_type"
+            ],
+            "properties": {
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "xlsx",
+                        "pdf"
+                    ],
+                    "example": "xlsx"
+                },
+                "report_type": {
+                    "type": "string",
+                    "enum": [
+                        "uat",
+                        "planning",
+                        "testcase"
+                    ],
+                    "example": "uat"
                 }
             }
         },
@@ -3168,6 +3298,28 @@ const docTemplate = `{
                 },
                 "trace_id": {
                     "type": "string"
+                }
+            }
+        },
+        "usecase.GenerateResult": {
+            "type": "object",
+            "properties": {
+                "download_url": {
+                    "type": "string"
+                },
+                "report": {
+                    "$ref": "#/definitions/domain.Report"
+                }
+            }
+        },
+        "usecase.HistoryItem": {
+            "type": "object",
+            "properties": {
+                "download_url": {
+                    "type": "string"
+                },
+                "report": {
+                    "$ref": "#/definitions/domain.Report"
                 }
             }
         },

@@ -40,6 +40,21 @@ definitions:
       version:
         type: integer
     type: object
+  domain.Report:
+    properties:
+      created_at:
+        type: string
+      format:
+        type: string
+      generated_by:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      report_type:
+        type: string
+    type: object
   domain.Revision:
     properties:
       created_at:
@@ -175,6 +190,24 @@ definitions:
         items:
           $ref: '#/definitions/domain.Revision'
         type: array
+    type: object
+  http.GenerateRequest:
+    properties:
+      format:
+        enum:
+        - xlsx
+        - pdf
+        example: xlsx
+        type: string
+      report_type:
+        enum:
+        - uat
+        - planning
+        - testcase
+        example: uat
+        type: string
+    required:
+    - report_type
     type: object
   http.InviteMemberRequest:
     properties:
@@ -476,6 +509,20 @@ definitions:
         type: string
       trace_id:
         type: string
+    type: object
+  usecase.GenerateResult:
+    properties:
+      download_url:
+        type: string
+      report:
+        $ref: '#/definitions/domain.Report'
+    type: object
+  usecase.HistoryItem:
+    properties:
+      download_url:
+        type: string
+      report:
+        $ref: '#/definitions/domain.Report'
     type: object
   usecase.PresignResult:
     properties:
@@ -1948,6 +1995,59 @@ paths:
       summary: Kiểm tra email còn trống
       tags:
       - users
+  /projects/{id}/reports:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại
+        đã chọn (uat, planning, testcase). Chỉ Editor trở lên được xuất.
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Loại báo cáo và định dạng
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.GenerateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/usecase.GenerateResult'
+      security:
+      - BearerAuth: []
+      summary: Xuất báo cáo dự án (UAT Report / Project Planning / Testcase)
+      tags:
+      - reports
+  /projects/{id}/reports/history:
+    get:
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/usecase.HistoryItem'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Lịch sử các lần xuất báo cáo của dự án
+      tags:
+      - reports
   /public/api/v1/auth/dev-token:
     post:
       consumes:
