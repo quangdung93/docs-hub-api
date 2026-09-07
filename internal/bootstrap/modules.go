@@ -11,6 +11,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/module/document"
 	"github.com/quangdung93/docs-hub-api/internal/module/mcpserver"
 	"github.com/quangdung93/docs-hub-api/internal/module/project"
+	"github.com/quangdung93/docs-hub-api/internal/module/report"
 	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
@@ -70,6 +71,15 @@ func buildModules(cfg *config.Config, infra *Infra) ([]Module, http.Handler) {
 			DB: infra.DB, RAG: infra.RAG, Clock: infra.clock(),
 		})
 		modules = append(modules, retrievalModule, chatModule)
+	}
+	// report cần cả RAG (sinh nội dung) và ObjectStore (lưu file) — khác chat/
+	// retrieval chỉ cần RAG.
+	if infra.RAG != nil && infra.ObjectStore != nil {
+		reportModule := report.New(report.Deps{
+			DB: infra.DB, Tx: infra.Tx, RAG: infra.RAG, Store: infra.ObjectStore,
+			Clock: infra.clock(), BypassProjectACL: cfg.App.IsLocal(),
+		})
+		modules = append(modules, reportModule)
 	}
 	if !cfg.MCP.Enabled {
 		return modules, nil
