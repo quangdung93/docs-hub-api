@@ -122,7 +122,8 @@ func setupRouter(t *testing.T, svc *usecase.Service) *gin.Engine {
 }
 
 func TestGenerate_BindLoiTra400(t *testing.T) {
-	t.Parallel()
+	// KHÔNG t.Parallel(): gin.SetMode ghi biến global trong gin, chạy song
+	// song với test khác gọi setupRouter sẽ gây data race (-race).
 	svc := usecase.New(&fakeRepo{role: "editor"}, fakeTx{}, &fakeRAG{}, &fakeStore{}, fixedClock{})
 	r := setupRouter(t, svc)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
@@ -134,7 +135,6 @@ func TestGenerate_BindLoiTra400(t *testing.T) {
 }
 
 func TestGenerate_HappyPathTraEnvelopeChuan(t *testing.T) {
-	t.Parallel()
 	const validJSON = `{"items":[{"title":"Đăng nhập","steps":"B","expected":"C","source":"D"}]}`
 	svc := usecase.New(&fakeRepo{role: "editor"}, fakeTx{}, &fakeRAG{content: validJSON}, &fakeStore{}, fixedClock{})
 	r := setupRouter(t, svc)
