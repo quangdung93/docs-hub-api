@@ -1,5 +1,5 @@
 // Package report ráp vertical slice xuất báo cáo dự án (UAT Report / Project
-// Planning / Testcase — SRS v1.1 mục IX/X). Hiện chỉ hiện thực UAT Report.
+// Planning / Testcase — SRS v1.1 mục IX/X).
 package report
 
 import (
@@ -10,6 +10,7 @@ import (
 	reporthttp "github.com/quangdung93/docs-hub-api/internal/module/report/delivery/http"
 	"github.com/quangdung93/docs-hub-api/internal/module/report/repository"
 	"github.com/quangdung93/docs-hub-api/internal/module/report/usecase"
+	retrievalrepo "github.com/quangdung93/docs-hub-api/internal/module/retrieval/repository"
 )
 
 type Deps struct {
@@ -28,7 +29,9 @@ type Module struct {
 
 func New(d Deps) *Module {
 	repo := repository.New(d.DB)
-	service := usecase.New(repo, d.Tx, d.RAG, d.Store, d.Clock, usecase.WithProjectACLBypass(d.BypassProjectACL))
+	scopeRepo := retrievalrepo.New(d.DB)
+	service := usecase.New(
+		repo, scopeRepo, d.Tx, d.RAG, d.Store, d.Clock, usecase.WithProjectACLBypass(d.BypassProjectACL))
 	return &Module{handler: reporthttp.New(service), service: service}
 }
 

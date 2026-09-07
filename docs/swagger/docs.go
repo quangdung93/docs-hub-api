@@ -2329,7 +2329,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại\nđã chọn (uat, planning, testcase). Chỉ Editor trở lên được xuất.",
+                "description": "Nhờ RAGFlow tổng hợp nội dung tài liệu dự án thành báo cáo theo loại\nđã chọn (uat, planning, testcase), giới hạn theo project_version_id\nhoặc change_request_id nếu có (để trống cả hai = toàn bộ tài liệu mới\nnhất). Chỉ Editor trở lên được xuất.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2349,7 +2349,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Loại báo cáo và định dạng",
+                        "description": "Loại báo cáo, định dạng và phạm vi tùy chọn",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2835,6 +2835,9 @@ const docTemplate = `{
                 "report_type"
             ],
             "properties": {
+                "change_request_id": {
+                    "type": "string"
+                },
                 "format": {
                     "type": "string",
                     "enum": [
@@ -2842,6 +2845,9 @@ const docTemplate = `{
                         "pdf"
                     ],
                     "example": "xlsx"
+                },
+                "project_version_id": {
+                    "type": "string"
                 },
                 "report_type": {
                     "type": "string",

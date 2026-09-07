@@ -20,6 +20,7 @@ import (
 	reporthttp "github.com/quangdung93/docs-hub-api/internal/module/report/delivery/http"
 	"github.com/quangdung93/docs-hub-api/internal/module/report/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/report/usecase"
+	retrievaldomain "github.com/quangdung93/docs-hub-api/internal/module/retrieval/domain"
 )
 
 type fakeRepo struct{ role string }
@@ -38,6 +39,28 @@ func (*fakeRepo) SaveRAGFlowChatID(_ context.Context, _ uuid.UUID, chatID string
 func (*fakeRepo) Create(context.Context, domain.Report, []domain.ReportItem) error { return nil }
 func (*fakeRepo) ListHistory(context.Context, uuid.UUID, int, int) ([]domain.Report, int64, error) {
 	return nil, 0, nil
+}
+
+// fakeScopeRepo permissive mặc định: 1 revision ref cho mọi scope, đủ để
+// resolveScope không chặn các test không quan tâm tới version/change_request.
+type fakeScopeRepo struct{}
+
+func (*fakeScopeRepo) ResolveScope(
+	_ context.Context, _ uuid.UUID, scope retrievaldomain.Scope,
+) ([]retrievaldomain.ResolvedScope, error) {
+	out := make([]retrievaldomain.ResolvedScope, 0, len(scope.VersionIDs)+len(scope.ChangeRequestIDs))
+	for _, id := range scope.VersionIDs {
+		out = append(out, retrievaldomain.ResolvedScope{ID: id, Type: "version", Label: "v1.0.0"})
+	}
+	for _, id := range scope.ChangeRequestIDs {
+		out = append(out, retrievaldomain.ResolvedScope{ID: id, Type: "change_request", Label: "CR-01"})
+	}
+	return out, nil
+}
+func (*fakeScopeRepo) RevisionRefs(
+	context.Context, uuid.UUID, retrievaldomain.Scope,
+) ([]retrievaldomain.RevisionRef, error) {
+	return []retrievaldomain.RevisionRef{{RAGFlowDocumentID: "remote-doc-1"}}, nil
 }
 
 type fakeRAG struct{ content string }
@@ -124,7 +147,7 @@ func setupRouter(t *testing.T, svc *usecase.Service) *gin.Engine {
 func TestGenerate_BindLoiTra400(t *testing.T) {
 	// KHÔNG t.Parallel(): gin.SetMode ghi biến global trong gin, chạy song
 	// song với test khác gọi setupRouter sẽ gây data race (-race).
-	svc := usecase.New(&fakeRepo{role: "editor"}, fakeTx{}, &fakeRAG{}, &fakeStore{}, fixedClock{})
+	svc := usecase.New(&fakeRepo{role: "editor"}, &fakeScopeRepo{}, fakeTx{}, &fakeRAG{}, &fakeStore{}, fixedClock{})
 	r := setupRouter(t, svc)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
 		"/internal/api/v1/projects/"+uuid.NewString()+"/reports", bytes.NewBufferString("{invalid"))
@@ -134,9 +157,25 @@ func TestGenerate_BindLoiTra400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestGenerate_ProjectVersionIDSaiDinhDangTra400(t *testing.T) {
+	svc := usecase.New(&fakeRepo{role: "editor"}, &fakeScopeRepo{}, fakeTx{}, &fakeRAG{}, &fakeStore{}, fixedClock{})
+	r := setupRouter(t, svc)
+	body, err := json.Marshal(reporthttp.GenerateRequest{
+		ReportType: domain.ReportTypeUAT, ProjectVersionID: "khong-phai-uuid",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
+		"/internal/api/v1/projects/"+uuid.NewString()+"/reports", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestGenerate_HappyPathTraEnvelopeChuan(t *testing.T) {
 	const validJSON = `{"items":[{"title":"Đăng nhập","steps":"B","expected":"C","source":"D"}]}`
-	svc := usecase.New(&fakeRepo{role: "editor"}, fakeTx{}, &fakeRAG{content: validJSON}, &fakeStore{}, fixedClock{})
+	svc := usecase.New(
+		&fakeRepo{role: "editor"}, &fakeScopeRepo{}, fakeTx{}, &fakeRAG{content: validJSON}, &fakeStore{}, fixedClock{})
 	r := setupRouter(t, svc)
 	body, err := json.Marshal(reporthttp.GenerateRequest{ReportType: domain.ReportTypeUAT, Format: domain.FormatXLSX})
 	require.NoError(t, err)
