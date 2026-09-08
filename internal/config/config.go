@@ -70,6 +70,16 @@ type IngestionConfig struct {
 	ChunkLines   int           `mapstructure:"chunk_lines"`
 	OverlapLines int           `mapstructure:"overlap_lines"`
 	BatchSize    int           `mapstructure:"batch_size"`
+	// MaxAttempts là số lượt xử lý TỐI ĐA cho một job trước khi đánh hỏng hẳn.
+	// RetryBackoffCap chặn trần thời gian chờ giữa hai lượt (backoff luỹ thừa
+	// 2s, 4s, 8s... sẽ dừng tăng ở đây).
+	//
+	// Hai giá trị này quyết định tài liệu chịu được sự cố RAGFlow dài bao lâu.
+	// Mặc định 15 lượt + trần 5 phút ≈ 38 phút chờ — chọn theo hai sự cố đã đo
+	// thật (RAGFlow chết 30 phút ngày 2026-09-03 và ≥50 phút ngày 2026-09-04).
+	// Suốt thời gian đó tài liệu hiện 'queued'; hết lượt mới thành 'failed'.
+	MaxAttempts     int           `mapstructure:"max_attempts" validate:"min=1"`
+	RetryBackoffCap time.Duration `mapstructure:"retry_backoff_cap" validate:"min=1s"`
 }
 
 // MCPConfig cấu hình cổng Streamable HTTP read-only dành cho AI client.

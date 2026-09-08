@@ -126,6 +126,10 @@ ingestion:
   chunk_lines: 80
   overlap_lines: 10
   batch_size: 16
+  # Ngân sách thử lại khi RAGFlow lỗi tạm thời. 15 lượt với backoff 2s, 4s, 8s…
+  # chặn trần 5 phút ≈ 38 phút chờ. Suốt thời gian đó tài liệu hiện 'queued'.
+  max_attempts: 15
+  retry_backoff_cap: 5m
 
 mcp:
   enabled: false

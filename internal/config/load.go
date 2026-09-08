@@ -186,6 +186,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ingestion.chunk_lines", 80)
 	v.SetDefault("ingestion.overlap_lines", 10)
 	v.SetDefault("ingestion.batch_size", 16)
+	// Đặt mặc định ở đây chứ KHÔNG thêm khối rỗng vào 5 file yaml: chỉ
+	// config.local.yaml có khối `ingestion`, bốn file kia (gồm config.ec2.yaml
+	// đang chạy production) không có. Cách này giúp mọi môi trường nhận cùng
+	// một giá trị mà không lặp lại sự cố "thiếu khối trong config.ec2.yaml".
+	v.SetDefault("ingestion.max_attempts", 15)
+	v.SetDefault("ingestion.retry_backoff_cap", "5m")
 	v.SetDefault("mcp.enabled", false)
 	v.SetDefault("mcp.requests_per_window", 30)
 	v.SetDefault("mcp.window", "1m")

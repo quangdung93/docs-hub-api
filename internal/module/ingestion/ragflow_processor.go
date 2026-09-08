@@ -17,6 +17,53 @@ type RAGFlowProcessorConfig struct {
 	PollInterval    time.Duration
 	MaxPollDuration time.Duration
 	DatasetPrefix   string
+	// MaxAttempts và RetryBackoffCap là ngân sách thử lại khi RAGFlow lỗi tạm
+	// thời. Xem retryBudget() để biết vì sao chúng nằm ở config chứ không đọc
+	// cột max_attempts của bảng.
+	MaxAttempts     int
+	RetryBackoffCap time.Duration
+}
+
+// Giá trị dùng khi cấu hình bỏ trống — cốt để test và mã gọi cũ không rơi vào
+// ngân sách 0 lượt (tức là không thử lại lần nào), tệ hơn hẳn hành vi trước đây.
+const (
+	defaultMaxAttempts     = 15
+	defaultRetryBackoffCap = 5 * time.Minute
+)
+
+// retryBudget trả về ngân sách thử lại đang áp dụng.
+//
+// Cố ý KHÔNG đọc cột `max_attempts` của bảng ingestion_jobs nữa. Cột đó do
+// module document ghi lúc tạo job, mà nó chưa bao giờ truyền giá trị nên luôn
+// nhận DEFAULT 3 của migration — tức là cột không mang thông tin gì, chỉ tạo
+// ảo giác có thể cấu hình. Chính sách thử lại thuộc về worker, nên để ở config
+// của worker; nhờ vậy đổi ngân sách không cần migration và áp được cho cả job
+// cũ đang nằm trong bảng.
+func (p *RAGFlowProcessor) retryBudget() (int, time.Duration) {
+	maxAttempts, backoffCap := p.cfg.MaxAttempts, p.cfg.RetryBackoffCap
+	if maxAttempts < 1 {
+		maxAttempts = defaultMaxAttempts
+	}
+	if backoffCap <= 0 {
+		backoffCap = defaultRetryBackoffCap
+	}
+	return maxAttempts, backoffCap
+}
+
+// backoffFor tính thời gian chờ trước lượt kế tiếp: luỹ thừa 2s, 4s, 8s… nhưng
+// không vượt backoffCap. Chặn attempt để phép dịch bit không tràn.
+func backoffFor(attempt int, backoffCap time.Duration) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	if attempt > 30 {
+		return backoffCap
+	}
+	wait := time.Duration(1<<attempt) * time.Second
+	if wait > backoffCap {
+		return backoffCap
+	}
+	return wait
 }
 
 // RAGFlowProcessor đồng bộ file gốc từ ObjectStore sang RAGFlow. PostgreSQL
@@ -45,10 +92,9 @@ type ragWork struct {
 	ObjectKey        string  `gorm:"column:object_key"`
 	FileName         string  `gorm:"column:file_name"`
 	MediaType        string  `gorm:"column:media_type"`
-	// Attempt/MaxAttempts lấy từ ingestion_jobs để biết còn lượt thử lại không.
-	// claim đã tăng attempt trước khi trả về, nên Attempt là số lượt ĐÃ dùng.
-	Attempt     int `gorm:"column:attempt"`
-	MaxAttempts int `gorm:"column:max_attempts"`
+	// Attempt lấy từ ingestion_jobs để biết còn lượt thử lại không. claim đã
+	// tăng attempt trước khi trả về, nên đây là số lượt ĐÃ dùng.
+	Attempt int `gorm:"column:attempt"`
 }
 
 func (p *RAGFlowProcessor) ProcessNext(ctx context.Context) (bool, error) {
@@ -153,33 +199,36 @@ func (p *RAGFlowProcessor) failCleanup(ctx context.Context, w cleanupWork, cause
 	// lại thì không ghi được gì và event kẹt mãi ở 'processing'.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbWriteTimeout)
 	defer cancel()
+	// Dùng CHUNG ngân sách với nhánh ingest: sự cố RAGFlow kéo dài thì việc xoá
+	// cũng hỏng y như việc nạp, mà xoá hỏng nghĩa là tài liệu ở lại RAGFlow mãi.
+	maxAttempts, backoffCap := p.retryBudget()
 	status := "pending"
-	if w.Attempt >= 5 {
+	if w.Attempt >= maxAttempts {
 		status = "failed"
 	}
-	backoff := time.Duration(1<<min(w.Attempt, 6)) * time.Second
+	backoff := backoffFor(w.Attempt, backoffCap)
 	_ = p.db.WithContext(ctx).Table("outbox_events").Where("id=?", w.EventID).Updates(map[string]any{
 		"status": status, "available_at": time.Now().UTC().Add(backoff),
 	}).Error
 }
 
 func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
+	maxAttempts, _ := p.retryBudget()
 	var claimed struct {
 		JobID              string `gorm:"column:job_id"`
 		DocumentRevisionID string `gorm:"column:document_revision_id"`
 		Attempt            int    `gorm:"column:attempt"`
-		MaxAttempts        int    `gorm:"column:max_attempts"`
 	}
 	err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		const sql = `WITH next AS (
 			SELECT id FROM ingestion_jobs
-			WHERE status='pending' AND available_at<=now() AND attempt<max_attempts
+			WHERE status='pending' AND available_at<=now() AND attempt<?
 			ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
 		) UPDATE ingestion_jobs j
 		SET status='running',attempt=attempt+1,updated_at=now()
 		FROM next WHERE j.id=next.id
-		RETURNING j.id AS job_id,j.document_revision_id,j.attempt,j.max_attempts`
-		return tx.Raw(sql).Scan(&claimed).Error
+		RETURNING j.id AS job_id,j.document_revision_id,j.attempt`
+		return tx.Raw(sql, maxAttempts).Scan(&claimed).Error
 	})
 	if err != nil {
 		return nil, fmt.Errorf("claim RAGFlow ingestion job: %w", err)
@@ -200,9 +249,9 @@ func (p *RAGFlowProcessor) claim(ctx context.Context) (*ragWork, error) {
 		return nil, fmt.Errorf("revision %s không tồn tại", claimed.DocumentRevisionID)
 	}
 	w.JobID = claimed.JobID
-	// Gán SAU khi Scan: câu SELECT revision không trả hai cột này nên Scan sẽ
-	// để chúng ở giá trị zero, ghi đè mất giá trị lấy từ ingestion_jobs.
-	w.Attempt, w.MaxAttempts = claimed.Attempt, claimed.MaxAttempts
+	// Gán SAU khi Scan: câu SELECT revision không trả cột này nên Scan sẽ để nó
+	// ở giá trị zero, ghi đè mất giá trị lấy từ ingestion_jobs.
+	w.Attempt = claimed.Attempt
 	return &w, nil
 }
 
@@ -368,7 +417,8 @@ func (p *RAGFlowProcessor) fail(ctx context.Context, w *ragWork, cause error) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbWriteTimeout)
 	defer cancel()
 	detail := sanitizeDetail(cause.Error())
-	if retryable(cause) && w.Attempt < w.MaxAttempts {
+	maxAttempts, _ := p.retryBudget()
+	if retryable(cause) && w.Attempt < maxAttempts {
 		p.retryLater(ctx, w, detail)
 		return
 	}
@@ -388,7 +438,8 @@ func (p *RAGFlowProcessor) fail(ctx context.Context, w *ragWork, cause error) {
 // gần nhất để còn quan sát được.
 func (p *RAGFlowProcessor) retryLater(ctx context.Context, w *ragWork, detail string) {
 	now := time.Now().UTC()
-	backoff := time.Duration(1<<min(w.Attempt, 6)) * time.Second
+	_, backoffCap := p.retryBudget()
+	backoff := backoffFor(w.Attempt, backoffCap)
 	_ = p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		_ = tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
 			"ragflow_last_error": detail, "updated_at": now,
