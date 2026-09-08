@@ -131,10 +131,26 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 		return nil
 	})
 	if err != nil {
+		// Xoá object trước rồi mới phân loại lỗi: dù trùng nội dung hay hỏng
+		// thật, file vừa ghi lên storage cũng đã thành rác không ai trỏ tới.
 		_ = s.store.Delete(ctx, key)
+		if errors.Is(err, domain.ErrDuplicateContent) {
+			return nil, nil, duplicateContentError(err)
+		}
 		return nil, nil, apperr.Internal("Không thể tạo revision").WithCause(err)
 	}
 	return d, rev, nil
+}
+
+// duplicateContentError dựng lỗi nghiệp vụ cho trường hợp nạp lại đúng nội dung
+// đã có. Theo ADR-0002 đây là HTTP 200 kèm success=false, không phải 5xx —
+// trước đây nó lọt qua thành SYS_500, khiến client tưởng hệ thống hỏng.
+//
+// retryable=false: gửi lại đúng file đó thì vẫn trùng. Muốn qua được thì phải
+// đổi file, hoặc lưu trữ (archive) revision đang chiếm chỗ.
+func duplicateContentError(cause error) error {
+	return apperr.NewBusiness(errcode.DuplicateContent,
+		"Nội dung file này đã tồn tại trong phạm vi đã chọn", false).WithCause(cause)
 }
 func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult, error) {
 	actor, err := s.authorize(ctx, in.ProjectID, true)
@@ -200,6 +216,12 @@ func (s *Service) Complete(ctx context.Context, pid, uid uuid.UUID) (*domain.Doc
 	})
 	if errors.Is(err, domain.ErrConflict) {
 		return nil, nil, apperr.NewBusiness(errcode.UploadInvalid, "Phiên upload đã được hoàn tất", false)
+	}
+	// Đường presign còn dễ trúng hơn đường upload thẳng: từ khi bỏ sha256 khỏi
+	// API, client không tự tính hash nữa nên không có cách nào biết trước file có
+	// trùng hay không — chỉ phát hiện được ở đúng bước hoàn tất này.
+	if errors.Is(err, domain.ErrDuplicateContent) {
+		return nil, nil, duplicateContentError(err)
 	}
 	if err != nil {
 		return nil, nil, apperr.Internal("Không thể hoàn tất upload").WithCause(err)

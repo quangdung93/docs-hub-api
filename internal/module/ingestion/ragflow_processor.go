@@ -170,7 +170,26 @@ func (p *RAGFlowProcessor) processCleanup(ctx context.Context) (bool, error) {
 		p.failCleanup(ctx, w, err)
 		return true, err
 	}
-	if w.DatasetID != "" && len(documentIDs) > 0 {
+	// Ba nhánh, cố ý KHÔNG gộp lại thành một điều kiện. Bản cũ viết
+	// `if w.DatasetID != "" && len(documentIDs) > 0` rồi luôn đánh 'succeeded',
+	// nên hai lý do bỏ qua rất khác nhau lại đi chung một đường: một cái bình
+	// thường, một cái là tài liệu bị bỏ lại trên RAGFlow mà không ai biết.
+	switch {
+	case len(documentIDs) == 0:
+		// Bình thường: tài liệu chưa từng lên tới RAGFlow (ingest chưa chạy, hoặc
+		// đã dọn ở lượt trước rồi). Không có gì để xoá — đánh 'succeeded' là đúng.
+	case w.DatasetID == "":
+		// Bất thường: revision còn giữ ragflow_document_id, tức tài liệu ĐANG nằm
+		// trên RAGFlow, nhưng project lại không có dataset id để mà xoá. Thử lại
+		// vô ích vì dataset id không tự mọc lại — cần người vào tra. Đánh dấu vĩnh
+		// viễn để event dừng hẳn ở 'failed' và worker ghi log, thay vì im lặng
+		// báo xong rồi để tài liệu ở lại RAGFlow.
+		wrapped := permanent(fmt.Errorf(
+			"document %s còn %d tài liệu trên RAGFlow nhưng project %s không có ragflow_dataset_id",
+			w.DocumentID, len(documentIDs), w.ProjectID))
+		p.failCleanup(ctx, w, wrapped)
+		return true, wrapped
+	default:
 		if err = p.rag.DeleteDocuments(ctx, w.DatasetID, documentIDs); err != nil {
 			wrapped := fmt.Errorf("xóa RAGFlow documents: %w", err)
 			p.failCleanup(ctx, w, wrapped)
@@ -202,8 +221,12 @@ func (p *RAGFlowProcessor) failCleanup(ctx context.Context, w cleanupWork, cause
 	// Dùng CHUNG ngân sách với nhánh ingest: sự cố RAGFlow kéo dài thì việc xoá
 	// cũng hỏng y như việc nạp, mà xoá hỏng nghĩa là tài liệu ở lại RAGFlow mãi.
 	maxAttempts, backoffCap := p.retryBudget()
+	// CỐ Ý dùng explicitlyPermanent chứ không dùng retryable như fail() bên nhánh
+	// ingest: chỉ dừng ngay với lỗi do chính mình gắn dấu, còn lỗi từ RAGFlow thì
+	// vẫn thử lại đủ ngân sách. Xem explicitlyPermanent để biết vì sao hai nhánh
+	// không nên xử như nhau. Trước đây tham số cause bị bỏ không hoàn toàn.
 	status := "pending"
-	if w.Attempt >= maxAttempts {
+	if explicitlyPermanent(cause) || w.Attempt >= maxAttempts {
 		status = "failed"
 	}
 	backoff := backoffFor(w.Attempt, backoffCap)

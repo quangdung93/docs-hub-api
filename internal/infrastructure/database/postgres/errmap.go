@@ -44,3 +44,19 @@ func Translate(err error) error {
 	}
 	return err
 }
+
+// UniqueViolation trả về TÊN ràng buộc duy nhất vừa bị vi phạm, hoặc "" nếu err
+// không phải lỗi 23505.
+//
+// Translate gộp mọi 23505 thành một sentinel, đủ dùng khi bảng chỉ có một ràng
+// buộc duy nhất. Nhưng document_revisions có tới bốn, mang bốn ý nghĩa khác hẳn
+// nhau: trùng nội dung (lỗi nghiệp vụ, người dùng sửa được) so với trùng
+// object_key (lỗi sinh khoá của chính mình, phải là 500). Muốn phân biệt thì
+// phải đọc tên ràng buộc chứ không chỉ mã lỗi.
+func UniqueViolation(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == codeUniqueViolation {
+		return pgErr.ConstraintName
+	}
+	return ""
+}

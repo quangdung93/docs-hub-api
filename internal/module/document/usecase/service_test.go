@@ -24,6 +24,9 @@ type fakeRepo struct {
 	created  *domain.CreateRevisionParams
 	revision *domain.Revision
 	uatItems []domain.UATItem
+	// createErr: lỗi mà CreateRevision trả về thay cho kết quả thành công. Để
+	// nil thì mọi test cũ giữ nguyên hành vi.
+	createErr error
 }
 
 func (f *fakeRepo) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
@@ -33,6 +36,9 @@ func (f *fakeRepo) ScopeExists(context.Context, uuid.UUID, domain.Scope) (bool, 
 	return f.scope, nil
 }
 func (f *fakeRepo) CreateRevision(_ context.Context, in domain.CreateRevisionParams) (*domain.Document, *domain.Revision, error) {
+	if f.createErr != nil {
+		return nil, nil, f.createErr
+	}
 	f.created = &in
 	return &domain.Document{ID: in.DocumentID}, &domain.Revision{ID: in.RevisionID, ObjectKey: in.ObjectKey}, nil
 }

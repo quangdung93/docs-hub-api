@@ -67,6 +67,44 @@ func TestPermanent_NilThiVanNil(t *testing.T) {
 	require.False(t, retryable(nil))
 }
 
+// Ranh giới giữa explicitlyPermanent và retryable — đây là thứ giữ cho nhánh
+// cleanup không đánh hỏng nhầm event mà không có đường quay lại.
+//
+// RAGFlow 400 là ví dụ then chốt: retryable() coi nó vĩnh viễn (đúng cho nhánh
+// ingest), nhưng explicitlyPermanent thì KHÔNG, nên cleanup vẫn thử lại đủ ngân
+// sách trước khi bỏ cuộc.
+func TestExplicitlyPermanent_ChiNhanDauCuaChinhMinh(t *testing.T) {
+	cases := []struct {
+		ten     string
+		err     error
+		mongDoi bool
+	}{
+		{"dấu permanent() của chính mình", permanent(errors.New("mâu thuẫn dữ liệu")), true},
+		{"dấu permanent() bọc nhiều lớp",
+			fmt.Errorf("dọn dẹp: %w", permanent(errors.New("hỏng"))), true},
+		{"RAGFlow 400 mang cờ Retryable=false",
+			&ragflow.APIError{HTTPStatus: 400, Retryable: false}, false},
+		{"RAGFlow báo lỗi bằng HTTP 200 kèm code khác 0",
+			&ragflow.APIError{HTTPStatus: 200, Code: 102, Retryable: false}, false},
+		{"RAGFlow 500", &ragflow.APIError{HTTPStatus: 500, Retryable: true}, false},
+		{"lỗi thường", errors.New("mất kết nối"), false},
+		{"nil", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.ten, func(t *testing.T) {
+			require.Equal(t, c.mongDoi, explicitlyPermanent(c.err))
+		})
+	}
+}
+
+// Chốt lại sự khác biệt bằng một phép so trực tiếp, để ai đọc sau không gộp hai
+// hàm làm một.
+func TestExplicitlyPermanent_KhacRetryableOLoiCuaRAGFlow(t *testing.T) {
+	loi := &ragflow.APIError{HTTPStatus: 400, Retryable: false}
+	require.False(t, retryable(loi), "nhánh ingest: đánh hỏng ngay")
+	require.False(t, explicitlyPermanent(loi), "nhánh cleanup: vẫn còn thử lại")
+}
+
 // Bảng quyết định của fail(): còn lượt + lỗi tạm thời thì xếp lại hàng đợi,
 // ngược lại đánh hỏng. claim đã tăng attempt trước khi trả về nên Attempt là số
 // lượt ĐÃ dùng — attempt=3/max=3 nghĩa là hết lượt.

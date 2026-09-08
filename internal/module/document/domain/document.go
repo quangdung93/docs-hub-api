@@ -14,6 +14,10 @@ import (
 var (
 	ErrNotFound = errors.New("không tìm thấy tài liệu")
 	ErrConflict = errors.New("xung đột phiên bản tài liệu")
+	// ErrDuplicateContent: trong cùng một scope (version hoặc change request) đã
+	// có revision khác mang đúng nội dung này — chỉ số uk_revisions_*_hash chặn.
+	// Đây là chuyện người dùng gây ra và tự sửa được, nên là lỗi NGHIỆP VỤ.
+	ErrDuplicateContent = errors.New("nội dung tài liệu đã tồn tại trong phạm vi này")
 )
 
 type Scope struct {

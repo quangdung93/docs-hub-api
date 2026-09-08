@@ -123,6 +123,9 @@ func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisio
 	}
 	setScope(&m, in.Scope)
 	if err := db.Create(&m).Error; err != nil {
+		if isDuplicateContent(err) {
+			return nil, nil, domain.ErrDuplicateContent
+		}
 		return nil, nil, fmt.Errorf("tạo revision: %w", err)
 	}
 	if err := r.enqueue(ctx, &m, in.ActorID, "document.uploaded"); err != nil {
@@ -440,4 +443,25 @@ func mapErr(err error) error {
 		return domain.ErrNotFound
 	}
 	return err
+}
+
+// Hai chỉ số duy nhất trên document_revisions chặn việc nạp lại đúng nội dung cũ
+// vào cùng một scope (xem migrations/000007). Chúng là chỉ số RIÊNG PHẦN:
+// `WHERE ... AND status <> 'archived'`, nên bản đã lưu trữ không tính là trùng.
+const (
+	ukRevisionsVersionHash = "uk_revisions_version_hash"
+	ukRevisionsChangeHash  = "uk_revisions_change_hash"
+)
+
+// isDuplicateContent chỉ nhận đúng hai chỉ số nội dung trên. Cố ý KHÔNG bắt mọi
+// lỗi 23505: bảng này còn ràng buộc duy nhất trên object_key và trên
+// (document_id, revision_no) — hai cái đó vỡ là lỗi sinh khoá của chính mình,
+// người dùng không làm gì được, phải để nguyên thành lỗi kỹ thuật 500 chứ đừng
+// báo cho họ là "nội dung trùng".
+func isDuplicateContent(err error) bool {
+	switch postgres.UniqueViolation(err) {
+	case ukRevisionsVersionHash, ukRevisionsChangeHash:
+		return true
+	}
+	return false
 }
