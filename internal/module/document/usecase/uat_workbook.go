@@ -97,6 +97,17 @@ func fillUATSummary(f *excelize.File, in uatWorkbookInput) error {
 // Sheet Report2 _Process vẫn được giữ lại (Guideline mục 3.4 cho phép
 // Hide/Delete sheet Report không dùng, nhưng đó là bước tinh gọn tính sau).
 func clearUATSampleData(f *excelize.File) error {
+	// Summary!D10 là ô KẾT QUẢ NGHIỆM THU: một danh sách chọn
+	// (ACCEPT UAT / ACCEPT WITH CONDITIONS / NOT ACCEPT UAT) mà template chốt
+	// sẵn "ACCEPT UAT". Không dọn thì mọi báo cáo xuất ra đều tự nhận PO đã
+	// nghiệm thu, trong khi ô tên PO (C10) còn trống và chưa ai chạy test.
+	//
+	// Đây không phải rác hiển thị mà là một kết luận sai trong tài liệu bàn
+	// giao. Ô cho phép để trống (allowBlank="1") nên xoá là hợp lệ; PO tự chọn
+	// khi nghiệm thu thật.
+	if err := f.SetCellValue(uatSheetSummary, "D10", ""); err != nil {
+		return fmt.Errorf("dọn dữ liệu mẫu %s!D10: %w", uatSheetSummary, err)
+	}
 	// K4/K5 là ngày test Round 1 của dự án mẫu (16/10/2025 - 20/10/2025), lưu
 	// dạng số serial nên nhìn qua tưởng mã số — dễ bị đọc nhầm là ngày thật.
 	for _, cell := range []string{"K4", "K5"} {
