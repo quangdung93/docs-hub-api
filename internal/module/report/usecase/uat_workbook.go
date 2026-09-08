@@ -13,6 +13,7 @@ import (
 const (
 	uatSheetSummary = "Summary"
 	uatSheetModule  = "Report 1_Module"
+	uatSheetProcess = "Report2 _Process"
 	uatFirstDataRow = 12 // dòng đầu tiên dành cho test case trong Report 1_Module
 )
 
@@ -32,9 +33,9 @@ func renderUATContent(format string, in uatContentInput) ([]byte, string, error)
 	return content, contentTypeXLSX, err
 }
 
-// buildUATWorkbook mở template UAT Report chuẩn ISC đã nhúng sẵn, điền tên dự
-// án (Summary) và danh sách test case (Report 1_Module) rồi trả bytes xlsx
-// hoàn chỉnh. Không đụng tới Cover/Report2_Process/Guideline.
+// buildUATWorkbook mở template UAT Report chuẩn ISC đã nhúng sẵn, dọn dữ liệu
+// của dự án mẫu, điền tên dự án (Summary) và danh sách test case
+// (Report 1_Module) rồi trả bytes xlsx hoàn chỉnh.
 func buildUATWorkbook(in uatContentInput) ([]byte, error) {
 	f, err := excelize.OpenReader(bytes.NewReader(assets.UATReportXLSX))
 	if err != nil {
@@ -42,6 +43,9 @@ func buildUATWorkbook(in uatContentInput) ([]byte, error) {
 	}
 	defer f.Close()
 
+	if err := clearUATSampleData(f); err != nil {
+		return nil, err
+	}
 	if in.ProjectName != "" {
 		if err := f.SetCellValue(uatSheetSummary, "D3", in.ProjectName); err != nil {
 			return nil, fmt.Errorf("điền sheet Summary ô D3: %w", err)
@@ -56,6 +60,26 @@ func buildUATWorkbook(in uatContentInput) ([]byte, error) {
 		return nil, fmt.Errorf("ghi file UAT: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// clearUATSampleData dọn dữ liệu của dự án mẫu còn sót trong template UAT.
+//
+// Summary!D10 là ô đáng chú ý nhất: đó là danh sách chọn kết quả nghiệm thu
+// (ACCEPT UAT / ACCEPT WITH CONDITIONS / NOT ACCEPT UAT) và template chọn sẵn
+// "ACCEPT UAT". Để nguyên thì mọi báo cáo xuất ra đều tự nhận PO đã nghiệm thu,
+// trong khi ô tên PO ngay bên cạnh còn trống và chưa ai chạy test.
+func clearUATSampleData(f *excelize.File) error {
+	// Summary: D6 người test của dự án mẫu, D10 kết quả nghiệm thu chọn sẵn.
+	if err := clearSampleCells(f, uatSheetSummary, "D6", "D10"); err != nil {
+		return err
+	}
+	// Report 1_Module: K4/K5 là ngày bắt đầu/kết thúc Round 1 của dự án mẫu.
+	if err := clearSampleCells(f, uatSheetModule, "K4", "K5"); err != nil {
+		return err
+	}
+	// Report2 _Process: 3 dòng quy trình nghiệp vụ của dự án mẫu, gồm cả kết quả
+	// test PENDING/FAILED. Code không ghi gì vào sheet này nên phải dọn cả khối.
+	return clearSampleBlock(f, uatSheetProcess, "A", "J", 2, 4)
 }
 
 // fillUATModuleRows điền mỗi test case thành 1 dòng: NO./MODULE/STEPS TO

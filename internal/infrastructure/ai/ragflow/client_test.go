@@ -228,3 +228,38 @@ func TestClient_FindDatasetByName_LoiKhacVanBaoLoi(t *testing.T) {
 
 	require.Error(t, err, "khóa sai mà nuốt lỗi thì worker im lặng tạo dataset hỏng")
 }
+
+// extra_body.reference phải đi theo cờ WantReference của request, không được
+// hardcode. Module report tắt cờ này để RAGFlow đừng chèn "[ID:n]" vào câu trả
+// lời — dấu trích dẫn lọt vào sẽ phá json.Unmarshal.
+func TestClient_CompleteChat_ReferenceTheoCoWantReference(t *testing.T) {
+	t.Parallel()
+	for _, truongHop := range []struct {
+		nhan string
+		want bool
+	}{{"bật", true}, {"tắt", false}} {
+		var nhanDuoc bool
+		var daGoi bool
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				ExtraBody struct {
+					Reference bool `json:"reference"`
+				} `json:"extra_body"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			nhanDuoc, daGoi = body.ExtraBody.Reference, true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+		}))
+
+		client := New(server.URL, "test-key", time.Second, time.Second)
+		_, err := client.CompleteChat(context.Background(), port.RAGChatCompletionRequest{
+			ChatID: "chat-1", Messages: []port.RAGChatMessage{{Role: "user", Content: "q"}},
+			WantReference: truongHop.want,
+		})
+		require.NoError(t, err)
+		require.True(t, daGoi)
+		require.Equal(t, truongHop.want, nhanDuoc, "trường hợp %s", truongHop.nhan)
+		server.Close()
+	}
+}

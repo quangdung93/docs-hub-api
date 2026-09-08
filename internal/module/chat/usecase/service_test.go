@@ -150,6 +150,9 @@ func TestAsk_DungRAGFlowChatVaMapCitationLocal(t *testing.T) {
 	require.Len(t, rag.completionInput.MetadataConditions, 1)
 	require.Equal(t, versionID.String(), rag.completionInput.MetadataConditions[0].Value)
 	require.Len(t, rag.completionInput.Messages, 2)
+	// Hỏi-đáp CẦN trích dẫn: mapRAGCitations dựng danh sách nguồn từ References
+	// để trả cho người đọc. Khác module report vốn phải tắt vì "[ID:n]" phá parse.
+	require.True(t, rag.completionInput.WantReference)
 	require.Equal(t, 1, rag.createChatCalls)
 	require.Equal(t, "chat-1", repo.chatID)
 }

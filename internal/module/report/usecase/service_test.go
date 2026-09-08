@@ -233,10 +233,33 @@ func TestGenerateUAT_ChuaDongBoRAGFlow(t *testing.T) {
 	require.Equal(t, 504, technical.HTTPStatus)
 }
 
-func TestGenerateUAT_RAGFlowTraJSONHong(t *testing.T) {
+// RAGFlow trả VĂN XUÔI (không tìm thấy nội dung liên quan) là chuyện nghiệp vụ:
+// tài liệu dự án chưa đủ dữ liệu. Không được báo thành EXT_504 vì người đọc sẽ
+// tưởng hệ thống ngoài đang chết.
+func TestGenerateUAT_RAGFlowTraVanXuoiTraLoi400(t *testing.T) {
+	t.Parallel()
+	for _, noiDung := range []string{
+		"không phải json",
+		"Sorry! No relevant content was found in the knowledge base!",
+		"The answer you are looking for is not found in the dataset!",
+	} {
+		actor, pid := uuid.New(), uuid.New()
+		rag := &fakeRAG{completion: port.RAGChatCompletionResult{Content: noiDung}}
+		svc := newService(&fakeRepo{role: "editor", datasetID: "ds-1"}, rag, &fakeStore{})
+		ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
+		_, err := svc.Generate(ctx, GenerateInput{ProjectID: pid, ReportType: domain.ReportTypeUAT})
+		var technical *apperr.TechnicalError
+		require.ErrorAs(t, err, &technical, noiDung)
+		require.Equal(t, 400, technical.HTTPStatus, noiDung)
+	}
+}
+
+// Ngược lại, nội dung MỞ ĐẦU bằng "{" mà vẫn hỏng thì đúng là JSON méo — vẫn
+// phải là lỗi kỹ thuật để còn điều tra, đừng nuốt thành lỗi nghiệp vụ.
+func TestGenerateUAT_RAGFlowTraJSONMeoVanLa504(t *testing.T) {
 	t.Parallel()
 	actor, pid := uuid.New(), uuid.New()
-	rag := &fakeRAG{completion: port.RAGChatCompletionResult{Content: "không phải json"}}
+	rag := &fakeRAG{completion: port.RAGChatCompletionResult{Content: `{"items":[{"title":`}}
 	svc := newService(&fakeRepo{role: "editor", datasetID: "ds-1"}, rag, &fakeStore{})
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
 	_, err := svc.Generate(ctx, GenerateInput{ProjectID: pid, ReportType: domain.ReportTypeUAT})
@@ -381,4 +404,20 @@ func TestGenerateUAT_ChatIDDuocTaiSuDung(t *testing.T) {
 	_, err := svc.Generate(ctx, GenerateInput{ProjectID: pid, ReportType: domain.ReportTypeUAT})
 	require.NoError(t, err)
 	require.Equal(t, "existing-chat", repo.chatID)
+}
+
+// Báo cáo vứt hẳn result.References và chỉ parse result.Content thành JSON, nên
+// phải TẮT trích dẫn từ tầng request. Bật lên thì RAGFlow chèn "[ID:n]" vào câu
+// trả lời và phá parse. Module chat thì ngược lại — nó cần trích dẫn.
+func TestGenerate_TatTrichDanTuTangRequest(t *testing.T) {
+	t.Parallel()
+	actor, pid := uuid.New(), uuid.New()
+	rag := &fakeRAG{completion: port.RAGChatCompletionResult{
+		Content: `{"items":[{"title":"A","steps":"B","expected":"C","source":"D"}]}`,
+	}}
+	svc := newService(&fakeRepo{role: "editor", datasetID: "ds-1"}, rag, &fakeStore{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
+	_, err := svc.Generate(ctx, GenerateInput{ProjectID: pid, ReportType: domain.ReportTypeUAT})
+	require.NoError(t, err)
+	require.False(t, rag.completionInput.WantReference)
 }

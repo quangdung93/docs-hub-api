@@ -85,6 +85,18 @@ type RAGChatCompletionRequest struct {
 	Messages           []RAGChatMessage
 	MetadataLogic      string
 	MetadataConditions []RAGMetadataCondition
+	// WantReference bật chú thích trích dẫn dạng "[ID:n]" mà RAGFlow chèn vào
+	// câu trả lời. Module chat CẦN nó để hiển thị nguồn cho người đọc; module
+	// report thì không, vì nó chỉ lấy Content rồi parse JSON — dấu trích dẫn lọt
+	// vào giữa hoặc sau JSON sẽ phá parse.
+	//
+	// Đây là hàng rào dựa trên trường CÓ trong API của RAGFlow, khác với việc gỡ
+	// bằng biểu thức chính quy vốn phải đoán định dạng nội bộ của họ.
+	//
+	// Lưu ý: dấu trích dẫn chỉ xuất hiện khi cờ này bật VÀ chat assistant đặt
+	// prompt_config.quote=true. Tắt một trong hai là đủ, và tắt ở đây là cách duy
+	// nhất không ảnh hưởng module chat (hai module dùng CHUNG một chat assistant).
+	WantReference bool
 }
 
 type RAGChatCompletionResult struct {
