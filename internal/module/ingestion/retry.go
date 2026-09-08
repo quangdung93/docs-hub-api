@@ -32,6 +32,24 @@ func permanent(err error) error {
 	return permanentError{err: err}
 }
 
+// explicitlyPermanent chỉ nhận lỗi do CHÍNH code này gắn dấu bằng permanent().
+//
+// Khác retryable() ở chỗ nó KHÔNG hỏi cờ IsRetryable của lỗi bên ngoài, nên
+// *ragflow.APIError dù mang cờ false vẫn không tính. Dùng cho nhánh cleanup:
+// hỏng ở đó thì event nằm lại 'failed' vĩnh viễn, mà KHÔNG có API nào đưa nó về
+// 'pending' — phải vào tận DB production chạy tay câu UPDATE. Nhánh ingest thì
+// khác, người dùng còn bấm được POST retry.
+//
+// Vì cái giá lệch nhau như vậy nên chỗ này thà thử lại thừa 15 lượt còn hơn
+// đánh hỏng nhầm. Đáng lưu ý: RAGFlow hay báo lỗi bằng HTTP 200 kèm code khác 0,
+// mà decodeHTTPResponse gán cờ theo status, nên retryableStatus(200)=false —
+// tức cả lớp lỗi ứng dụng của RAGFlow đều đang mang cờ "vĩnh viễn" dù nhiều cái
+// chỉ là nhất thời.
+func explicitlyPermanent(err error) bool {
+	var marked permanentError
+	return errors.As(err, &marked)
+}
+
 // retryable trả lời: gặp lỗi này thì nên xếp job lại hàng đợi hay đánh hỏng hẳn?
 //
 // Chỉ lỗi TỰ KHAI BÁO mình là vĩnh viễn mới bị đánh hỏng; còn lại mặc định thử

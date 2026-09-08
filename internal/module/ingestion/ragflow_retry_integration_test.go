@@ -29,6 +29,8 @@ type ragStub struct {
 	// nhìn trạng thái trong DB là chưa đủ, vì lỗi cũ đánh 'succeeded' mà không xoá.
 	deletedDataset string
 	deletedIDs     []string
+	// deleteErr: lỗi mà DeleteDocuments trả về. Để nil thì xoá thành công.
+	deleteErr error
 }
 
 func (*ragStub) Health(context.Context) error { return nil }
@@ -43,7 +45,7 @@ func (*ragStub) DeleteDatasets(context.Context, []string) error              { r
 func (s *ragStub) DeleteDocuments(_ context.Context, datasetID string, ids []string) error {
 	s.deletedDataset = datasetID
 	s.deletedIDs = append(s.deletedIDs, ids...)
-	return nil
+	return s.deleteErr
 }
 func (*ragStub) StartParsing(context.Context, string, []string) error { return nil }
 func (*ragStub) StopParsing(context.Context, string, []string) error  { return nil }

@@ -43,4 +43,8 @@ const (
 	// AvatarNotUploaded — xác nhận upload ảnh đại diện dự án nhưng ảnh chưa
 	// thực sự tồn tại trong storage.
 	AvatarNotUploaded = "AVATAR_NOT_UPLOADED" // Ảnh đại diện chưa được tải lên storage
+	// DuplicateContent — mã nghiệp vụ BỔ SUNG cho module document: file vừa nạp
+	// có nội dung trùng một revision đang hoạt động trong cùng scope. Cùng nhóm
+	// với DuplicateEmail của templates/04. Fallback nếu TL từ chối: ConflictVersion.
+	DuplicateContent = "DUPLICATE_CONTENT" // Nội dung tài liệu đã tồn tại trong phạm vi này
 )
