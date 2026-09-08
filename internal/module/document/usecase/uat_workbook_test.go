@@ -82,6 +82,13 @@ func TestBuildUATWorkbook_DonDuLieuMauCuaTemplate(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, account, "D6 phải trống khi không truyền account_test")
 
+	// D10 (kết quả nghiệm thu): template chốt sẵn "ACCEPT UAT". Để nguyên thì
+	// báo cáo tự nhận PO đã nghiệm thu dù ô tên PO (C10) trống và chưa ai test
+	// — một kết luận SAI trong tài liệu bàn giao, nặng hơn rác hiển thị.
+	nghiemThu, err := f.GetCellValue(uatSheetSummary, "D10")
+	require.NoError(t, err)
+	require.Empty(t, nghiemThu, "D10 phải trống — PO tự chọn khi nghiệm thu thật")
+
 	// K4/K5: ngày test Round 1 của dự án mẫu (16/10/2025 - 20/10/2025), lưu
 	// dạng số serial nên nhìn qua tưởng mã số — dễ bị đọc nhầm là ngày thật.
 	for _, cell := range []string{"K4", "K5"} {
@@ -122,6 +129,14 @@ func TestBuildUATWorkbook_GiuNguyenKhungBieuMau(t *testing.T) {
 	account, err := f.GetCellValue(uatSheetSummary, "D6")
 	require.NoError(t, err)
 	require.Equal(t, "1. QA-ISC", account)
+
+	// Dọn D10 chỉ được xoá GIÁ TRỊ, danh sách chọn phải còn để PO chọn lại.
+	// dataValidation nằm ở tầng sheet nên GetCellValue không thấy — kiểm gián
+	// tiếp qua việc ô nhận lại được đúng một trong các giá trị hợp lệ.
+	require.NoError(t, f.SetCellValue(uatSheetSummary, "D10", "ACCEPT WITH CONDITIONS"))
+	chon, err := f.GetCellValue(uatSheetSummary, "D10")
+	require.NoError(t, err)
+	require.Equal(t, "ACCEPT WITH CONDITIONS", chon)
 
 	// Guideline là hướng dẫn chính thức của ISC, không được dọn.
 	huongDan, err := f.GetCellValue("Guideline", "C2")

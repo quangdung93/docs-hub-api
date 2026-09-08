@@ -48,6 +48,22 @@ type revisionModel struct {
 
 func (revisionModel) TableName() string { return "document_revisions" }
 
+// revisionOfLiveDocument giới hạn truy vấn vào revision của tài liệu CHƯA bị
+// xoá mềm.
+//
+// Bảng document_revisions KHÔNG có cột deleted_at — xoá tài liệu chỉ đánh dấu ở
+// bảng documents. GORM cũng chỉ tự áp scope soft-delete cho model CÓ trường
+// gorm.DeletedAt, mà revisionModel thì không. Nên truy vấn thẳng revision theo
+// id sẽ đọc được cả revision của tài liệu đã xoá, và tệ hơn là chạy lại được
+// ingestion cho nó (nạp ngược tài liệu đã xoá lên RAGFlow).
+//
+// Cùng lớp lỗi đã lặp nhiều lần trong repo: GORM cư xử khác khi truy vấn không
+// đi qua model có soft-delete. Xem mục #6 trong docs/bugs.
+func revisionOfLiveDocument(db *gorm.DB) *gorm.DB {
+	return db.Where(`EXISTS (SELECT 1 FROM documents d
+		WHERE d.id = document_revisions.document_id AND d.deleted_at IS NULL)`)
+}
+
 type uploadModel struct {
 	ID, ProjectID, DocumentID, RevisionID   string
 	ProjectVersionID, ChangeRequestID       *string
@@ -218,7 +234,8 @@ func (r *Repository) FindDocument(ctx context.Context, pid, did uuid.UUID) (*dom
 }
 func (r *Repository) FindRevision(ctx context.Context, pid, did, rid uuid.UUID) (*domain.Revision, error) {
 	var m revisionModel
-	if err := postgres.DBFrom(ctx, r.db).First(&m, "id=? AND document_id=? AND project_id=?", rid, did, pid).Error; err != nil {
+	if err := revisionOfLiveDocument(postgres.DBFrom(ctx, r.db)).
+		First(&m, "id=? AND document_id=? AND project_id=?", rid, did, pid).Error; err != nil {
 		return nil, mapErr(err)
 	}
 	return toRevision(m), nil
@@ -242,7 +259,8 @@ func (r *Repository) Update(ctx context.Context, pid, did uuid.UUID, title, desc
 func (r *Repository) Retry(ctx context.Context, pid, did, rid, actor uuid.UUID) error {
 	db := postgres.DBFrom(ctx, r.db)
 	var m revisionModel
-	if err := db.First(&m, "id=? AND document_id=? AND project_id=?", rid, did, pid).Error; err != nil {
+	if err := revisionOfLiveDocument(db).
+		First(&m, "id=? AND document_id=? AND project_id=?", rid, did, pid).Error; err != nil {
 		return mapErr(err)
 	}
 	if m.Status != "failed" {
