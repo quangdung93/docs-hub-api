@@ -35,15 +35,17 @@ const (
 )
 
 type Document struct {
-	ID          uuid.UUID `json:"id"`
-	ProjectID   uuid.UUID `json:"project_id"`
-	CreatedBy   uuid.UUID `json:"created_by"`
-	Title       string    `json:"title"`
-	Key         string    `json:"document_key"`
-	Description string    `json:"description"`
-	Version     int       `json:"version"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uuid.UUID  `json:"id"`
+	ProjectID   uuid.UUID  `json:"project_id"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	Title       string     `json:"title"`
+	Key         string     `json:"document_key"`
+	Description string     `json:"description"`
+	Version     int        `json:"version"`
+	IsDeleted   bool       `json:"is_deleted"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type Revision struct {
@@ -81,6 +83,7 @@ type Upload struct {
 type Filter struct {
 	Query, Status, MediaType   string
 	VersionID, ChangeRequestID *uuid.UUID
+	IncludeDeleted             bool
 }
 
 // UATItem là 1 dòng trong sheet Report 1_Module của UAT Report — tài liệu

@@ -1,0 +1,229 @@
+2026-09-03T09:48:03.630+0700	[34mINFO[0m	bootstrap/infra.go:139	đã khởi tạo object storage	{"service": "docs-hub-api", "env": "local", "driver": "filesystem"}
+2026-09-03T09:48:03.631+0700	[34mINFO[0m	bootstrap/infra.go:79	đã khởi tạo RAGFlow client	{"service": "docs-hub-api", "env": "local", "base_url": "https://ragflow.io.vn"}
+2026-09-03T09:48:03.636+0700	[33mWARN[0m	bootstrap/router.go:35	Đã TẮT JWT authentication cho internal API ở local	{"service": "docs-hub-api", "env": "local", "actor_email": "admin@docshub.io.vn", "actor_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:48:03.636+0700	[33mWARN[0m	bootstrap/router.go:59	Đã bật endpoint /public/api/v1/auth/dev-token (CHỈ dành cho local)	{"service": "docs-hub-api", "env": "local"}
+2026-09-03T09:48:03.636+0700	[34mINFO[0m	bootstrap/router.go:69	Đã bật MCP Streamable HTTP tại /mcp	{"service": "docs-hub-api", "env": "local"}
+2026-09-03T09:48:03.636+0700	[34mINFO[0m	bootstrap/app.go:89	service đã khởi động	{"service": "docs-hub-api", "env": "local", "api_port": 8080, "admin_port": 9090, "env": "local"}
+2026-09-03T09:48:59.314+0700	[31mERROR[0m	postgres/gormlogger.go:81	gorm query lỗi	{"service": "docs-hub-api", "env": "local", "request_id": "f920b323-a627-4f02-b0f9-7e09105d9925", "trace_id": "943aac291cd7f8370424789a4df419c9", "elapsed": 0, "rows": 0, "sql": "INSERT INTO \"sessions\" (\"id\",\"user_id\",\"token\",\"expires_at\",\"created_at\") VALUES ('bf8f3b91-3185-4668-b71e-d06f3c2d806a','d065a7d1-539d-49be-8692-f70991c8717b','E7ZGlkoRMuOUQ2d8FB-kny2-r7qB-qUNrN5IAS_xCWI','2026-09-10 09:48:59.313','2026-09-03 09:48:59.313')", "error": "ERROR: relation \"sessions\" does not exist (SQLSTATE 42P01)"}
+github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres.(*gormZapLogger).Trace
+	/media/Data/GitHub/docs-hub-api/internal/infrastructure/database/postgres/gormlogger.go:81
+gorm.io/gorm.(*processor).Execute
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/callbacks.go:134
+gorm.io/gorm.(*DB).Create
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/finisher_api.go:24
+github.com/quangdung93/docs-hub-api/internal/module/auth/repository/postgres.(*sessionRepository).Create
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/repository/postgres/session_repo.go:23
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).issue
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:213
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:98
+github.com/quangdung93/docs-hub-api/internal/module/auth/delivery/http.(*AuthHandler).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/delivery/http/auth_handler.go:106
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Timeout.func9
+	/media/Data/GitHub/docs-hub-api/internal/middleware/timeout.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/bootstrap.Run.buildGlobalInfraMiddleware.RateLimit.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/ratelimit.go:51
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.BodyLimit.func8
+	/media/Data/GitHub/docs-hub-api/internal/middleware/bodylimit.go:15
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.SecureHeaders.func7
+	/media/Data/GitHub/docs-hub-api/internal/middleware/secure.go:21
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.ErrorHandler.func6
+	/media/Data/GitHub/docs-hub-api/internal/middleware/errorhandler.go:32
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Metrics.func5
+	/media/Data/GitHub/docs-hub-api/internal/middleware/metrics.go:22
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Logging.func4
+	/media/Data/GitHub/docs-hub-api/internal/middleware/logging.go:28
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.TraceIDInjector.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/tracing.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin.Middleware.func1
+	/home/quocviet/go/pkg/mod/go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin@v0.56.0/gintrace.go:90
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.RequestID.func2
+	/media/Data/GitHub/docs-hub-api/internal/middleware/requestid.go:27
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Recovery.func1
+	/media/Data/GitHub/docs-hub-api/internal/middleware/recovery.go:47
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589
+net/http.serverHandler.ServeHTTP
+	/usr/local/go/src/net/http/server.go:3340
+net/http.(*conn).serve
+	/usr/local/go/src/net/http/server.go:2109
+2026-09-03T09:48:59.314+0700	[33mWARN[0m	middleware/errorhandler.go:106	lỗi kỹ thuật	{"service": "docs-hub-api", "env": "local", "request_id": "f920b323-a627-4f02-b0f9-7e09105d9925", "trace_id": "943aac291cd7f8370424789a4df419c9", "code": "AUTH_401", "error": "technical error AUTH_401 (401): Tên đăng nhập hoặc mật khẩu không đúng", "http_status": 401}
+2026-09-03T09:48:59.314+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "f920b323-a627-4f02-b0f9-7e09105d9925", "trace_id": "943aac291cd7f8370424789a4df419c9", "method": "POST", "path": "/public/api/v1/auth/login", "status": 401, "latency": 56, "bytes": 292, "client_ip": "::1"}
+2026-09-03T09:49:26.097+0700	[33mWARN[0m	middleware/errorhandler.go:106	lỗi kỹ thuật	{"service": "docs-hub-api", "env": "local", "request_id": "31fb53e5-9ee6-4872-b6c6-d1d403248cc6", "trace_id": "1221d34596375fea2393017e6b8aece2", "code": "AUTH_401", "error": "technical error AUTH_401 (401): Tên đăng nhập hoặc mật khẩu không đúng", "http_status": 401}
+2026-09-03T09:49:26.097+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "31fb53e5-9ee6-4872-b6c6-d1d403248cc6", "trace_id": "1221d34596375fea2393017e6b8aece2", "method": "POST", "path": "/public/api/v1/auth/login", "status": 401, "latency": 3, "bytes": 292, "client_ip": "::1"}
+2026-09-03T09:51:22.023+0700	[31mERROR[0m	postgres/gormlogger.go:81	gorm query lỗi	{"service": "docs-hub-api", "env": "local", "request_id": "9a1e87e5-003e-4e8f-96b4-6dec76c1d7a0", "trace_id": "9328d29c895c730eb2f76cf5929e3b05", "elapsed": 0, "rows": 0, "sql": "INSERT INTO \"sessions\" (\"id\",\"user_id\",\"token\",\"expires_at\",\"created_at\") VALUES ('6b368286-a0bc-46dc-82bc-75ebdb2f1d71','d065a7d1-539d-49be-8692-f70991c8717b','m4FRbL6sZkSLSoTv6y8ef9DJbIIZcXhTCwe_ueEKJbg','2026-09-10 09:51:22.022','2026-09-03 09:51:22.022')", "error": "ERROR: relation \"sessions\" does not exist (SQLSTATE 42P01)"}
+github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres.(*gormZapLogger).Trace
+	/media/Data/GitHub/docs-hub-api/internal/infrastructure/database/postgres/gormlogger.go:81
+gorm.io/gorm.(*processor).Execute
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/callbacks.go:134
+gorm.io/gorm.(*DB).Create
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/finisher_api.go:24
+github.com/quangdung93/docs-hub-api/internal/module/auth/repository/postgres.(*sessionRepository).Create
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/repository/postgres/session_repo.go:23
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).issue
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:213
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:98
+github.com/quangdung93/docs-hub-api/internal/module/auth/delivery/http.(*AuthHandler).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/delivery/http/auth_handler.go:106
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Timeout.func9
+	/media/Data/GitHub/docs-hub-api/internal/middleware/timeout.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/bootstrap.Run.buildGlobalInfraMiddleware.RateLimit.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/ratelimit.go:51
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.BodyLimit.func8
+	/media/Data/GitHub/docs-hub-api/internal/middleware/bodylimit.go:15
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.SecureHeaders.func7
+	/media/Data/GitHub/docs-hub-api/internal/middleware/secure.go:21
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.ErrorHandler.func6
+	/media/Data/GitHub/docs-hub-api/internal/middleware/errorhandler.go:32
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Metrics.func5
+	/media/Data/GitHub/docs-hub-api/internal/middleware/metrics.go:22
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Logging.func4
+	/media/Data/GitHub/docs-hub-api/internal/middleware/logging.go:28
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.TraceIDInjector.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/tracing.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin.Middleware.func1
+	/home/quocviet/go/pkg/mod/go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin@v0.56.0/gintrace.go:90
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.RequestID.func2
+	/media/Data/GitHub/docs-hub-api/internal/middleware/requestid.go:27
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Recovery.func1
+	/media/Data/GitHub/docs-hub-api/internal/middleware/recovery.go:47
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589
+net/http.serverHandler.ServeHTTP
+	/usr/local/go/src/net/http/server.go:3340
+net/http.(*conn).serve
+	/usr/local/go/src/net/http/server.go:2109
+2026-09-03T09:51:22.023+0700	[33mWARN[0m	middleware/errorhandler.go:106	lỗi kỹ thuật	{"service": "docs-hub-api", "env": "local", "request_id": "9a1e87e5-003e-4e8f-96b4-6dec76c1d7a0", "trace_id": "9328d29c895c730eb2f76cf5929e3b05", "code": "AUTH_401", "error": "technical error AUTH_401 (401): Tên đăng nhập hoặc mật khẩu không đúng", "http_status": 401}
+2026-09-03T09:51:22.023+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "9a1e87e5-003e-4e8f-96b4-6dec76c1d7a0", "trace_id": "9328d29c895c730eb2f76cf5929e3b05", "method": "POST", "path": "/public/api/v1/auth/login", "status": 401, "latency": 56, "bytes": 292, "client_ip": "::1"}
+2026-09-03T09:51:38.935+0700	[31mERROR[0m	postgres/gormlogger.go:81	gorm query lỗi	{"service": "docs-hub-api", "env": "local", "request_id": "78976e72-9518-4c30-826f-7a9561708eac", "trace_id": "32de7666a60fc4e5da01ddc94bf6d311", "elapsed": 0, "rows": 0, "sql": "INSERT INTO \"sessions\" (\"id\",\"user_id\",\"token\",\"expires_at\",\"created_at\") VALUES ('06b62c23-e763-4a03-bb36-45ef2afa2076','d065a7d1-539d-49be-8692-f70991c8717b','kbWmPQrvBbsr-zilMmhaU_nkUCSJyaqOsY7gkJ0CYSE','2026-09-10 09:51:38.935','2026-09-03 09:51:38.935')", "error": "ERROR: relation \"sessions\" does not exist (SQLSTATE 42P01)"}
+github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres.(*gormZapLogger).Trace
+	/media/Data/GitHub/docs-hub-api/internal/infrastructure/database/postgres/gormlogger.go:81
+gorm.io/gorm.(*processor).Execute
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/callbacks.go:134
+gorm.io/gorm.(*DB).Create
+	/home/quocviet/go/pkg/mod/gorm.io/gorm@v1.25.12/finisher_api.go:24
+github.com/quangdung93/docs-hub-api/internal/module/auth/repository/postgres.(*sessionRepository).Create
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/repository/postgres/session_repo.go:23
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).issue
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:213
+github.com/quangdung93/docs-hub-api/internal/module/auth/usecase.(*authUseCase).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/usecase/auth_usecase.go:98
+github.com/quangdung93/docs-hub-api/internal/module/auth/delivery/http.(*AuthHandler).Login
+	/media/Data/GitHub/docs-hub-api/internal/module/auth/delivery/http/auth_handler.go:106
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Timeout.func9
+	/media/Data/GitHub/docs-hub-api/internal/middleware/timeout.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/bootstrap.Run.buildGlobalInfraMiddleware.RateLimit.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/ratelimit.go:51
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.BodyLimit.func8
+	/media/Data/GitHub/docs-hub-api/internal/middleware/bodylimit.go:15
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.SecureHeaders.func7
+	/media/Data/GitHub/docs-hub-api/internal/middleware/secure.go:21
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.ErrorHandler.func6
+	/media/Data/GitHub/docs-hub-api/internal/middleware/errorhandler.go:32
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Metrics.func5
+	/media/Data/GitHub/docs-hub-api/internal/middleware/metrics.go:22
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Logging.func4
+	/media/Data/GitHub/docs-hub-api/internal/middleware/logging.go:28
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.TraceIDInjector.func3
+	/media/Data/GitHub/docs-hub-api/internal/middleware/tracing.go:26
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin.Middleware.func1
+	/home/quocviet/go/pkg/mod/go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin@v0.56.0/gintrace.go:90
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.RequestID.func2
+	/media/Data/GitHub/docs-hub-api/internal/middleware/requestid.go:27
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/quangdung93/docs-hub-api/internal/infrastructure/httpserver.NewAPIEngine.Recovery.func1
+	/media/Data/GitHub/docs-hub-api/internal/middleware/recovery.go:47
+github.com/gin-gonic/gin.(*Context).Next
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/quocviet/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589
+net/http.serverHandler.ServeHTTP
+	/usr/local/go/src/net/http/server.go:3340
+net/http.(*conn).serve
+	/usr/local/go/src/net/http/server.go:2109
+2026-09-03T09:51:38.935+0700	[33mWARN[0m	middleware/errorhandler.go:106	lỗi kỹ thuật	{"service": "docs-hub-api", "env": "local", "request_id": "78976e72-9518-4c30-826f-7a9561708eac", "trace_id": "32de7666a60fc4e5da01ddc94bf6d311", "code": "AUTH_401", "error": "technical error AUTH_401 (401): Tên đăng nhập hoặc mật khẩu không đúng", "http_status": 401}
+2026-09-03T09:51:38.935+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "78976e72-9518-4c30-826f-7a9561708eac", "trace_id": "32de7666a60fc4e5da01ddc94bf6d311", "method": "POST", "path": "/public/api/v1/auth/login", "status": 401, "latency": 55, "bytes": 292, "client_ip": "::1"}
+2026-09-03T09:52:10.861+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "33c53600-6921-4e1f-befb-ea26b95744ee", "trace_id": "91e1d5a1ac88c004e792579276dbfb8d", "method": "POST", "path": "/mcp", "status": 200, "latency": 0, "bytes": 210, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:52:10.962+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "9e7b9728-6c3a-4ffd-8f2f-7aa41dbb373a", "trace_id": "c691a5d095069c5df442b9e206038e8e", "method": "POST", "path": "/mcp", "status": 202, "latency": 0, "bytes": -1, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:52:11.125+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "369d0253-068d-497a-9799-3d2e237c7ede", "trace_id": "00aee118b1f4db162401e3368e1b8200", "method": "GET", "path": "/mcp", "status": 405, "latency": 0, "bytes": 19, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:52:11.131+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "75641d6f-998d-415b-96e2-653150a33f61", "trace_id": "3ed02eac0c3edeadebe7b49ef3901684", "method": "POST", "path": "/mcp", "status": 200, "latency": 1, "bytes": 9397, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:52:11.131+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "fc422273-c7dc-4808-a64e-9cfd14b7db1e", "trace_id": "62c27e49220d85569f25eb583de7b84b", "method": "POST", "path": "/mcp", "status": 200, "latency": 0, "bytes": 50, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:56:31.635+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "cfd687d9-f1f3-4a8a-9348-1fd1e89f4893", "trace_id": "212e0efccd0a9ac9ba2d94f82013d716", "method": "POST", "path": "/mcp", "status": 200, "latency": 23, "bytes": 550, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:56:48.051+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "2e91cf3a-3fdf-484d-ba60-71376b822a45", "trace_id": "cc21fa94329977b5ebba67c997d965b7", "method": "POST", "path": "/mcp", "status": 200, "latency": 3, "bytes": 1376, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}
+2026-09-03T09:59:25.233+0700	[34mINFO[0m	middleware/logging.go:42	access	{"service": "docs-hub-api", "env": "local", "request_id": "e98ba16d-0987-490a-a7c9-2042e73ed3ef", "trace_id": "8f57e232bc5419d3a4a11a023d7456cc", "method": "POST", "path": "/mcp", "status": 202, "latency": 0, "bytes": -1, "client_ip": "::1", "user_id": "1676d8f4-020d-4ffd-a1f3-0d6aa0d0ae65"}

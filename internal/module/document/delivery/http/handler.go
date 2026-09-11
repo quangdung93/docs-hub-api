@@ -227,6 +227,7 @@ func (h *Handler) Complete(c *gin.Context) {
 // @Param type query string false "MIME type"
 // @Param version_id query string false "Project version ID" format(uuid)
 // @Param change_request_id query string false "Change request ID" format(uuid)
+// @Param include_deleted query bool false "Trả cả tài liệu đã xóa mềm" default(false)
 // @Success 200 {object} response.Envelope{data=[]domain.Document}
 // @Failure 401 {object} response.Envelope
 // @Failure 403 {object} response.Envelope
@@ -242,6 +243,14 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 	f := domain.Filter{Query: c.Query("q"), Status: c.Query("status"), MediaType: c.Query("type")}
+	if raw := c.Query("include_deleted"); raw != "" {
+		includeDeleted, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			fail(c, apperr.BadRequest("include_deleted phải là true hoặc false"))
+			return
+		}
+		f.IncludeDeleted = includeDeleted
+	}
 	f.VersionID, _ = optionalIDPtr(c.Query("version_id"))
 	f.ChangeRequestID, _ = optionalIDPtr(c.Query("change_request_id"))
 	items, meta, err := h.svc.List(c.Request.Context(), pid, f, p)

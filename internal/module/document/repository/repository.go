@@ -195,6 +195,12 @@ func (r *Repository) CompleteUpload(ctx context.Context, u *domain.Upload) (*dom
 func (r *Repository) List(ctx context.Context, pid uuid.UUID, f domain.Filter, p pagination.Query) ([]domain.Document, int64, error) {
 	p = p.Normalize()
 	q := postgres.DBFrom(ctx, r.db).Model(&documentModel{}).Where("project_id=?", pid)
+	if f.IncludeDeleted {
+		// Unscoped chỉ áp dụng cho màn hình quản lý/lịch sử. Các đường đọc chi
+		// tiết, retry và retrieval vẫn giữ soft-delete scope để tài liệu đã xoá
+		// không thể được sử dụng lại.
+		q = q.Unscoped()
+	}
 	if f.Query != "" {
 		q = q.Where("title ILIKE ?", "%"+f.Query+"%")
 	}
@@ -211,7 +217,13 @@ func (r *Repository) List(ctx context.Context, pid uuid.UUID, f domain.Filter, p
 		return nil, 0, err
 	}
 	var ms []documentModel
-	if err := q.Order("updated_at DESC,id DESC").Limit(p.Limit).Offset(p.Offset()).Find(&ms).Error; err != nil {
+	order := "updated_at DESC,id DESC"
+	if f.IncludeDeleted {
+		// Một lần xoá không cập nhật updated_at. Dùng deleted_at làm mốc hoạt
+		// động giúp danh sách mở rộng có hành vi gần với activity log.
+		order = "GREATEST(updated_at,COALESCE(deleted_at,updated_at)) DESC,id DESC"
+	}
+	if err := q.Order(order).Limit(p.Limit).Offset(p.Offset()).Find(&ms).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]domain.Document, len(ms))
@@ -391,10 +403,16 @@ func stringOrEmpty(value *string) string {
 }
 
 func toDocument(m documentModel) *domain.Document {
+	var deletedAt *time.Time
+	if m.DeletedAt.Valid {
+		value := m.DeletedAt.Time
+		deletedAt = &value
+	}
 	return &domain.Document{
 		ID: uuid.MustParse(m.ID), ProjectID: uuid.MustParse(m.ProjectID),
 		CreatedBy: uuid.MustParse(m.CreatedBy), Title: m.Title, Key: m.DocumentKey,
-		Description: m.Description, Version: m.Version, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Description: m.Description, Version: m.Version, IsDeleted: m.DeletedAt.Valid,
+		DeletedAt: deletedAt, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 func toRevision(m revisionModel) *domain.Revision {

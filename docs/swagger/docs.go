@@ -650,6 +650,13 @@ const docTemplate = `{
                         "description": "Change request ID",
                         "name": "change_request_id",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Trả cả tài liệu đã xóa mềm",
+                        "name": "include_deleted",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2581,6 +2588,9 @@ const docTemplate = `{
                 "created_by": {
                     "type": "string"
                 },
+                "deleted_at": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -2589,6 +2599,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_deleted": {
+                    "type": "boolean"
                 },
                 "project_id": {
                     "type": "string"

@@ -25,12 +25,16 @@ definitions:
         type: string
       created_by:
         type: string
+      deleted_at:
+        type: string
       description:
         type: string
       document_key:
         type: string
       id:
         type: string
+      is_deleted:
+        type: boolean
       project_id:
         type: string
       title:
@@ -945,6 +949,11 @@ paths:
         in: query
         name: change_request_id
         type: string
+      - default: false
+        description: Trả cả tài liệu đã xóa mềm
+        in: query
+        name: include_deleted
+        type: boolean
       produces:
       - application/json
       responses:

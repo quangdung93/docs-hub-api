@@ -132,7 +132,7 @@ ingestion:
   retry_backoff_cap: 5m
 
 mcp:
-  enabled: false
+  enabled: true
   requests_per_window: 30
   window: 1m
   max_source_lines: 200

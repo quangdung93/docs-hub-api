@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"github.com/quangdung93/docs-hub-api/internal/common/pagination"
+	"github.com/quangdung93/docs-hub-api/internal/module/document/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/repository"
 )
 
@@ -118,4 +120,26 @@ func TestFindRevision_TaiLieuConSongVanDocDuoc(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "failed", rev.Status)
 	require.Equal(t, 1, rev.RevisionNo)
+}
+
+func TestList_ChiTraTaiLieuDaXoaKhiDuocYeuCau(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, did, _, actor := dungDuLieu(t, db)
+
+	require.NoError(t, repo.SoftDelete(ctx, pid, did, actor))
+
+	items, total, err := repo.List(ctx, pid, domain.Filter{}, pagination.Query{Page: 1, Limit: 20})
+	require.NoError(t, err)
+	require.Zero(t, total)
+	require.Empty(t, items)
+
+	items, total, err = repo.List(ctx, pid, domain.Filter{IncludeDeleted: true}, pagination.Query{Page: 1, Limit: 20})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, items, 1)
+	require.Equal(t, did, items[0].ID)
+	require.True(t, items[0].IsDeleted)
+	require.NotNil(t, items[0].DeletedAt)
 }
