@@ -81,7 +81,7 @@ jwt:
   algorithm: HS256
   secret: "" # <- APP_JWT_SECRET
   issuer: docs-hub-api
-  access_ttl: 60m
+  access_ttl: 24h
   refresh_ttl: 168h
 
 # Thêm domain/IP thật của bạn vào đây khi có frontend gọi tới.
