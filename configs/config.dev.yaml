@@ -75,7 +75,7 @@ jwt:
   algorithm: HS256
   secret: "" # <- APP_JWT_SECRET
   issuer: docs-hub-api
-  access_ttl: 15m
+  access_ttl: 24h
   refresh_ttl: 168h
 
 cors:
