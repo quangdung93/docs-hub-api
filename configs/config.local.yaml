@@ -74,7 +74,7 @@ jwt:
   algorithm: HS256
   secret: local-dev-secret-doi-o-moi-truong-that # local only
   issuer: docs-hub-api
-  access_ttl: 15m
+  access_ttl: 60m
   refresh_ttl: 168h
 
 cors:
