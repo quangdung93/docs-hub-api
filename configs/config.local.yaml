@@ -132,7 +132,9 @@ ingestion:
   retry_backoff_cap: 5m
 
 mcp:
-  enabled: true
+  # MCP phụ thuộc search/chat của RAGFlow. Bật hai cờ cùng nhau qua .env:
+  # APP_RAGFLOW_ENABLED=true và APP_MCP_ENABLED=true.
+  enabled: false
   requests_per_window: 30
   window: 1m
   max_source_lines: 200
