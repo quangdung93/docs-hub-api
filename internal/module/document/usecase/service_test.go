@@ -61,6 +61,9 @@ func (f *fakeRepo) FindRevision(context.Context, uuid.UUID, uuid.UUID, uuid.UUID
 func (*fakeRepo) Update(context.Context, uuid.UUID, uuid.UUID, string, string, int) (*domain.Document, error) {
 	return nil, nil
 }
+func (*fakeRepo) SetDocType(context.Context, uuid.UUID, uuid.UUID, string, int) (*domain.Document, error) {
+	return nil, nil
+}
 func (*fakeRepo) Retry(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error { return nil }
 func (*fakeRepo) SoftDelete(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error       { return nil }
 func (*fakeRepo) ProjectMeta(context.Context, uuid.UUID) (string, string, error) {
@@ -126,7 +129,7 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 		FileName: "../../yeu cau.md", MediaType: mimeMarkdown, SizeBytes: int64(len(data)),
 		Reader: bytes.NewReader(data),
 	}
-	d, r, err := svc.Upload(ctx, input)
+	d, r, _, err := svc.Upload(ctx, input)
 	require.NoError(t, err)
 	require.NotNil(t, d)
 	require.NotNil(t, r)
@@ -141,7 +144,7 @@ func TestUpload_ViewerBiTuChoi(t *testing.T) {
 	actor, pid, vid := uuid.New(), uuid.New(), uuid.New()
 	svc := New(&fakeRepo{role: "viewer", scope: true}, fakeTx{}, &fakeStore{}, fakeClock{})
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-	_, _, err := svc.Upload(ctx, UploadInput{ProjectID: pid, Scope: domain.Scope{VersionID: &vid}})
+	_, _, _, err := svc.Upload(ctx, UploadInput{ProjectID: pid, Scope: domain.Scope{VersionID: &vid}})
 	var technical *apperr.TechnicalError
 	require.ErrorAs(t, err, &technical)
 	require.Equal(t, 403, technical.HTTPStatus)
@@ -165,7 +168,7 @@ func TestUpload_KichThuocLuuTruSaiXoaObject(t *testing.T) {
 	svc := New(repo, fakeTx{}, store, fakeClock{})
 	data := []byte("abc")
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-	_, _, err := svc.Upload(ctx, UploadInput{
+	_, _, _, err := svc.Upload(ctx, UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
 		FileName: "x.txt", MediaType: mimeTextPlain, SizeBytes: 3,
 		Reader: bytes.NewReader(data),
@@ -179,7 +182,7 @@ func TestValidate_TuChoiExtensionKhongKhopMIME(t *testing.T) {
 	actor, pid, vid := uuid.New(), uuid.New(), uuid.New()
 	svc := New(&fakeRepo{role: "editor", scope: true}, fakeTx{}, &fakeStore{}, fakeClock{})
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
-	_, _, err := svc.Upload(ctx, UploadInput{
+	_, _, _, err := svc.Upload(ctx, UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
 		FileName: "x.txt", MediaType: "application/pdf", SizeBytes: 3,
 		Reader: bytes.NewReader([]byte("abc")),

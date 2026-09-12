@@ -1017,6 +1017,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/internal/api/v1/projects/{id}/documents/urd-summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Dùng hiển thị cột \"Hoàn thiện\" trong bảng Quản lý dự án — chỉ tài\nliệu nào đã từng phân tích mới xuất hiện trong kết quả.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Tóm tắt độ hoàn thiện URD của toàn bộ tài liệu trong project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/http.SummaryItem"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/internal/api/v1/projects/{id}/documents/{document_id}": {
             "get": {
                 "security": [
@@ -1180,6 +1242,91 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/http.UpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.Document"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/documents/{document_id}/doc-type": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).\ndoc_type=\"urd\" để xác nhận, để trống để từ chối gợi ý.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "Xác nhận (hoặc từ chối) loại tài liệu URD",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Loại tài liệu và version hiện tại",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.ConfirmDocTypeRequest"
                         }
                     }
                 ],
@@ -1615,6 +1762,351 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Xem chi tiết 1 phân tích edge case (mở lại modal đang dở)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Analysis ID",
+                        "name": "analysis_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/http.AnalysisResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}/cases/{case_id}/image": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Trả về image_object_key để đính vào item tương ứng khi gọi POST .../resolutions.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Tải ảnh minh hoạ cho 1 edge case",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Analysis ID",
+                        "name": "analysis_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Edge case ID",
+                        "name": "case_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Ảnh minh hoạ",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/http.UploadImageResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}/resolutions": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động\nmerge nội dung vào cuối file .docx gốc và tạo revision mới.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Lưu hướng giải quyết cho các edge case; tạo phiên bản URD mới khi đã đủ",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Analysis ID",
+                        "name": "analysis_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Hướng giải quyết từng case",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.SubmitResolutionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.Analysis"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/internal/api/v1/projects/{id}/documents/{document_id}/urd/analyze": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Tài liệu phải đã được xác nhận doc_type=urd (PATCH .../documents/{document_id}/doc-type)\nvà có revision mới nhất đã ingest xong (status=ready).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/http.AnalysisResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -2572,6 +3064,44 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.Analysis": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "createdBy": {
+                    "type": "string"
+                },
+                "documentID": {
+                    "type": "string"
+                },
+                "errorCode": {
+                    "type": "string"
+                },
+                "errorDetail": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "resolvedCases": {
+                    "type": "integer"
+                },
+                "revisionID": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "totalCases": {
+                    "type": "integer"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Document": {
             "type": "object",
             "properties": {
@@ -2582,6 +3112,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "description": {
+                    "type": "string"
+                },
+                "doc_type": {
+                    "description": "DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị\n\"urd\" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.",
                     "type": "string"
                 },
                 "document_key": {
@@ -2600,6 +3134,32 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.EdgeCase": {
+            "type": "object",
+            "properties": {
+                "analysisID": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "imageObjectKey": {
+                    "type": "string"
+                },
+                "resolution": {
+                    "type": "string"
+                },
+                "resolved": {
+                    "type": "boolean"
+                },
+                "sequenceNo": {
                     "type": "integer"
                 }
             }
@@ -2686,6 +3246,20 @@ const docTemplate = `{
                 }
             }
         },
+        "http.AnalysisResponse": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "$ref": "#/definitions/domain.Analysis"
+                },
+                "cases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.EdgeCase"
+                    }
+                }
+            }
+        },
         "http.AskRequest": {
             "type": "object",
             "required": [
@@ -2712,6 +3286,24 @@ const docTemplate = `{
                         "editor",
                         "viewer"
                     ]
+                }
+            }
+        },
+        "http.ConfirmDocTypeRequest": {
+            "type": "object",
+            "required": [
+                "version"
+            ],
+            "properties": {
+                "doc_type": {
+                    "type": "string",
+                    "enum": [
+                        "urd"
+                    ]
+                },
+                "version": {
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -3046,12 +3638,62 @@ const docTemplate = `{
                 }
             }
         },
+        "http.ResolutionItem": {
+            "type": "object",
+            "required": [
+                "case_id",
+                "resolution"
+            ],
+            "properties": {
+                "case_id": {
+                    "type": "string"
+                },
+                "image_object_key": {
+                    "type": "string"
+                },
+                "resolution": {
+                    "type": "string"
+                }
+            }
+        },
         "http.RetryResponse": {
             "type": "object",
             "properties": {
                 "status": {
                     "type": "string",
                     "example": "queued"
+                }
+            }
+        },
+        "http.SubmitResolutionsRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/http.ResolutionItem"
+                    }
+                }
+            }
+        },
+        "http.SummaryItem": {
+            "type": "object",
+            "properties": {
+                "document_id": {
+                    "type": "string"
+                },
+                "resolved_cases": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_cases": {
+                    "type": "integer"
                 }
             }
         },
@@ -3168,6 +3810,14 @@ const docTemplate = `{
                 }
             }
         },
+        "http.UploadImageResponse": {
+            "type": "object",
+            "properties": {
+                "image_object_key": {
+                    "type": "string"
+                }
+            }
+        },
         "http.UploadResponse": {
             "type": "object",
             "properties": {
@@ -3176,6 +3826,9 @@ const docTemplate = `{
                 },
                 "revision": {
                     "$ref": "#/definitions/domain.Revision"
+                },
+                "suggested_doc_type": {
+                    "type": "string"
                 }
             }
         },

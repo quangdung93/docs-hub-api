@@ -19,6 +19,31 @@ definitions:
         example: Bearer
         type: string
     type: object
+  domain.Analysis:
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      documentID:
+        type: string
+      errorCode:
+        type: string
+      errorDetail:
+        type: string
+      id:
+        type: string
+      resolvedCases:
+        type: integer
+      revisionID:
+        type: string
+      status:
+        type: string
+      totalCases:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
   domain.Document:
     properties:
       created_at:
@@ -26,6 +51,11 @@ definitions:
       created_by:
         type: string
       description:
+        type: string
+      doc_type:
+        description: |-
+          DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
+          "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
         type: string
       document_key:
         type: string
@@ -38,6 +68,23 @@ definitions:
       updated_at:
         type: string
       version:
+        type: integer
+    type: object
+  domain.EdgeCase:
+    properties:
+      analysisID:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      imageObjectKey:
+        type: string
+      resolution:
+        type: string
+      resolved:
+        type: boolean
+      sequenceNo:
         type: integer
     type: object
   domain.Report:
@@ -94,6 +141,15 @@ definitions:
       updated_at:
         type: string
     type: object
+  http.AnalysisResponse:
+    properties:
+      analysis:
+        $ref: '#/definitions/domain.Analysis'
+      cases:
+        items:
+          $ref: '#/definitions/domain.EdgeCase'
+        type: array
+    type: object
   http.AskRequest:
     properties:
       question:
@@ -112,6 +168,18 @@ definitions:
         type: string
     required:
     - role
+    type: object
+  http.ConfirmDocTypeRequest:
+    properties:
+      doc_type:
+        enum:
+        - urd
+        type: string
+      version:
+        minimum: 1
+        type: integer
+    required:
+    - version
     type: object
   http.CreateProjectRequest:
     properties:
@@ -338,11 +406,44 @@ definitions:
     - mime_type
     - size_bytes
     type: object
+  http.ResolutionItem:
+    properties:
+      case_id:
+        type: string
+      image_object_key:
+        type: string
+      resolution:
+        type: string
+    required:
+    - case_id
+    - resolution
+    type: object
   http.RetryResponse:
     properties:
       status:
         example: queued
         type: string
+    type: object
+  http.SubmitResolutionsRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/http.ResolutionItem'
+        minItems: 1
+        type: array
+    required:
+    - items
+    type: object
+  http.SummaryItem:
+    properties:
+      document_id:
+        type: string
+      resolved_cases:
+        type: integer
+      status:
+        type: string
+      total_cases:
+        type: integer
     type: object
   http.UATReportRequest:
     properties:
@@ -423,12 +524,19 @@ definitions:
     - full_name
     - version
     type: object
+  http.UploadImageResponse:
+    properties:
+      image_object_key:
+        type: string
+    type: object
   http.UploadResponse:
     properties:
       document:
         $ref: '#/definitions/domain.Document'
       revision:
         $ref: '#/definitions/domain.Revision'
+      suggested_doc_type:
+        type: string
     type: object
   internal_module_chat_delivery_http.ScopeRequest:
     properties:
@@ -1101,6 +1209,61 @@ paths:
       summary: Cập nhật metadata tài liệu
       tags:
       - documents
+  /internal/api/v1/projects/{id}/documents/{document_id}/doc-type:
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).
+        doc_type="urd" để xác nhận, để trống để từ chối gợi ý.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      - description: Loại tài liệu và version hiện tại
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.ConfirmDocTypeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Document'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xác nhận (hoặc từ chối) loại tài liệu URD
+      tags:
+      - documents
   /internal/api/v1/projects/{id}/documents/{document_id}/revisions:
     post:
       consumes:
@@ -1358,6 +1521,230 @@ paths:
       summary: Xem file revision inline
       tags:
       - documents
+  /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}:
+    get:
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      - description: Analysis ID
+        format: uuid
+        in: path
+        name: analysis_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/http.AnalysisResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Xem chi tiết 1 phân tích edge case (mở lại modal đang dở)
+      tags:
+      - urd
+  /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}/cases/{case_id}/image:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Trả về image_object_key để đính vào item tương ứng khi gọi POST
+        .../resolutions.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      - description: Analysis ID
+        format: uuid
+        in: path
+        name: analysis_id
+        required: true
+        type: string
+      - description: Edge case ID
+        format: uuid
+        in: path
+        name: case_id
+        required: true
+        type: string
+      - description: Ảnh minh hoạ
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/http.UploadImageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tải ảnh minh hoạ cho 1 edge case
+      tags:
+      - urd
+  /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}/resolutions:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động
+        merge nội dung vào cuối file .docx gốc và tạo revision mới.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      - description: Analysis ID
+        format: uuid
+        in: path
+        name: analysis_id
+        required: true
+        type: string
+      - description: Hướng giải quyết từng case
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.SubmitResolutionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Analysis'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Lưu hướng giải quyết cho các edge case; tạo phiên bản URD mới khi đã
+        đủ
+      tags:
+      - urd
+  /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyze:
+    post:
+      description: |-
+        Tài liệu phải đã được xác nhận doc_type=urd (PATCH .../documents/{document_id}/doc-type)
+        và có revision mới nhất đã ingest xong (status=ready).
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/http.AnalysisResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD
+      tags:
+      - urd
   /internal/api/v1/projects/{id}/documents/uat-report:
     post:
       consumes:
@@ -1570,6 +1957,45 @@ paths:
       summary: Tạo presigned upload
       tags:
       - documents
+  /internal/api/v1/projects/{id}/documents/urd-summary:
+    get:
+      description: |-
+        Dùng hiển thị cột "Hoàn thiện" trong bảng Quản lý dự án — chỉ tài
+        liệu nào đã từng phân tích mới xuất hiện trong kết quả.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/http.SummaryItem'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Tóm tắt độ hoàn thiện URD của toàn bộ tài liệu trong project
+      tags:
+      - urd
   /internal/api/v1/projects/{id}/members:
     get:
       parameters:

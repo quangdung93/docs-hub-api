@@ -42,10 +42,21 @@ type UpdateRequest struct {
 	Version     int    `json:"version" binding:"required,min=1"`
 }
 
-// UploadResponse mô tả document và revision vừa được đưa vào hàng đợi ingestion.
+// UploadResponse mô tả document và revision vừa được đưa vào hàng đợi
+// ingestion. SuggestedDocType khác rỗng khi tiêu đề/tên file gợi ý đây là tài
+// liệu URD (URD v1.2 mục XI) và tài liệu chưa được xác nhận loại — FE hiện
+// popup xác nhận, gọi PATCH .../doc-type để chốt.
 type UploadResponse struct {
-	Document *domain.Document `json:"document"`
-	Revision *domain.Revision `json:"revision"`
+	Document         *domain.Document `json:"document"`
+	Revision         *domain.Revision `json:"revision"`
+	SuggestedDocType string           `json:"suggested_doc_type,omitempty"`
+}
+
+// ConfirmDocTypeRequest xác nhận (doc_type="urd") hoặc từ chối (doc_type="")
+// gợi ý loại tài liệu, kèm optimistic lock qua version.
+type ConfirmDocTypeRequest struct {
+	DocType string `json:"doc_type" binding:"omitempty,oneof=urd"`
+	Version int    `json:"version" binding:"required,min=1"`
 }
 
 // DocumentDetailResponse trả document cùng lịch sử revision.
@@ -131,12 +142,12 @@ func (h *Handler) upload(c *gin.Context, pathDocumentID uuid.UUID) {
 		FileName: fh.Filename, MediaType: mediaType, SizeBytes: size,
 		Reader: reader,
 	}
-	d, r, err := h.svc.Upload(c.Request.Context(), input)
+	d, r, suggestedDocType, err := h.svc.Upload(c.Request.Context(), input)
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	response.Accepted(c, gin.H{"document": d, "revision": r})
+	response.Accepted(c, gin.H{"document": d, "revision": r, "suggested_doc_type": suggestedDocType})
 }
 
 // Presign godoc
@@ -206,12 +217,12 @@ func (h *Handler) Complete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	d, r, err := h.svc.Complete(c.Request.Context(), pid, uid)
+	d, r, suggestedDocType, err := h.svc.Complete(c.Request.Context(), pid, uid)
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	response.Accepted(c, gin.H{"document": d, "revision": r})
+	response.Accepted(c, gin.H{"document": d, "revision": r, "suggested_doc_type": suggestedDocType})
 }
 
 // List godoc
@@ -302,6 +313,40 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	d, err := h.svc.Update(c.Request.Context(), pid, did, req.Title, req.Description, req.Version)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, d)
+}
+
+// ConfirmDocType godoc
+// @Summary Xác nhận (hoặc từ chối) loại tài liệu URD
+// @Description Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).
+// @Description doc_type="urd" để xác nhận, để trống để từ chối gợi ý.
+// @Tags documents
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Project ID" format(uuid)
+// @Param document_id path string true "Document ID" format(uuid)
+// @Param body body ConfirmDocTypeRequest true "Loại tài liệu và version hiện tại"
+// @Success 200 {object} response.Envelope{data=domain.Document}
+// @Failure 400 {object} response.Envelope
+// @Failure 401 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Router /internal/api/v1/projects/{id}/documents/{document_id}/doc-type [patch]
+func (h *Handler) ConfirmDocType(c *gin.Context) {
+	pid, did, ok := documentIDs(c)
+	if !ok {
+		return
+	}
+	var req ConfirmDocTypeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, apperr.BadRequest("Dữ liệu không hợp lệ"))
+		return
+	}
+	d, err := h.svc.ConfirmDocType(c.Request.Context(), pid, did, req.DocType, req.Version)
 	if err != nil {
 		fail(c, err)
 		return

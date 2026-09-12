@@ -51,4 +51,22 @@ const (
 	// cùng luồng upload. Cố ý KHÔNG chọn ConflictVersion: mã đó cũng đang chờ
 	// duyệt (ADR-0003), lấy nó làm chỗ lui thì không giải quyết được gì.
 	DuplicateContent = "DUPLICATE_CONTENT" // Nội dung tài liệu đã tồn tại trong phạm vi này
+
+	// URDNotConfirmed — mã nghiệp vụ BỔ SUNG cho module urd: chưa xác nhận
+	// tài liệu là URD (documents.doc_type rỗng) nên chưa thể phân tích edge
+	// case. Cần TL duyệt (xem ADR-0008).
+	URDNotConfirmed = "URD_NOT_CONFIRMED" // Tài liệu chưa được xác nhận là URD
+	// URDRevisionNotReady — mã nghiệp vụ BỔ SUNG cho module urd: revision mới
+	// nhất chưa ingest xong (status khác "ready") nên chưa có canonical text
+	// để phân tích. Cần TL duyệt (xem ADR-0009).
+	URDRevisionNotReady = "URD_REVISION_NOT_READY" // Phiên bản tài liệu chưa sẵn sàng để phân tích
+	// URDAnalysisActive — mã nghiệp vụ BỔ SUNG cho module urd: tài liệu đang
+	// có 1 phân tích edge case chưa hoàn tất (status analyzing/awaiting_input);
+	// chặn phân tích lại để tránh mất dữ liệu người dùng đang nhập dở. Cần TL
+	// duyệt (xem ADR-0010).
+	URDAnalysisActive = "URD_ANALYSIS_ACTIVE" // Tài liệu đang có phân tích edge case chưa hoàn tất
+	// URDCaseUnresolved — mã nghiệp vụ BỔ SUNG cho module urd: còn edge case
+	// chưa nhập hướng giải quyết nên chưa thể tạo phiên bản URD mới. Cần TL
+	// duyệt (xem ADR-0011).
+	URDCaseUnresolved = "URD_CASE_UNRESOLVED" // Còn edge case chưa nhập hướng giải quyết
 )

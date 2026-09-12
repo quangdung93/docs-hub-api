@@ -81,23 +81,23 @@ type PresignResult struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document, *domain.Revision, error) {
+func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document, *domain.Revision, string, error) {
 	newDocument := in.DocumentID == uuid.Nil
 	actor, err := s.authorize(ctx, in.ProjectID, true)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if newDocument && strings.TrimSpace(in.Title) == "" {
-		return nil, nil, apperr.BadRequest("Title là bắt buộc khi tạo tài liệu")
+		return nil, nil, "", apperr.BadRequest("Title là bắt buộc khi tạo tài liệu")
 	}
 	if len([]rune(in.Title)) > 255 {
-		return nil, nil, apperr.BadRequest("Title không được vượt quá 255 ký tự")
+		return nil, nil, "", apperr.BadRequest("Title không được vượt quá 255 ký tự")
 	}
 	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if in.Reader == nil {
-		return nil, nil, apperr.BadRequest("File rỗng")
+		return nil, nil, "", apperr.BadRequest("File rỗng")
 	}
 	if in.DocumentID == uuid.Nil {
 		in.DocumentID = uuid.New()
@@ -107,11 +107,11 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 	hasher := sha256.New()
 	stored, err := s.store.PutReader(ctx, key, io.TeeReader(in.Reader, hasher), in.SizeBytes, in.MediaType)
 	if err != nil {
-		return nil, nil, apperr.Internal("Không thể lưu tài liệu").WithCause(err)
+		return nil, nil, "", apperr.Internal("Không thể lưu tài liệu").WithCause(err)
 	}
 	if stored.Size != in.SizeBytes {
 		_ = s.store.Delete(ctx, key)
-		return nil, nil, apperr.BadRequest("Kích thước file thực tế không khớp")
+		return nil, nil, "", apperr.BadRequest("Kích thước file thực tế không khớp")
 	}
 	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
 	var d *domain.Document
@@ -135,11 +135,73 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 		// thật, file vừa ghi lên storage cũng đã thành rác không ai trỏ tới.
 		_ = s.store.Delete(ctx, key)
 		if errors.Is(err, domain.ErrDuplicateContent) {
+			return nil, nil, "", duplicateContentError(err)
+		}
+		return nil, nil, "", apperr.Internal("Không thể tạo revision").WithCause(err)
+	}
+	return d, rev, suggestDocType(d.Title, rev.FileName, d.DocType), nil
+}
+
+// CreateRevisionFromBytes tạo một revision mới từ nội dung đã có sẵn trong bộ
+// nhớ (không qua io.Reader) — dùng bởi module urd để lưu tài liệu URD đã được
+// AI hợp nhất thêm nội dung edge case (URD v1.2 mục XI), tái dùng đúng luồng
+// ghi object store + repo.CreateRevision như Upload.
+func (s *Service) CreateRevisionFromBytes(
+	ctx context.Context, pid, did uuid.UUID, scope domain.Scope, fileName, mediaType string, data []byte,
+) (*domain.Document, *domain.Revision, error) {
+	actor, err := s.authorize(ctx, pid, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = s.validate(ctx, pid, scope, fileName, mediaType, int64(len(data))); err != nil {
+		return nil, nil, err
+	}
+	rid := uuid.New()
+	key := objectKey(pid, did, rid, fileName)
+	if _, err = s.store.Put(ctx, key, data, mediaType); err != nil {
+		return nil, nil, apperr.Internal("Không thể lưu tài liệu").WithCause(err)
+	}
+	hash := sha256.Sum256(data)
+	var d *domain.Document
+	var rev *domain.Revision
+	err = s.tx.Do(ctx, func(txctx context.Context) error {
+		var e error
+		params := domain.CreateRevisionParams{
+			DocumentID: did, RevisionID: rid, ProjectID: pid, ActorID: actor, Scope: scope,
+			FileName: safeName(fileName), MediaType: mediaType,
+			SHA256: hex.EncodeToString(hash[:]), ObjectKey: key, SizeBytes: int64(len(data)),
+		}
+		d, rev, e = s.repo.CreateRevision(txctx, params)
+		if e != nil {
+			return fmt.Errorf("lưu metadata revision: %w", e)
+		}
+		return nil
+	})
+	if err != nil {
+		_ = s.store.Delete(ctx, key)
+		if errors.Is(err, domain.ErrDuplicateContent) {
 			return nil, nil, duplicateContentError(err)
 		}
 		return nil, nil, apperr.Internal("Không thể tạo revision").WithCause(err)
 	}
 	return d, rev, nil
+}
+
+// suggestDocType gợi ý loại tài liệu bằng heuristic rẻ (không gọi AI) ngay khi
+// upload/complete xong — chỉ là gợi ý để FE hiện popup xác nhận, người dùng
+// vẫn phải xác nhận qua ConfirmDocType (URD v1.2 mục XI). Không gợi ý lại nếu
+// tài liệu đã có doc_type (đã từng được xác nhận, kể cả bị từ chối trước đó
+// vẫn giữ nguyên "" — hành vi từ chối không được model, chỉ dừng gợi ý lại
+// bằng cách không set DocType, nên vẫn gợi ý mỗi lần trừ khi đã confirm).
+func suggestDocType(title, fileName, currentDocType string) string {
+	if currentDocType != "" {
+		return ""
+	}
+	needle := strings.ToLower(title + " " + fileName)
+	if strings.Contains(needle, "urd") {
+		return domain.DocTypeURD
+	}
+	return ""
 }
 
 // duplicateContentError dựng lỗi nghiệp vụ cho trường hợp nạp lại đúng nội dung
@@ -189,20 +251,20 @@ func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult,
 	}
 	return &PresignResult{UploadID: u.ID, ObjectKey: u.ObjectKey, UploadURL: url, ExpiresAt: u.ExpiresAt}, nil
 }
-func (s *Service) Complete(ctx context.Context, pid, uid uuid.UUID) (*domain.Document, *domain.Revision, error) {
+func (s *Service) Complete(ctx context.Context, pid, uid uuid.UUID) (*domain.Document, *domain.Revision, string, error) {
 	actor, err := s.authorize(ctx, pid, true)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	u, err := s.repo.FindUpload(ctx, pid, uid)
 	if err != nil {
-		return nil, nil, s.mapErr(err)
+		return nil, nil, "", s.mapErr(err)
 	}
 	if u.CreatedBy != actor || u.Status != "pending" || !s.clock.Now().Before(u.ExpiresAt) {
-		return nil, nil, apperr.NewBusiness(errcode.UploadInvalid, "Phiên upload không hợp lệ hoặc đã hết hạn", false)
+		return nil, nil, "", apperr.NewBusiness(errcode.UploadInvalid, "Phiên upload không hợp lệ hoặc đã hết hạn", false)
 	}
 	if err = s.verifyObject(ctx, u); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	var d *domain.Document
 	var rev *domain.Revision
@@ -215,18 +277,35 @@ func (s *Service) Complete(ctx context.Context, pid, uid uuid.UUID) (*domain.Doc
 		return nil
 	})
 	if errors.Is(err, domain.ErrConflict) {
-		return nil, nil, apperr.NewBusiness(errcode.UploadInvalid, "Phiên upload đã được hoàn tất", false)
+		return nil, nil, "", apperr.NewBusiness(errcode.UploadInvalid, "Phiên upload đã được hoàn tất", false)
 	}
 	// Đường presign còn dễ trúng hơn đường upload thẳng: từ khi bỏ sha256 khỏi
 	// API, client không tự tính hash nữa nên không có cách nào biết trước file có
 	// trùng hay không — chỉ phát hiện được ở đúng bước hoàn tất này.
 	if errors.Is(err, domain.ErrDuplicateContent) {
-		return nil, nil, duplicateContentError(err)
+		return nil, nil, "", duplicateContentError(err)
 	}
 	if err != nil {
-		return nil, nil, apperr.Internal("Không thể hoàn tất upload").WithCause(err)
+		return nil, nil, "", apperr.Internal("Không thể hoàn tất upload").WithCause(err)
 	}
-	return d, rev, nil
+	return d, rev, suggestDocType(d.Title, rev.FileName, d.DocType), nil
+}
+
+// ConfirmDocType xác nhận (hoặc từ chối, docType="") loại tài liệu sau khi FE
+// hiện popup gợi ý — mở khoá luồng AI phân tích edge case của module urd
+// (URD v1.2 mục XI). Optimistic lock giống Update.
+func (s *Service) ConfirmDocType(ctx context.Context, pid, did uuid.UUID, docType string, v int) (*domain.Document, error) {
+	if _, err := s.authorize(ctx, pid, true); err != nil {
+		return nil, err
+	}
+	if docType != "" && docType != domain.DocTypeURD {
+		return nil, apperr.BadRequest("doc_type chỉ hỗ trợ giá trị rỗng hoặc \"urd\"")
+	}
+	d, err := s.repo.SetDocType(ctx, pid, did, docType, v)
+	if errors.Is(err, domain.ErrConflict) {
+		return nil, apperr.NewBusiness(errcode.ConflictVersion, "Tài liệu đã được cập nhật bởi yêu cầu khác", true)
+	}
+	return d, s.mapErr(err)
 }
 
 func (s *Service) verifyObject(ctx context.Context, u *domain.Upload) error {

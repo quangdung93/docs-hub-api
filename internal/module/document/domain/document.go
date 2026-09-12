@@ -34,6 +34,10 @@ const (
 	ScopeKindChangeRequest = "change_request"
 )
 
+// DocTypeURD là giá trị Document.DocType khi người dùng xác nhận tài liệu là
+// URD (xem URD v1.2 mục XI) — mở khoá luồng AI phân tích edge case.
+const DocTypeURD = "urd"
+
 type Document struct {
 	ID          uuid.UUID `json:"id"`
 	ProjectID   uuid.UUID `json:"project_id"`
@@ -41,9 +45,12 @@ type Document struct {
 	Title       string    `json:"title"`
 	Key         string    `json:"document_key"`
 	Description string    `json:"description"`
-	Version     int       `json:"version"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
+	// "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
+	DocType   string    `json:"doc_type,omitempty"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Revision struct {
@@ -112,6 +119,9 @@ type Repository interface {
 	FindDocument(ctx context.Context, projectID, documentID uuid.UUID) (*Document, []Revision, error)
 	FindRevision(ctx context.Context, projectID, documentID, revisionID uuid.UUID) (*Revision, error)
 	Update(ctx context.Context, projectID, documentID uuid.UUID, title, description string, version int) (*Document, error)
+	// SetDocType xác nhận/đổi loại tài liệu (optimistic lock qua version, cùng
+	// cơ chế với Update) — dùng cho luồng xác nhận URD (URD v1.2 mục XI).
+	SetDocType(ctx context.Context, projectID, documentID uuid.UUID, docType string, version int) (*Document, error)
 	Retry(ctx context.Context, projectID, documentID, revisionID, actorID uuid.UUID) error
 	SoftDelete(ctx context.Context, projectID, documentID, actorID uuid.UUID) error
 

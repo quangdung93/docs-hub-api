@@ -23,7 +23,7 @@ func uploadTrung(t *testing.T, loi error) (*fakeStore, error) {
 	svc := New(repo, fakeTx{}, store, fakeClock{})
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
 	data := []byte("noi dung trung")
-	_, _, err := svc.Upload(ctx, UploadInput{
+	_, _, _, err := svc.Upload(ctx, UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "Tai lieu",
 		FileName: "a.txt", MediaType: mimeTextPlain, SizeBytes: int64(len(data)),
 		Reader: bytes.NewReader(data),

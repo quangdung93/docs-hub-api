@@ -11,6 +11,7 @@ func Register(rg *gin.RouterGroup, h *Handler) {
 	p.GET("", h.List)
 	p.GET("/:document_id", h.Detail)
 	p.PATCH("/:document_id", h.Update)
+	p.PATCH("/:document_id/doc-type", h.ConfirmDocType)
 	p.DELETE("/:document_id", h.Delete)
 	p.POST("/:document_id/revisions", h.RevisionUpload)
 	p.GET("/:document_id/revisions/:revision_id/status", h.Status)
