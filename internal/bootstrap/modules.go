@@ -13,6 +13,7 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/module/project"
 	"github.com/quangdung93/docs-hub-api/internal/module/report"
 	"github.com/quangdung93/docs-hub-api/internal/module/retrieval"
+	"github.com/quangdung93/docs-hub-api/internal/module/urd"
 	"github.com/quangdung93/docs-hub-api/internal/module/user"
 )
 
@@ -80,6 +81,16 @@ func buildModules(cfg *config.Config, infra *Infra) ([]Module, http.Handler) {
 			Clock: infra.clock(), BypassProjectACL: cfg.App.IsLocal(),
 		})
 		modules = append(modules, reportModule)
+	}
+	// urd (AI phân tích edge case cho URD, URD v1.2 mục XI) cần document module
+	// (đọc/ghi revision) + RAG (gọi AI) + ObjectStore (lưu ảnh minh hoạ).
+	if documentModule != nil && infra.RAG != nil {
+		urdModule := urd.New(urd.Deps{
+			DB: infra.DB, Tx: infra.Tx, RAG: infra.RAG, Store: infra.ObjectStore,
+			Clock: infra.clock(), DocumentService: documentModule.Service(),
+			BypassProjectACL: cfg.App.IsLocal(),
+		})
+		modules = append(modules, urdModule)
 	}
 	if !cfg.MCP.Enabled {
 		return modules, nil

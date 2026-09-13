@@ -23,6 +23,7 @@ func New(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 type documentModel struct {
 	ID, ProjectID, Title, DocumentKey, Description, SourceType, CreatedBy string
+	DocType                                                               string
 	Version                                                               int
 	CreatedAt, UpdatedAt                                                  time.Time
 	DeletedAt                                                             gorm.DeletedAt
@@ -271,6 +272,21 @@ func (r *Repository) Update(ctx context.Context, pid, did uuid.UUID, title, desc
 	d, _, err := r.FindDocument(ctx, pid, did)
 	return d, err
 }
+func (r *Repository) SetDocType(ctx context.Context, pid, did uuid.UUID, docType string, v int) (*domain.Document, error) {
+	updates := map[string]any{
+		"doc_type": docType, "version": gorm.Expr("version+1"), "updated_at": time.Now().UTC(),
+	}
+	res := postgres.DBFrom(ctx, r.db).Model(&documentModel{}).
+		Where("id=? AND project_id=? AND version=?", did, pid, v).Updates(updates)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, domain.ErrConflict
+	}
+	d, _, err := r.FindDocument(ctx, pid, did)
+	return d, err
+}
 func (r *Repository) Retry(ctx context.Context, pid, did, rid, actor uuid.UUID) error {
 	db := postgres.DBFrom(ctx, r.db)
 	var m revisionModel
@@ -411,8 +427,9 @@ func toDocument(m documentModel) *domain.Document {
 	return &domain.Document{
 		ID: uuid.MustParse(m.ID), ProjectID: uuid.MustParse(m.ProjectID),
 		CreatedBy: uuid.MustParse(m.CreatedBy), Title: m.Title, Key: m.DocumentKey,
-		Description: m.Description, Version: m.Version, IsDeleted: m.DeletedAt.Valid,
-		DeletedAt: deletedAt, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Description: m.Description, DocType: m.DocType, Version: m.Version,
+		IsDeleted: m.DeletedAt.Valid, DeletedAt: deletedAt,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 func toRevision(m revisionModel) *domain.Revision {
