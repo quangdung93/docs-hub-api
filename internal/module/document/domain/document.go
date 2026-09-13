@@ -39,12 +39,12 @@ const (
 const DocTypeURD = "urd"
 
 type Document struct {
-	ID          uuid.UUID  `json:"id"`
-	ProjectID   uuid.UUID  `json:"project_id"`
-	CreatedBy   uuid.UUID  `json:"created_by"`
-	Title       string     `json:"title"`
-	Key         string     `json:"document_key"`
-	Description string     `json:"description"`
+	ID          uuid.UUID `json:"id"`
+	ProjectID   uuid.UUID `json:"project_id"`
+	CreatedBy   uuid.UUID `json:"created_by"`
+	Title       string    `json:"title"`
+	Key         string    `json:"document_key"`
+	Description string    `json:"description"`
 	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
 	// "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
 	DocType   string     `json:"doc_type,omitempty"`
