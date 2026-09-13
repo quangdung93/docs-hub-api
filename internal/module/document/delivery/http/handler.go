@@ -23,6 +23,9 @@ type Handler struct{ svc *usecase.Service }
 
 func New(svc *usecase.Service) *Handler { return &Handler{svc: svc} }
 
+// keyDocument là key "document" dùng chung trong response envelope (goconst).
+const keyDocument = "document"
+
 // PresignRequest là body tạo phiên upload trực tiếp qua S3/MinIO.
 type PresignRequest struct {
 	DocumentID       string `json:"document_id"`
@@ -147,7 +150,7 @@ func (h *Handler) upload(c *gin.Context, pathDocumentID uuid.UUID) {
 		fail(c, err)
 		return
 	}
-	response.Accepted(c, gin.H{"document": d, "revision": r, "suggested_doc_type": suggestedDocType})
+	response.Accepted(c, gin.H{keyDocument: d, "revision": r, "suggested_doc_type": suggestedDocType})
 }
 
 // Presign godoc
@@ -222,7 +225,7 @@ func (h *Handler) Complete(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	response.Accepted(c, gin.H{"document": d, "revision": r, "suggested_doc_type": suggestedDocType})
+	response.Accepted(c, gin.H{keyDocument: d, "revision": r, "suggested_doc_type": suggestedDocType})
 }
 
 // List godoc
@@ -294,7 +297,7 @@ func (h *Handler) Detail(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	response.OK(c, gin.H{"document": d, "revisions": rs})
+	response.OK(c, gin.H{keyDocument: d, "revisions": rs})
 }
 
 // Update godoc
