@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	promptVersion     = "ragflow-chat-v1"
+	promptVersion     = "ragflow-chat-v2-planner"
 	maxTitleLength    = 255
 	maxQuestionLength = 8000
 	scopeMetadataKey  = "docs_hub_scope_id"
@@ -27,6 +27,7 @@ const (
 
 type ScopeRepository interface {
 	ResolveScope(ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope) ([]retrievaldomain.ResolvedScope, error)
+	VersionScopes(ctx context.Context, projectID uuid.UUID) ([]retrievaldomain.ResolvedScope, error)
 	DatasetID(ctx context.Context, projectID uuid.UUID) (string, error)
 	RevisionRefs(ctx context.Context, projectID uuid.UUID, scope retrievaldomain.Scope) ([]retrievaldomain.RevisionRef, error)
 }
@@ -123,6 +124,11 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 		return nil, apperr.BadRequest("Câu hỏi rỗng hoặc vượt quá 8000 ký tự")
 	}
 	scope := input.Scope
+	scopeForced := scope != nil
+	if scope == nil && conversation.ActiveScope != nil {
+		scope = conversation.ActiveScope
+		scopeForced = true
+	}
 	if scope == nil {
 		scope = &retrievaldomain.Scope{Mode: retrievaldomain.ScopeAll}
 	}
@@ -133,9 +139,8 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	intent := intentFor(*scope)
 	if len(refs) == 0 {
-		return s.save(ctx, input, *scope, resolved, intent,
+		return s.save(ctx, input, *scope, resolved, "current_state",
 			"Không tìm thấy đủ thông tin trong phạm vi tài liệu đã chọn.", "", nil, false, started)
 	}
 	datasetID, err := s.scopeRepo.DatasetID(ctx, input.ProjectID)
@@ -145,17 +150,38 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	if datasetID == "" {
 		return nil, apperr.External("Project chưa được đồng bộ sang RAGFlow")
 	}
+	chatID, err := s.ensureChat(ctx, input.ProjectID, datasetID)
+	if err != nil {
+		return nil, apperr.External("Không thể chuẩn bị RAGFlow chat assistant").WithCause(err)
+	}
+	versionScopes, err := s.scopeRepo.VersionScopes(ctx, input.ProjectID)
+	if err != nil {
+		return nil, apperr.Database("Không thể đọc timeline version").WithCause(err)
+	}
+	availableScopes := mergeAvailableScopes(versionScopes, scopesFrom(refs))
+	plan := s.planQuestion(ctx, chatID, input.Question, availableScopes, scopeForced)
+	if !scopeForced {
+		plannedScope := scopeForPlan(plan, versionScopes)
+		plannedResolved, plannedRefs, resolveErr := s.resolveScope(ctx, input.ProjectID, plannedScope)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		scope, resolved, refs = &plannedScope, plannedResolved, plannedRefs
+		if len(refs) == 0 {
+			return s.save(ctx, input, *scope, resolved, plan.Intent,
+				"Không tìm thấy đủ thông tin trong phạm vi tài liệu đã chọn.", "", nil, false, started)
+		}
+	}
 	if scope.Mode != retrievaldomain.ScopeAll {
 		if err = s.syncScopeMetadata(ctx, datasetID, refs); err != nil {
 			return nil, apperr.External("Không thể đồng bộ scope metadata sang RAGFlow").WithCause(err)
 		}
 	}
-	chatID, err := s.ensureChat(ctx, input.ProjectID, datasetID)
-	if err != nil {
-		return nil, apperr.External("Không thể chuẩn bị RAGFlow chat assistant").WithCause(err)
-	}
+	evidence := s.retrievePlannedEvidence(ctx, datasetID, refs, plan.Queries)
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
-		ChatID: chatID, Messages: ragMessages(conversation.Messages, input.Question),
+		ChatID: chatID,
+		Messages: ragMessages(conversation.Messages, answerSystemPrompt(plan),
+			finalQuestion(input.Question, plan, resolved, evidence, refs)),
 		MetadataLogic: "or", MetadataConditions: scopeConditions(*scope),
 		// Hỏi-đáp CẦN trích dẫn: mapRAGCitations dựng danh sách nguồn từ
 		// result.References để trả về cho người đọc.
@@ -164,8 +190,9 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	if err != nil {
 		return nil, apperr.External("RAGFlow chat không khả dụng").WithCause(err)
 	}
-	citations := mapRAGCitations(input.ProjectID, datasetID, refs, result.References)
-	return s.save(ctx, input, *scope, resolved, intent, result.Content, result.Model,
+	references := append(append([]port.RAGChunk(nil), evidence...), result.References...)
+	citations := mapRAGCitations(input.ProjectID, datasetID, refs, references)
+	return s.save(ctx, input, *scope, resolved, plan.Intent, result.Content, result.Model,
 		citations, len(citations) > 0, started)
 }
 
@@ -281,13 +308,6 @@ func (s *Service) authorize(ctx context.Context, projectID uuid.UUID) (uuid.UUID
 	return actorID, nil
 }
 
-func intentFor(scope retrievaldomain.Scope) string {
-	if scope.Mode == retrievaldomain.ScopeAll || len(scope.VersionIDs)+len(scope.ChangeRequestIDs) > 1 {
-		return "evolution"
-	}
-	return "specific_revision"
-}
-
 func scopesFrom(refs []retrievaldomain.RevisionRef) []retrievaldomain.ResolvedScope {
 	seen := make(map[uuid.UUID]struct{}, len(refs))
 	out := make([]retrievaldomain.ResolvedScope, 0, len(refs))
@@ -314,13 +334,14 @@ func scopeConditions(scope retrievaldomain.Scope) []port.RAGMetadataCondition {
 	return out
 }
 
-func ragMessages(history []domain.Message, question string) []port.RAGChatMessage {
+func ragMessages(history []domain.Message, systemPrompt, question string) []port.RAGChatMessage {
 	const maxHistory = 10
 	start := len(history) - maxHistory
 	if start < 0 {
 		start = 0
 	}
-	out := make([]port.RAGChatMessage, 0, len(history)-start+1)
+	out := make([]port.RAGChatMessage, 0, len(history)-start+2)
+	out = append(out, port.RAGChatMessage{Role: "system", Content: systemPrompt})
 	for _, message := range history[start:] {
 		if message.Role != "user" && message.Role != "assistant" {
 			continue

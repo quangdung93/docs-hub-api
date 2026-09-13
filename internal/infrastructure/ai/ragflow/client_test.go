@@ -67,6 +67,11 @@ func TestClient_DatasetDocumentAndRetrieval(t *testing.T) {
 			var body map[string]any
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			require.Equal(t, false, body["stream"])
+			messages := body["messages"].([]any)
+			require.Len(t, messages, 2)
+			systemMessage := messages[0].(map[string]any)
+			require.Equal(t, "system", systemMessage["role"])
+			require.Equal(t, "system instructions", systemMessage["content"])
 			_, _ = io.WriteString(w, `{"model":"qwen@ragflow","choices":[{"message":{"content":"final answer","reference":{"chunks":{"2":{"id":"chunk-2","dataset_id":"ds-1","document_id":"doc-1","document_name":"revision.txt","content":"evidence","similarity":0.8}}}}}]}`)
 		default:
 			http.Error(w, "unexpected", http.StatusNotFound)
@@ -109,7 +114,9 @@ func TestClient_DatasetDocumentAndRetrieval(t *testing.T) {
 	require.Equal(t, "chat-1", createdChat.ID)
 	require.NoError(t, client.UpdateChatDatasets(context.Background(), "chat-1", []string{"ds-1"}))
 	completion, err := client.CompleteChat(context.Background(), port.RAGChatCompletionRequest{
-		ChatID: "chat-1", Messages: []port.RAGChatMessage{{Role: "user", Content: "question"}},
+		ChatID: "chat-1", Messages: []port.RAGChatMessage{
+			{Role: "system", Content: "system instructions"}, {Role: "user", Content: "question"},
+		},
 		MetadataConditions: []port.RAGMetadataCondition{{Name: "docs_hub_scope_id", Operator: "is", Value: "version-1"}},
 	})
 	require.NoError(t, err)

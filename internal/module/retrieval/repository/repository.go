@@ -57,6 +57,25 @@ func (r *Repository) ResolveScope(
 	return resolved, nil
 }
 
+// VersionScopes trả timeline version độc lập với trạng thái index tài liệu.
+// Nhờ đó chat không gọi nhầm một version cũ là "mới nhất" chỉ vì version mới
+// chưa có revision ready trên RAGFlow.
+func (r *Repository) VersionScopes(ctx context.Context, projectID uuid.UUID) ([]domain.ResolvedScope, error) {
+	var rows []struct {
+		ID    uuid.UUID `gorm:"column:id"`
+		Label string    `gorm:"column:label"`
+	}
+	if err := postgres.DBFrom(ctx, r.db).Table("project_versions").Select("id,label").
+		Where("project_id=?", projectID).Order("sequence_no,id").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.ResolvedScope, len(rows))
+	for i, row := range rows {
+		out[i] = domain.ResolvedScope{ID: row.ID, Type: "version", Label: row.Label}
+	}
+	return out, nil
+}
+
 func (r *Repository) DatasetID(ctx context.Context, projectID uuid.UUID) (string, error) {
 	var datasetID string
 	err := postgres.DBFrom(ctx, r.db).Table("projects").Select("ragflow_dataset_id").
