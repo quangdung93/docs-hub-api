@@ -69,14 +69,15 @@ func backoffFor(attempt int, backoffCap time.Duration) time.Duration {
 // RAGFlowProcessor đồng bộ file gốc từ ObjectStore sang RAGFlow. PostgreSQL
 // vẫn giữ project/revision/version và remote ID làm source of truth nghiệp vụ.
 type RAGFlowProcessor struct {
-	db    *gorm.DB
-	store port.ObjectStore
-	rag   port.RAGClient
-	cfg   RAGFlowProcessorConfig
+	db      *gorm.DB
+	store   port.ObjectStore
+	rag     port.RAGClient
+	cfg     RAGFlowProcessorConfig
+	parsers *ParserRegistry
 }
 
 func NewRAGFlowProcessor(db *gorm.DB, store port.ObjectStore, rag port.RAGClient, cfg RAGFlowProcessorConfig) *RAGFlowProcessor {
-	return &RAGFlowProcessor{db: db, store: store, rag: rag, cfg: cfg}
+	return &RAGFlowProcessor{db: db, store: store, rag: rag, cfg: cfg, parsers: NewParserRegistry()}
 }
 
 type ragWork struct {
@@ -344,10 +345,15 @@ func (p *RAGFlowProcessor) process(ctx context.Context, w *ragWork) error {
 			return err
 		}
 	}
+	canonicalKey, parserVersion, err := p.storeCanonicalText(ctx, w)
+	if err != nil {
+		return err
+	}
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
 		if err := tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
 			"status": "ready", "ragflow_sync_status": "ready", "ragflow_synced_at": now,
+			"canonical_text_key": canonicalKey, "parser_version": parserVersion,
 			"ragflow_last_error": nil, "error_code": nil, "error_detail_sanitized": nil, "updated_at": now,
 		}).Error; err != nil {
 			return err
@@ -355,6 +361,32 @@ func (p *RAGFlowProcessor) process(ctx context.Context, w *ragWork) error {
 		return tx.Table("ingestion_jobs").Where("id=?", w.JobID).
 			Updates(map[string]any{"status": "succeeded", "last_error": nil, "updated_at": now}).Error
 	})
+}
+
+// storeCanonicalText tự trích canonical text từ file gốc bằng ParserRegistry
+// dùng chung với pipeline ingestion nội bộ (KHÔNG qua RAGFlow, vì RAGFlow
+// không có API trả lại nội dung đã parse của 1 document). Module urd
+// (Analyze/CanonicalSource) cần cột canonical_text_key để đọc nội dung đưa
+// cho AI phân tích edge case — thiếu bước này thì mọi revision ingest qua
+// RAGFlow sẽ luôn báo "Nguồn canonical của revision chưa sẵn sàng" dù đã
+// ready ở phía RAGFlow.
+func (p *RAGFlowProcessor) storeCanonicalText(ctx context.Context, w *ragWork) (string, string, error) {
+	reader, err := p.store.GetReader(ctx, w.ObjectKey)
+	if err != nil {
+		return "", "", fmt.Errorf("mở object để trích canonical text: %w", err)
+	}
+	defer reader.Close()
+	parsed, err := p.parsers.Parse(ctx, w.MediaType, reader)
+	if err != nil {
+		return "", "", fmt.Errorf("parse canonical text: %w", err)
+	}
+	canonicalKey := w.ObjectKey + ".canonical.txt"
+	stored, err := p.store.PutReader(ctx, canonicalKey, strings.NewReader(parsed.Text),
+		int64(len([]byte(parsed.Text))), "text/plain; charset=utf-8")
+	if err != nil {
+		return "", "", fmt.Errorf("lưu canonical text: %w", err)
+	}
+	return stored.Key, parsed.ParserVersion, nil
 }
 
 func (p *RAGFlowProcessor) ensureDataset(ctx context.Context, w *ragWork) (string, error) {
