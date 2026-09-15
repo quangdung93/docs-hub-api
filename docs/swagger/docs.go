@@ -1307,7 +1307,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "documents"
+                    "urd"
                 ],
                 "summary": "Xác nhận (hoặc từ chối) loại tài liệu URD",
                 "parameters": [
