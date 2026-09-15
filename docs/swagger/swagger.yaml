@@ -1272,7 +1272,7 @@ paths:
       - BearerAuth: []
       summary: Xác nhận (hoặc từ chối) loại tài liệu URD
       tags:
-      - documents
+      - urd
   /internal/api/v1/projects/{id}/documents/{document_id}/revisions:
     post:
       consumes:

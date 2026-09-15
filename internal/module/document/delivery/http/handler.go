@@ -336,7 +336,7 @@ func (h *Handler) Update(c *gin.Context) {
 // @Summary Xác nhận (hoặc từ chối) loại tài liệu URD
 // @Description Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).
 // @Description doc_type="urd" để xác nhận, để trống để từ chối gợi ý.
-// @Tags documents
+// @Tags urd
 // @Security BearerAuth
 // @Accept json
 // @Produce json
