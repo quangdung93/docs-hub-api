@@ -639,6 +639,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Phiên bản tài liệu",
+                        "name": "document_version",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "format": "uuid",
                         "description": "Project version ID",
                         "name": "version_id",
@@ -805,6 +811,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Mô tả",
                         "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Phiên bản tài liệu do người dùng nhập",
+                        "name": "document_version",
                         "in": "formData"
                     },
                     {
@@ -1418,6 +1430,12 @@ const docTemplate = `{
                         "name": "file",
                         "in": "formData",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Phiên bản tài liệu do người dùng nhập",
+                        "name": "document_version",
+                        "in": "formData"
                     },
                     {
                         "type": "string",
@@ -3131,6 +3149,10 @@ const docTemplate = `{
                 "document_key": {
                     "type": "string"
                 },
+                "document_version": {
+                    "description": "DocumentVersion và UploadedAt là metadata của revision được upload gần\nnhất, dùng cho danh sách tài liệu. Lịch sử đầy đủ nằm trong Revision.",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3144,6 +3166,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                },
+                "uploaded_at": {
                     "type": "string"
                 },
                 "version": {
@@ -3210,6 +3235,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "document_id": {
+                    "type": "string"
+                },
+                "document_version": {
                     "type": "string"
                 },
                 "error_code": {
@@ -3523,6 +3551,10 @@ const docTemplate = `{
                 },
                 "document_id": {
                     "type": "string"
+                },
+                "document_version": {
+                    "type": "string",
+                    "maxLength": 255
                 },
                 "file_name": {
                     "type": "string"

@@ -268,7 +268,8 @@ func (s *Service) finalizeAnalysis(
 			WithCause(err)
 	}
 	if _, _, err = s.docSvc.CreateRevisionFromBytes(
-		ctx, projectID, documentID, revision.Scope, revision.FileName, revision.MediaType, merged,
+		ctx, projectID, documentID, revision.Scope, revision.DocumentVersion,
+		revision.FileName, revision.MediaType, merged,
 	); err != nil {
 		return nil, err
 	}

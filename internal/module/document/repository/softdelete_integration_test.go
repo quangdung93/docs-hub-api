@@ -8,6 +8,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -142,4 +143,52 @@ func TestList_ChiTraTaiLieuDaXoaKhiDuocYeuCau(t *testing.T) {
 	require.Equal(t, did, items[0].ID)
 	require.True(t, items[0].IsDeleted)
 	require.NotNil(t, items[0].DeletedAt)
+}
+
+func TestList_LocDocumentVersionGomRevisionTrungVaSortTheoNgayUpload(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, firstDocumentID, firstRevisionID, actor := dungDuLieu(t, db)
+
+	var projectVersionID uuid.UUID
+	require.NoError(t, db.Raw(`SELECT id FROM project_versions WHERE project_id=? LIMIT 1`, pid).
+		Scan(&projectVersionID).Error)
+
+	day1 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	day2 := day1.Add(24 * time.Hour)
+	day3 := day2.Add(24 * time.Hour)
+	require.NoError(t, db.Exec(`UPDATE document_revisions
+		SET document_version='Release 1',created_at=? WHERE id=?`, day1, firstRevisionID).Error)
+
+	secondDocumentID, secondRevisionID := uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO documents (id,project_id,title,document_key,created_by)
+		VALUES (?,?,?,?,?)`, secondDocumentID, pid, "Tài liệu thứ hai",
+		"key-"+secondDocumentID.String(), actor).Error)
+	require.NoError(t, db.Exec(`INSERT INTO document_revisions
+		(id,document_id,project_id,project_version_id,revision_no,document_version,file_name,
+		 media_type,size_bytes,sha256,object_key,status,created_by,created_at)
+		VALUES (?,?,?,?,1,'release 1','b.txt','text/plain',10,?,?, 'ready',?,?)`,
+		secondRevisionID, secondDocumentID, pid, projectVersionID, strings.Repeat("b", 64),
+		"obj-"+secondRevisionID.String(), actor, day2).Error)
+
+	// Cùng document và cùng document_version có revision mới hơn: GET vẫn chỉ
+	// trả một logical document, lấy metadata/ngày upload mới nhất để sắp xếp.
+	latestRevisionID := uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO document_revisions
+		(id,document_id,project_id,project_version_id,revision_no,document_version,file_name,
+		 media_type,size_bytes,sha256,object_key,status,created_by,created_at)
+		VALUES (?,?,?,?,2,'release 1','a2.txt','text/plain',10,?,?, 'ready',?,?)`,
+		latestRevisionID, firstDocumentID, pid, projectVersionID, strings.Repeat("c", 64),
+		"obj-"+latestRevisionID.String(), actor, day3).Error)
+
+	items, total, err := repo.List(ctx, pid, domain.Filter{DocumentVersion: "RELEASE 1"},
+		pagination.Query{Page: 1, Limit: 20})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, items, 2)
+	require.Equal(t, firstDocumentID, items[0].ID)
+	require.Equal(t, "release 1", items[0].DocumentVersion)
+	require.Equal(t, day3, *items[0].UploadedAt)
+	require.Equal(t, secondDocumentID, items[1].ID)
 }

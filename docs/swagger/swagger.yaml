@@ -61,6 +61,11 @@ definitions:
         type: string
       document_key:
         type: string
+      document_version:
+        description: |-
+          DocumentVersion và UploadedAt là metadata của revision được upload gần
+          nhất, dùng cho danh sách tài liệu. Lịch sử đầy đủ nằm trong Revision.
+        type: string
       id:
         type: string
       is_deleted:
@@ -70,6 +75,8 @@ definitions:
       title:
         type: string
       updated_at:
+        type: string
+      uploaded_at:
         type: string
       version:
         type: integer
@@ -113,6 +120,8 @@ definitions:
       created_by:
         type: string
       document_id:
+        type: string
+      document_version:
         type: string
       error_code:
         type: string
@@ -320,6 +329,9 @@ definitions:
       description:
         type: string
       document_id:
+        type: string
+      document_version:
+        maxLength: 255
         type: string
       file_name:
         type: string
@@ -1047,6 +1059,10 @@ paths:
         in: query
         name: type
         type: string
+      - description: Phiên bản tài liệu
+        in: query
+        name: document_version
+        type: string
       - description: Project version ID
         format: uuid
         in: query
@@ -1297,6 +1313,10 @@ paths:
         name: file
         required: true
         type: file
+      - description: Phiên bản tài liệu do người dùng nhập
+        in: formData
+        name: document_version
+        type: string
       - description: Project version ID
         format: uuid
         in: formData
@@ -1825,6 +1845,10 @@ paths:
       - description: Mô tả
         in: formData
         name: description
+        type: string
+      - description: Phiên bản tài liệu do người dùng nhập
+        in: formData
+        name: document_version
         type: string
       - description: Document ID nếu thêm revision
         format: uuid

@@ -269,11 +269,11 @@ func mapConversations(rows []conversationRow) ([]domain.Conversation, error) {
 			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		}
 		if len(row.ActiveScope) > 0 {
-			var scope retrievaldomain.Scope
+			var scope *retrievaldomain.Scope
 			if err = json.Unmarshal(row.ActiveScope, &scope); err != nil {
 				return nil, fmt.Errorf("decode active scope: %w", err)
 			}
-			items[i].ActiveScope = &scope
+			items[i].ActiveScope = scope
 		}
 	}
 	return items, nil

@@ -25,6 +25,8 @@ type documentModel struct {
 	ID, ProjectID, Title, DocumentKey, Description, SourceType, CreatedBy string
 	DocType                                                               string
 	Version                                                               int
+	DocumentVersion                                                       string     `gorm:"column:document_version;->"`
+	UploadedAt                                                            *time.Time `gorm:"column:uploaded_at;->"`
 	CreatedAt, UpdatedAt                                                  time.Time
 	DeletedAt                                                             gorm.DeletedAt
 }
@@ -35,7 +37,7 @@ type revisionModel struct {
 	ID, DocumentID, ProjectID                   string
 	ProjectVersionID, ChangeRequestID           *string
 	RevisionNo                                  int
-	FileName, MediaType                         string
+	DocumentVersion, FileName, MediaType        string
 	SizeBytes                                   int64
 	SHA256, ObjectKey, CanonicalTextKey, Status string
 	ErrorCode, ErrorDetail                      string     `gorm:"column:error_detail_sanitized"`
@@ -66,13 +68,13 @@ func revisionOfLiveDocument(db *gorm.DB) *gorm.DB {
 }
 
 type uploadModel struct {
-	ID, ProjectID, DocumentID, RevisionID   string
-	ProjectVersionID, ChangeRequestID       *string
-	Title, Description, FileName, MediaType string
-	SizeBytes                               int64
-	SHA256, ObjectKey, Status, CreatedBy    string
-	ExpiresAt, CreatedAt                    time.Time
-	CompletedAt                             *time.Time
+	ID, ProjectID, DocumentID, RevisionID                    string
+	ProjectVersionID, ChangeRequestID                        *string
+	Title, Description, DocumentVersion, FileName, MediaType string
+	SizeBytes                                                int64
+	SHA256, ObjectKey, Status, CreatedBy                     string
+	ExpiresAt, CreatedAt                                     time.Time
+	CompletedAt                                              *time.Time
 }
 
 func (uploadModel) TableName() string { return "document_uploads" }
@@ -118,7 +120,8 @@ func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisio
 	}
 	m := revisionModel{
 		ID: in.RevisionID.String(), DocumentID: d.ID, ProjectID: in.ProjectID.String(),
-		RevisionNo: int(n) + 1, FileName: in.FileName, MediaType: in.MediaType,
+		RevisionNo: int(n) + 1, DocumentVersion: in.DocumentVersion,
+		FileName: in.FileName, MediaType: in.MediaType,
 		SizeBytes: in.SizeBytes, SHA256: in.SHA256, ObjectKey: in.ObjectKey,
 		Status: "queued", CreatedBy: in.ActorID.String(),
 	}
@@ -178,7 +181,7 @@ func (r *Repository) CompleteUpload(ctx context.Context, u *domain.Upload) (*dom
 	params := domain.CreateRevisionParams{
 		DocumentID: u.DocumentID, RevisionID: u.RevisionID, ProjectID: u.ProjectID,
 		ActorID: u.CreatedBy, Scope: u.Scope, Title: u.Title, Description: u.Description,
-		FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
+		DocumentVersion: u.DocumentVersion, FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
 		ObjectKey: u.ObjectKey, SizeBytes: u.SizeBytes,
 	}
 	d, rev, err := r.CreateRevision(ctx, params)
@@ -205,26 +208,39 @@ func (r *Repository) List(ctx context.Context, pid uuid.UUID, f domain.Filter, p
 	if f.Query != "" {
 		q = q.Where("title ILIKE ?", "%"+f.Query+"%")
 	}
-	if f.Status != "" || f.MediaType != "" || f.VersionID != nil || f.ChangeRequestID != nil {
+	if f.Status != "" || f.MediaType != "" || f.DocumentVersion != "" || f.VersionID != nil || f.ChangeRequestID != nil {
 		const revisionFilter = `EXISTS (SELECT 1 FROM document_revisions r
 			WHERE r.document_id=documents.id AND (?='' OR r.status=?)
-			AND (?='' OR r.media_type=?) AND (? IS NULL OR r.project_version_id=?)
+			AND (?='' OR r.media_type=?)
+			AND (?='' OR LOWER(r.document_version)=LOWER(?))
+			AND (? IS NULL OR r.project_version_id=?)
 			AND (? IS NULL OR r.change_request_id=?))`
 		q = q.Where(revisionFilter, f.Status, f.Status, f.MediaType, f.MediaType,
-			f.VersionID, f.VersionID, f.ChangeRequestID, f.ChangeRequestID)
+			f.DocumentVersion, f.DocumentVersion, f.VersionID, f.VersionID,
+			f.ChangeRequestID, f.ChangeRequestID)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var ms []documentModel
-	order := "updated_at DESC,id DESC"
+	// EXISTS ở trên giữ mỗi logical document đúng một lần dù nhiều revision có
+	// cùng document_version. MAX(created_at) sắp theo lần upload gần nhất thay
+	// vì thời điểm sửa metadata của document.
+	order := `(SELECT MAX(r.created_at) FROM document_revisions r
+		WHERE r.document_id=documents.id) DESC NULLS LAST,id DESC`
 	if f.IncludeDeleted {
-		// Một lần xoá không cập nhật updated_at. Dùng deleted_at làm mốc hoạt
-		// động giúp danh sách mở rộng có hành vi gần với activity log.
-		order = "GREATEST(updated_at,COALESCE(deleted_at,updated_at)) DESC,id DESC"
+		order = `GREATEST(COALESCE((SELECT MAX(r.created_at) FROM document_revisions r
+			WHERE r.document_id=documents.id),documents.created_at),
+			COALESCE(deleted_at,documents.created_at)) DESC,id DESC`
 	}
-	if err := q.Order(order).Limit(p.Limit).Offset(p.Offset()).Find(&ms).Error; err != nil {
+	const latestRevision = `LEFT JOIN LATERAL (
+		SELECT r.document_version,r.created_at AS uploaded_at
+		FROM document_revisions r WHERE r.document_id=documents.id
+		ORDER BY r.created_at DESC,r.id DESC LIMIT 1
+	) latest_revision ON TRUE`
+	if err := q.Select("documents.*,latest_revision.document_version,latest_revision.uploaded_at").
+		Joins(latestRevision).Order(order).Limit(p.Limit).Offset(p.Offset()).Find(&ms).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]domain.Document, len(ms))
@@ -428,6 +444,7 @@ func toDocument(m documentModel) *domain.Document {
 		ID: uuid.MustParse(m.ID), ProjectID: uuid.MustParse(m.ProjectID),
 		CreatedBy: uuid.MustParse(m.CreatedBy), Title: m.Title, Key: m.DocumentKey,
 		Description: m.Description, DocType: m.DocType, Version: m.Version,
+		DocumentVersion: m.DocumentVersion, UploadedAt: m.UploadedAt,
 		IsDeleted: m.DeletedAt.Valid, DeletedAt: deletedAt,
 		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
@@ -437,7 +454,8 @@ func toRevision(m revisionModel) *domain.Revision {
 		ID: uuid.MustParse(m.ID), DocumentID: uuid.MustParse(m.DocumentID),
 		ProjectID: uuid.MustParse(m.ProjectID), CreatedBy: uuid.MustParse(m.CreatedBy),
 		Scope:      domain.Scope{VersionID: ptrID(m.ProjectVersionID), ChangeRequestID: ptrID(m.ChangeRequestID)},
-		RevisionNo: m.RevisionNo, FileName: m.FileName, MediaType: m.MediaType,
+		RevisionNo: m.RevisionNo, DocumentVersion: m.DocumentVersion,
+		FileName: m.FileName, MediaType: m.MediaType,
 		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey,
 		CanonicalTextKey: m.CanonicalTextKey, Status: m.Status,
 		ErrorCode: m.ErrorCode, ErrorDetail: m.ErrorDetail, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
@@ -449,7 +467,8 @@ func fromUpload(u *domain.Upload) *uploadModel {
 	m := &uploadModel{
 		ID: u.ID.String(), ProjectID: u.ProjectID.String(), DocumentID: u.DocumentID.String(),
 		RevisionID: u.RevisionID.String(), Title: u.Title, Description: u.Description,
-		FileName: u.FileName, MediaType: u.MediaType, SizeBytes: u.SizeBytes,
+		DocumentVersion: u.DocumentVersion,
+		FileName:        u.FileName, MediaType: u.MediaType, SizeBytes: u.SizeBytes,
 		SHA256: u.SHA256, ObjectKey: u.ObjectKey, Status: u.Status,
 		CreatedBy: u.CreatedBy.String(), ExpiresAt: u.ExpiresAt,
 	}
@@ -469,7 +488,8 @@ func toUpload(m uploadModel) *domain.Upload {
 		CreatedBy: uuid.MustParse(m.CreatedBy),
 		Scope:     domain.Scope{VersionID: ptrID(m.ProjectVersionID), ChangeRequestID: ptrID(m.ChangeRequestID)},
 		Title:     m.Title, Description: m.Description, FileName: m.FileName, MediaType: m.MediaType,
-		SizeBytes: m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey,
+		DocumentVersion: m.DocumentVersion,
+		SizeBytes:       m.SizeBytes, SHA256: m.SHA256, ObjectKey: m.ObjectKey,
 		Status: m.Status, ExpiresAt: m.ExpiresAt,
 	}
 }

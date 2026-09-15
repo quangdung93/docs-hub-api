@@ -47,12 +47,16 @@ type Document struct {
 	Description string    `json:"description"`
 	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
 	// "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
-	DocType   string     `json:"doc_type,omitempty"`
-	Version   int        `json:"version"`
-	IsDeleted bool       `json:"is_deleted"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	DocType string `json:"doc_type,omitempty"`
+	Version int    `json:"version"`
+	// DocumentVersion và UploadedAt là metadata của revision được upload gần
+	// nhất, dùng cho danh sách tài liệu. Lịch sử đầy đủ nằm trong Revision.
+	DocumentVersion string     `json:"document_version"`
+	UploadedAt      *time.Time `json:"uploaded_at,omitempty"`
+	IsDeleted       bool       `json:"is_deleted"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type Revision struct {
@@ -62,6 +66,7 @@ type Revision struct {
 	CreatedBy         uuid.UUID  `json:"created_by"`
 	Scope             Scope      `json:"scope"`
 	RevisionNo        int        `json:"revision_no"`
+	DocumentVersion   string     `json:"document_version"`
 	FileName          string     `json:"file_name"`
 	MediaType         string     `json:"media_type"`
 	SHA256            string     `json:"sha256"`
@@ -80,17 +85,17 @@ type Revision struct {
 }
 
 type Upload struct {
-	ID, ProjectID, DocumentID, RevisionID, CreatedBy                   uuid.UUID
-	Scope                                                              Scope
-	Title, Description, FileName, MediaType, SHA256, ObjectKey, Status string
-	SizeBytes                                                          int64
-	ExpiresAt                                                          time.Time
+	ID, ProjectID, DocumentID, RevisionID, CreatedBy                                    uuid.UUID
+	Scope                                                                               Scope
+	Title, Description, DocumentVersion, FileName, MediaType, SHA256, ObjectKey, Status string
+	SizeBytes                                                                           int64
+	ExpiresAt                                                                           time.Time
 }
 
 type Filter struct {
-	Query, Status, MediaType   string
-	VersionID, ChangeRequestID *uuid.UUID
-	IncludeDeleted             bool
+	Query, Status, MediaType, DocumentVersion string
+	VersionID, ChangeRequestID                *uuid.UUID
+	IncludeDeleted                            bool
 }
 
 // UATItem là 1 dòng trong sheet Report 1_Module của UAT Report — tài liệu
@@ -105,10 +110,10 @@ type UATItem struct {
 }
 
 type CreateRevisionParams struct {
-	DocumentID, RevisionID, ProjectID, ActorID                 uuid.UUID
-	Scope                                                      Scope
-	Title, Description, FileName, MediaType, SHA256, ObjectKey string
-	SizeBytes                                                  int64
+	DocumentID, RevisionID, ProjectID, ActorID                                  uuid.UUID
+	Scope                                                                       Scope
+	Title, Description, DocumentVersion, FileName, MediaType, SHA256, ObjectKey string
+	SizeBytes                                                                   int64
 }
 
 type Repository interface {
