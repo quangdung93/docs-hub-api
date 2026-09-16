@@ -450,6 +450,13 @@ definitions:
     required:
     - items
     type: object
+  http.SubmitResolutionsResponse:
+    properties:
+      analysis:
+        $ref: '#/definitions/domain.Analysis'
+      new_revision_created:
+        type: boolean
+    type: object
   http.SummaryItem:
     properties:
       analysis_id:
@@ -1674,6 +1681,8 @@ paths:
       description: |-
         Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động
         merge nội dung vào cuối file .docx gốc và tạo revision mới.
+        Tài liệu không phải .docx vẫn hoàn tất bình thường nhưng KHÔNG sinh
+        revision mới — xem cờ new_revision_created trong data.
       parameters:
       - description: Project ID
         format: uuid
@@ -1709,7 +1718,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/domain.Analysis'
+                  $ref: '#/definitions/http.SubmitResolutionsResponse'
               type: object
         "400":
           description: Bad Request

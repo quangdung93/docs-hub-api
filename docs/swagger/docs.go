@@ -1980,7 +1980,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động\nmerge nội dung vào cuối file .docx gốc và tạo revision mới.",
+                "description": "Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động\nmerge nội dung vào cuối file .docx gốc và tạo revision mới.\nTài liệu không phải .docx vẫn hoàn tất bình thường nhưng KHÔNG sinh\nrevision mới — xem cờ new_revision_created trong data.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2038,7 +2038,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/domain.Analysis"
+                                            "$ref": "#/definitions/http.SubmitResolutionsResponse"
                                         }
                                     }
                                 }
@@ -3722,6 +3722,17 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/http.ResolutionItem"
                     }
+                }
+            }
+        },
+        "http.SubmitResolutionsResponse": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "$ref": "#/definitions/domain.Analysis"
+                },
+                "new_revision_created": {
+                    "type": "boolean"
                 }
             }
         },
