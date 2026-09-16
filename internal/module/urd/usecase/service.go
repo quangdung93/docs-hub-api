@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -83,8 +84,14 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 		return nil, nil, apperr.Database("Không thể kiểm tra phân tích đang hoạt động").WithCause(err)
 	}
 	if active != nil {
+		// Kèm analysis_id: đây là lối ra DUY NHẤT cho người dùng mở lại phân
+		// tích đang dở. Trước đó id chỉ xuất hiện một lần trong response của
+		// lần Analyze đầu tiên — mất response đó (tải lại trang, đổi máy, hoặc
+		// người khác trong dự án) là tài liệu kẹt awaiting_input vĩnh viễn, vì
+		// urd-summary không trả id còn Analyze lại bị chính nhánh này chặn.
 		return nil, nil, apperr.NewBusiness(
-			errcode.URDAnalysisActive, "Tài liệu đang có phân tích edge case chưa hoàn tất", false)
+			errcode.URDAnalysisActive, "Tài liệu đang có phân tích edge case chưa hoàn tất", false).
+			WithDetails(map[string]any{"analysis_id": active.ID})
 	}
 	_, reader, err := s.docSvc.CanonicalSource(ctx, projectID, documentID, revision.ID)
 	if err != nil {
@@ -123,9 +130,15 @@ func (s *Service) saveAnalysis(
 		// không cần tạo phiên bản mới vì không có nội dung gì để bổ sung.
 		status = domain.StatusCompleted
 	}
+	// Gán mốc thời gian ngay tại đây (thay vì để DB tự điền) để bản ghi trả về
+	// cho client khớp với bản ghi lưu xuống — trước đó response của Analyze
+	// mang created_at/updated_at rỗng "0001-01-01T00:00:00Z", còn GET analyses
+	// sau đó lại ra giờ thật, hai nơi lệch nhau.
+	now := time.Now().UTC()
 	a := domain.Analysis{
 		ID: analysisID, DocumentID: documentID, RevisionID: revisionID,
 		Status: status, TotalCases: len(cases), ResolvedCases: 0, CreatedBy: actorID,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.tx.Do(ctx, func(txctx context.Context) error { return s.repo.CreateAnalysis(txctx, a, cases) })
 	if err != nil {

@@ -45,8 +45,13 @@ type SubmitResolutionsRequest struct {
 
 // SummaryItem là 1 dòng tóm tắt độ hoàn thiện URD — cột "Hoàn thiện" trong
 // bảng Quản lý dự án.
+//
+// AnalysisID cho FE mở thẳng phân tích đang dở từ bảng danh sách. Thiếu nó thì
+// id chỉ tồn tại trong response của lần Analyze đầu tiên, mất là tài liệu khoá
+// vĩnh viễn (xem chú thích ở usecase.Analyze).
 type SummaryItem struct {
 	DocumentID    uuid.UUID `json:"document_id"`
+	AnalysisID    uuid.UUID `json:"analysis_id"`
 	Status        string    `json:"status"`
 	TotalCases    int       `json:"total_cases"`
 	ResolvedCases int       `json:"resolved_cases"`
@@ -227,7 +232,7 @@ func (h *Handler) ListSummaries(c *gin.Context) {
 	items := make([]SummaryItem, 0, len(summaries))
 	for documentID, a := range summaries {
 		items = append(items, SummaryItem{
-			DocumentID: documentID, Status: a.Status,
+			DocumentID: documentID, AnalysisID: a.ID, Status: a.Status,
 			TotalCases: a.TotalCases, ResolvedCases: a.ResolvedCases,
 		})
 	}

@@ -326,12 +326,20 @@ func TestAnalyze_DangCoPhanTichActive(t *testing.T) {
 		},
 	}
 	urdRepo := newFakeUrdRepo()
-	urdRepo.active = &domain.Analysis{ID: uuid.New(), DocumentID: did, Status: domain.StatusAwaitingInput}
+	activeID := uuid.New()
+	urdRepo.active = &domain.Analysis{ID: activeID, DocumentID: did, Status: domain.StatusAwaitingInput}
 	svc := newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{})
 
 	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
 
 	require.Equal(t, errcode.URDAnalysisActive, businessCode(t, err))
+	// Lỗi PHẢI kèm analysis_id: không có nó thì người dùng mất đường vào phân
+	// tích đang dở và tài liệu kẹt vĩnh viễn (đo trên production 2026-09-16).
+	var be *apperr.BusinessError
+	require.ErrorAs(t, err, &be)
+	details, ok := be.Details.(map[string]any)
+	require.True(t, ok, "details phải là object để client đọc analysis_id")
+	require.Equal(t, activeID, details["analysis_id"])
 }
 
 func TestAnalyze_ThanhCong_TaoPhanTich(t *testing.T) {
@@ -354,6 +362,39 @@ func TestAnalyze_ThanhCong_TaoPhanTich(t *testing.T) {
 	require.Equal(t, 2, a.TotalCases)
 	require.Len(t, cases, 2)
 	require.Equal(t, "Case A", cases[0].Description)
+}
+
+// TestAnalyze_TraVeCoMocThoiGian canh lỗi đã đo ở local 2026-09-16: response
+// của Analyze mang created_at/updated_at rỗng ("0001-01-01T00:00:00Z") vì
+// usecase dựng struct rồi trả luôn, để DB tự điền giờ. Client đọc ra ngày năm
+// 1, còn GET analyses sau đó lại ra giờ thật — hai nơi lệch nhau.
+func TestAnalyze_TraVeCoMocThoiGian(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD, Title: "URD Demo"},
+		revisions: []documentdomain.Revision{
+			{ID: rid, Status: revisionStatusReady, CanonicalTextKey: "canon"},
+		},
+	}
+	store := newFakeStore()
+	store.objects["canon"] = []byte("Noi dung URD da trich xuat")
+	rag := &fakeRAG{completeChatContent: `{"cases":[{"description":"Case A"}]}`}
+	urdRepo := newFakeUrdRepo()
+	svc := newTestService(t, docRepo, store, urdRepo, rag)
+	truoc := time.Now().UTC().Add(-time.Second)
+
+	a, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.NoError(t, err)
+	require.False(t, a.CreatedAt.IsZero(), "created_at không được rỗng")
+	require.False(t, a.UpdatedAt.IsZero(), "updated_at không được rỗng")
+	require.True(t, a.CreatedAt.After(truoc), "created_at phải là giờ hiện tại")
+	// Giá trị trả cho client phải đúng bằng giá trị đưa xuống repository, để
+	// bản ghi trong DB và response không lệch nhau.
+	daLuu := urdRepo.analyses[a.ID]
+	require.NotNil(t, daLuu, "phân tích phải được lưu xuống repository")
+	require.Equal(t, daLuu.CreatedAt, a.CreatedAt)
+	require.Equal(t, daLuu.UpdatedAt, a.UpdatedAt)
 }
 
 func TestSubmitResolutions_CaseKhongThuocPhanTich(t *testing.T) {
