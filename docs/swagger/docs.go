@@ -3092,37 +3092,37 @@ const docTemplate = `{
         "domain.Analysis": {
             "type": "object",
             "properties": {
-                "createdAt": {
+                "created_at": {
                     "type": "string"
                 },
-                "createdBy": {
+                "created_by": {
                     "type": "string"
                 },
-                "documentID": {
+                "document_id": {
                     "type": "string"
                 },
-                "errorCode": {
+                "error_code": {
                     "type": "string"
                 },
-                "errorDetail": {
+                "error_detail": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
-                "resolvedCases": {
+                "resolved_cases": {
                     "type": "integer"
                 },
-                "revisionID": {
+                "revision_id": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "totalCases": {
+                "total_cases": {
                     "type": "integer"
                 },
-                "updatedAt": {
+                "updated_at": {
                     "type": "string"
                 }
             }
@@ -3179,7 +3179,7 @@ const docTemplate = `{
         "domain.EdgeCase": {
             "type": "object",
             "properties": {
-                "analysisID": {
+                "analysis_id": {
                     "type": "string"
                 },
                 "description": {
@@ -3188,7 +3188,7 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "imageObjectKey": {
+                "image_object_key": {
                     "type": "string"
                 },
                 "resolution": {
@@ -3197,7 +3197,7 @@ const docTemplate = `{
                 "resolved": {
                     "type": "boolean"
                 },
-                "sequenceNo": {
+                "sequence_no": {
                     "type": "integer"
                 }
             }
@@ -3728,6 +3728,9 @@ const docTemplate = `{
         "http.SummaryItem": {
             "type": "object",
             "properties": {
+                "analysis_id": {
+                    "type": "string"
+                },
                 "document_id": {
                     "type": "string"
                 },

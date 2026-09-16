@@ -29,29 +29,35 @@ var (
 )
 
 // Analysis là một lần AI phân tích edge case cho 1 revision của tài liệu URD.
+//
+// Tag json BẮT BUỘC: thiếu tag thì encoding/json lấy nguyên tên field Go
+// ("ID", "TotalCases"), lệch cả với snake_case của toàn repo lẫn với
+// camelCase mà swag sinh ra trong docs/swagger — client đọc theo tài liệu sẽ
+// nhận undefined, và đó là cách `analysis_id` bị mất ở lần test production
+// 2026-09-15 (mất id là tài liệu bị khoá, không API nào trả lại).
 type Analysis struct {
-	ID            uuid.UUID
-	DocumentID    uuid.UUID
-	RevisionID    uuid.UUID
-	Status        string
-	TotalCases    int
-	ResolvedCases int
-	CreatedBy     uuid.UUID
-	ErrorCode     string
-	ErrorDetail   string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            uuid.UUID `json:"id"`
+	DocumentID    uuid.UUID `json:"document_id"`
+	RevisionID    uuid.UUID `json:"revision_id"`
+	Status        string    `json:"status"`
+	TotalCases    int       `json:"total_cases"`
+	ResolvedCases int       `json:"resolved_cases"`
+	CreatedBy     uuid.UUID `json:"created_by"`
+	ErrorCode     string    `json:"error_code,omitempty"`
+	ErrorDetail   string    `json:"error_detail,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // EdgeCase là 1 case do AI liệt kê, kèm hướng giải quyết người dùng nhập.
 type EdgeCase struct {
-	ID             uuid.UUID
-	AnalysisID     uuid.UUID
-	SequenceNo     int
-	Description    string
-	Resolution     string
-	ImageObjectKey string
-	Resolved       bool
+	ID             uuid.UUID `json:"id"`
+	AnalysisID     uuid.UUID `json:"analysis_id"`
+	SequenceNo     int       `json:"sequence_no"`
+	Description    string    `json:"description"`
+	Resolution     string    `json:"resolution"`
+	ImageObjectKey string    `json:"image_object_key,omitempty"`
+	Resolved       bool      `json:"resolved"`
 }
 
 // Repository là cổng ra ngoài (Postgres) mà usecase phụ thuộc.

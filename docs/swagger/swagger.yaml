@@ -21,27 +21,27 @@ definitions:
     type: object
   domain.Analysis:
     properties:
-      createdAt:
+      created_at:
         type: string
-      createdBy:
+      created_by:
         type: string
-      documentID:
+      document_id:
         type: string
-      errorCode:
+      error_code:
         type: string
-      errorDetail:
+      error_detail:
         type: string
       id:
         type: string
-      resolvedCases:
+      resolved_cases:
         type: integer
-      revisionID:
+      revision_id:
         type: string
       status:
         type: string
-      totalCases:
+      total_cases:
         type: integer
-      updatedAt:
+      updated_at:
         type: string
     type: object
   domain.Document:
@@ -83,19 +83,19 @@ definitions:
     type: object
   domain.EdgeCase:
     properties:
-      analysisID:
+      analysis_id:
         type: string
       description:
         type: string
       id:
         type: string
-      imageObjectKey:
+      image_object_key:
         type: string
       resolution:
         type: string
       resolved:
         type: boolean
-      sequenceNo:
+      sequence_no:
         type: integer
     type: object
   domain.Report:
@@ -452,6 +452,8 @@ definitions:
     type: object
   http.SummaryItem:
     properties:
+      analysis_id:
+        type: string
       document_id:
         type: string
       resolved_cases:
