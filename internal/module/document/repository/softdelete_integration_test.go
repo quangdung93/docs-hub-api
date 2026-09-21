@@ -195,6 +195,10 @@ func TestList_LocDocumentVersionGomRevisionTrungVaSortTheoNgayUpload(t *testing.
 	require.Len(t, items, 2)
 	require.Equal(t, firstDocumentID, items[0].ID)
 	require.Equal(t, "release 1", items[0].DocumentVersion)
-	require.Equal(t, day3, *items[0].UploadedAt)
+	// So sánh theo MỐC THỜI GIAN chứ không dùng require.Equal: require.Equal
+	// so từng field của time.Time nên cùng một mốc nhưng khác Location vẫn
+	// báo lệch. Driver trả về giờ theo time.Local, nên test chỉ xanh trên máy
+	// UTC (CI) và luôn đỏ trên máy dev múi giờ +07.
+	require.WithinDuration(t, day3, *items[0].UploadedAt, 0)
 	require.Equal(t, secondDocumentID, items[1].ID)
 }
