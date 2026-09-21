@@ -31,10 +31,17 @@ type UploadImageResponse struct {
 }
 
 // ResolutionItem là hướng giải quyết cho 1 edge case trong SubmitResolutionsRequest.
+//
+// IncludeInDocument: có đưa case này vào phụ lục URD mới hay không (tùy
+// chọn). Bỏ trống (không gửi) thì usecase TỰ suy đoán từ nội dung Resolution
+// — hướng giải quyết dạng "Không"/"Chưa có chức năng này" tự động bị loại,
+// không cần FE đổi gì. FE muốn kiểm soát chính xác thì gửi tường minh
+// true/false, sẽ được ưu tiên hơn suy đoán.
 type ResolutionItem struct {
-	CaseID         string `json:"case_id" binding:"required"`
-	Resolution     string `json:"resolution" binding:"required"`
-	ImageObjectKey string `json:"image_object_key"`
+	CaseID            string `json:"case_id" binding:"required"`
+	Resolution        string `json:"resolution" binding:"required"`
+	ImageObjectKey    string `json:"image_object_key"`
+	IncludeInDocument *bool  `json:"include_in_document"`
 }
 
 // SubmitResolutionsRequest là body xác nhận hướng giải quyết cho toàn bộ (hoặc
@@ -176,9 +183,12 @@ func (h *Handler) UploadCaseImage(c *gin.Context) {
 // SubmitResolutions godoc
 // @Summary Lưu hướng giải quyết cho các edge case; tạo phiên bản URD mới khi đã đủ
 // @Description Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động
-// @Description merge nội dung vào cuối file .docx gốc và tạo revision mới.
-// @Description Tài liệu không phải .docx vẫn hoàn tất bình thường nhưng KHÔNG sinh
-// @Description revision mới — xem cờ new_revision_created trong data.
+// @Description merge nội dung các case được đưa vào tài liệu vào cuối file .docx gốc
+// @Description và tạo revision mới. Case không gửi include_in_document mà có hướng
+// @Description giải quyết dạng "không áp dụng" sẽ TỰ ĐỘNG bị loại khỏi tài liệu.
+// @Description Tài liệu không phải .docx, hoặc không còn case nào được đưa vào tài
+// @Description liệu, vẫn hoàn tất bình thường nhưng KHÔNG sinh revision mới — xem
+// @Description cờ new_revision_created trong data.
 // @Tags urd
 // @Security BearerAuth
 // @Accept json
@@ -211,6 +221,7 @@ func (h *Handler) SubmitResolutions(c *gin.Context) {
 		}
 		items[i] = usecase.ResolutionInput{
 			CaseID: caseID, Resolution: item.Resolution, ImageObjectKey: item.ImageObjectKey,
+			IncludeInDocument: item.IncludeInDocument,
 		}
 	}
 	a, daTaoPhienBanMoi, err := h.svc.SubmitResolutions(c.Request.Context(), pid, did, aid, items)

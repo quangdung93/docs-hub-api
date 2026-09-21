@@ -41,7 +41,8 @@ func TestEdgeCase_TenTruongJSONTheoSnakeCase(t *testing.T) {
 	c := EdgeCase{
 		ID: uuid.New(), AnalysisID: uuid.New(), SequenceNo: 3,
 		Description: "mô tả", Resolution: "hướng giải quyết",
-		ImageObjectKey: "urd/a/b/anh.png", Resolved: true,
+		ImageObjectKey: "urd/a/b/anh.png", Resolved: true, IncludeInDocument: true,
+		TargetHeading: "Tiêu chí chấp nhận",
 	}
 	var got map[string]any
 	raw, err := json.Marshal(c)
@@ -50,7 +51,7 @@ func TestEdgeCase_TenTruongJSONTheoSnakeCase(t *testing.T) {
 
 	mong := []string{
 		"id", "analysis_id", "sequence_no", "description", "resolution",
-		"image_object_key", "resolved",
+		"image_object_key", "resolved", "include_in_document", "target_heading",
 	}
 	require.ElementsMatch(t, mong, khoa(got))
 	require.Equal(t, c.ID.String(), got["id"], "client lấy case_id từ đây để gửi resolutions")
