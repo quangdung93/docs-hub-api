@@ -235,6 +235,10 @@ func fromAnalysis(a domain.Analysis) analysisModel {
 		ID: a.ID.String(), DocumentID: a.DocumentID.String(), DocumentRevisionID: a.RevisionID.String(),
 		Status: a.Status, TotalCases: a.TotalCases, ResolvedCases: a.ResolvedCases,
 		CreatedBy: a.CreatedBy.String(), ErrorCode: a.ErrorCode, ErrorDetail: a.ErrorDetail,
+		// Chép cả hai mốc thời gian: usecase đã gán sẵn nên DB lưu ĐÚNG giá trị
+		// đã trả cho client. Bỏ trống thì GORM tự điền giờ của nó, lệch với
+		// response. Còn zero-value thì GORM vẫn tự điền như cũ.
+		CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
 	}
 }
 

@@ -31,6 +31,7 @@ type PresignRequest struct {
 	DocumentID       string `json:"document_id"`
 	Title            string `json:"title" binding:"max=255"`
 	Description      string `json:"description"`
+	DocumentVersion  string `json:"document_version" binding:"max=255"`
 	FileName         string `json:"file_name" binding:"required"`
 	MediaType        string `json:"media_type" binding:"required"`
 	SizeBytes        int64  `json:"size_bytes" binding:"required,min=1"`
@@ -84,6 +85,7 @@ type RetryResponse struct {
 // @Param file formData file true "File TXT, MD, CSV, PDF text-layer, DOCX hoặc XLSX (tối đa 50 MB)"
 // @Param title formData string true "Tiêu đề document mới"
 // @Param description formData string false "Mô tả"
+// @Param document_version formData string false "Phiên bản tài liệu do người dùng nhập"
 // @Param document_id formData string false "Document ID nếu thêm revision" format(uuid)
 // @Param project_version_id formData string false "Project version ID" format(uuid)
 // @Param change_request_id formData string false "Change request ID" format(uuid)
@@ -142,7 +144,8 @@ func (h *Handler) upload(c *gin.Context, pathDocumentID uuid.UUID) {
 	input := usecase.UploadInput{
 		ProjectID: pid, DocumentID: did, Scope: scope,
 		Title: c.PostForm("title"), Description: c.PostForm("description"),
-		FileName: fh.Filename, MediaType: mediaType, SizeBytes: size,
+		DocumentVersion: c.PostForm("document_version"),
+		FileName:        fh.Filename, MediaType: mediaType, SizeBytes: size,
 		Reader: reader,
 	}
 	d, r, suggestedDocType, err := h.svc.Upload(c.Request.Context(), input)
@@ -189,7 +192,7 @@ func (h *Handler) Presign(c *gin.Context) {
 	input := usecase.PresignInput{
 		ProjectID: pid, DocumentID: did, Scope: scope,
 		Title: req.Title, Description: req.Description, FileName: req.FileName,
-		MediaType: req.MediaType, SizeBytes: req.SizeBytes,
+		DocumentVersion: req.DocumentVersion, MediaType: req.MediaType, SizeBytes: req.SizeBytes,
 	}
 	out, err := h.svc.Presign(c.Request.Context(), input)
 	if err != nil {
@@ -239,6 +242,7 @@ func (h *Handler) Complete(c *gin.Context) {
 // @Param q query string false "Tìm theo tiêu đề"
 // @Param status query string false "Trạng thái revision"
 // @Param type query string false "MIME type"
+// @Param document_version query string false "Phiên bản tài liệu"
 // @Param version_id query string false "Project version ID" format(uuid)
 // @Param change_request_id query string false "Change request ID" format(uuid)
 // @Param include_deleted query bool false "Trả cả tài liệu đã xóa mềm" default(false)
@@ -256,7 +260,10 @@ func (h *Handler) List(c *gin.Context) {
 		fail(c, apperr.BadRequest("Phân trang không hợp lệ"))
 		return
 	}
-	f := domain.Filter{Query: c.Query("q"), Status: c.Query("status"), MediaType: c.Query("type")}
+	f := domain.Filter{
+		Query: c.Query("q"), Status: c.Query("status"), MediaType: c.Query("type"),
+		DocumentVersion: c.Query("document_version"),
+	}
 	if raw := c.Query("include_deleted"); raw != "" {
 		includeDeleted, parseErr := strconv.ParseBool(raw)
 		if parseErr != nil {
@@ -376,6 +383,7 @@ func (h *Handler) ConfirmDocType(c *gin.Context) {
 // @Param id path string true "Project ID" format(uuid)
 // @Param document_id path string true "Document ID" format(uuid)
 // @Param file formData file true "File tài liệu"
+// @Param document_version formData string false "Phiên bản tài liệu do người dùng nhập"
 // @Param project_version_id formData string false "Project version ID" format(uuid)
 // @Param change_request_id formData string false "Change request ID" format(uuid)
 // @Param size_bytes formData integer false "Kích thước khai báo"

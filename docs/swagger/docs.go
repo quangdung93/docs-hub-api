@@ -639,6 +639,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Phiên bản tài liệu",
+                        "name": "document_version",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "format": "uuid",
                         "description": "Project version ID",
                         "name": "version_id",
@@ -805,6 +811,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Mô tả",
                         "name": "description",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Phiên bản tài liệu do người dùng nhập",
+                        "name": "document_version",
                         "in": "formData"
                     },
                     {
@@ -1421,6 +1433,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Phiên bản tài liệu do người dùng nhập",
+                        "name": "document_version",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
                         "format": "uuid",
                         "description": "Project version ID",
                         "name": "project_version_id",
@@ -1962,7 +1980,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động\nmerge nội dung vào cuối file .docx gốc và tạo revision mới.",
+                "description": "Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động\nmerge nội dung vào cuối file .docx gốc và tạo revision mới.\nTài liệu không phải .docx vẫn hoàn tất bình thường nhưng KHÔNG sinh\nrevision mới — xem cờ new_revision_created trong data.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2020,7 +2038,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/domain.Analysis"
+                                            "$ref": "#/definitions/http.SubmitResolutionsResponse"
                                         }
                                     }
                                 }
@@ -3074,37 +3092,37 @@ const docTemplate = `{
         "domain.Analysis": {
             "type": "object",
             "properties": {
-                "createdAt": {
+                "created_at": {
                     "type": "string"
                 },
-                "createdBy": {
+                "created_by": {
                     "type": "string"
                 },
-                "documentID": {
+                "document_id": {
                     "type": "string"
                 },
-                "errorCode": {
+                "error_code": {
                     "type": "string"
                 },
-                "errorDetail": {
+                "error_detail": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
-                "resolvedCases": {
+                "resolved_cases": {
                     "type": "integer"
                 },
-                "revisionID": {
+                "revision_id": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "totalCases": {
+                "total_cases": {
                     "type": "integer"
                 },
-                "updatedAt": {
+                "updated_at": {
                     "type": "string"
                 }
             }
@@ -3131,6 +3149,10 @@ const docTemplate = `{
                 "document_key": {
                     "type": "string"
                 },
+                "document_version": {
+                    "description": "DocumentVersion và UploadedAt là metadata của revision được upload gần\nnhất, dùng cho danh sách tài liệu. Lịch sử đầy đủ nằm trong Revision.",
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -3146,6 +3168,9 @@ const docTemplate = `{
                 "updated_at": {
                     "type": "string"
                 },
+                "uploaded_at": {
+                    "type": "string"
+                },
                 "version": {
                     "type": "integer"
                 }
@@ -3154,7 +3179,7 @@ const docTemplate = `{
         "domain.EdgeCase": {
             "type": "object",
             "properties": {
-                "analysisID": {
+                "analysis_id": {
                     "type": "string"
                 },
                 "description": {
@@ -3163,7 +3188,7 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "imageObjectKey": {
+                "image_object_key": {
                     "type": "string"
                 },
                 "resolution": {
@@ -3172,7 +3197,7 @@ const docTemplate = `{
                 "resolved": {
                     "type": "boolean"
                 },
-                "sequenceNo": {
+                "sequence_no": {
                     "type": "integer"
                 }
             }
@@ -3210,6 +3235,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "document_id": {
+                    "type": "string"
+                },
+                "document_version": {
                     "type": "string"
                 },
                 "error_code": {
@@ -3524,6 +3552,10 @@ const docTemplate = `{
                 "document_id": {
                     "type": "string"
                 },
+                "document_version": {
+                    "type": "string",
+                    "maxLength": 255
+                },
                 "file_name": {
                     "type": "string"
                 },
@@ -3693,9 +3725,23 @@ const docTemplate = `{
                 }
             }
         },
+        "http.SubmitResolutionsResponse": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "$ref": "#/definitions/domain.Analysis"
+                },
+                "new_revision_created": {
+                    "type": "boolean"
+                }
+            }
+        },
         "http.SummaryItem": {
             "type": "object",
             "properties": {
+                "analysis_id": {
+                    "type": "string"
+                },
                 "document_id": {
                     "type": "string"
                 },

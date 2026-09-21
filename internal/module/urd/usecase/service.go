@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,11 @@ const maxCanonicalTextBytes = 2 << 20 // 2 MiB
 // revisionStatusReady khớp giá trị document_revisions.status do module
 // document/ingestion set khi đã ingest xong (xem document/usecase/service.go).
 const revisionStatusReady = "ready"
+
+// mediaTypeDOCX là định dạng DUY NHẤT tự tạo được phiên bản URD mới, vì
+// docxmerge chèn nội dung bằng cách sửa word/document.xml trong gói .docx.
+// Các định dạng khác (PDF, MD, TXT…) vẫn phân tích edge case bình thường.
+const mediaTypeDOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 type Service struct {
 	repo             domain.Repository
@@ -83,8 +89,14 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 		return nil, nil, apperr.Database("Không thể kiểm tra phân tích đang hoạt động").WithCause(err)
 	}
 	if active != nil {
+		// Kèm analysis_id: đây là lối ra DUY NHẤT cho người dùng mở lại phân
+		// tích đang dở. Trước đó id chỉ xuất hiện một lần trong response của
+		// lần Analyze đầu tiên — mất response đó (tải lại trang, đổi máy, hoặc
+		// người khác trong dự án) là tài liệu kẹt awaiting_input vĩnh viễn, vì
+		// urd-summary không trả id còn Analyze lại bị chính nhánh này chặn.
 		return nil, nil, apperr.NewBusiness(
-			errcode.URDAnalysisActive, "Tài liệu đang có phân tích edge case chưa hoàn tất", false)
+			errcode.URDAnalysisActive, "Tài liệu đang có phân tích edge case chưa hoàn tất", false).
+			WithDetails(map[string]any{"analysis_id": active.ID})
 	}
 	_, reader, err := s.docSvc.CanonicalSource(ctx, projectID, documentID, revision.ID)
 	if err != nil {
@@ -123,9 +135,15 @@ func (s *Service) saveAnalysis(
 		// không cần tạo phiên bản mới vì không có nội dung gì để bổ sung.
 		status = domain.StatusCompleted
 	}
+	// Gán mốc thời gian ngay tại đây (thay vì để DB tự điền) để bản ghi trả về
+	// cho client khớp với bản ghi lưu xuống — trước đó response của Analyze
+	// mang created_at/updated_at rỗng "0001-01-01T00:00:00Z", còn GET analyses
+	// sau đó lại ra giờ thật, hai nơi lệch nhau.
+	now := time.Now().UTC()
 	a := domain.Analysis{
 		ID: analysisID, DocumentID: documentID, RevisionID: revisionID,
 		Status: status, TotalCases: len(cases), ResolvedCases: 0, CreatedBy: actorID,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	err := s.tx.Do(ctx, func(txctx context.Context) error { return s.repo.CreateAnalysis(txctx, a, cases) })
 	if err != nil {
@@ -185,22 +203,25 @@ func containsCase(cases []domain.EdgeCase, caseID uuid.UUID) bool {
 // SubmitResolutions lưu hướng giải quyết cho các case chỉ định. Khi đã đủ
 // hướng giải quyết cho TOÀN BỘ case của phân tích, tự động tạo phiên bản URD
 // mới (merge nội dung vào .docx gốc) và đánh dấu phân tích hoàn tất.
+//
+// Giá trị bool trả về: đã tạo phiên bản URD mới hay chưa. Luôn false khi chưa
+// nhập đủ hướng giải quyết, và cả khi tài liệu gốc không phải .docx.
 func (s *Service) SubmitResolutions(
 	ctx context.Context, projectID, documentID, analysisID uuid.UUID, items []ResolutionInput,
-) (*domain.Analysis, error) {
+) (*domain.Analysis, bool, error) {
 	if _, err := s.authorize(ctx, projectID, true); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	analysis, cases, err := s.repo.GetAnalysis(ctx, analysisID)
 	if err != nil {
-		return nil, s.mapErr(err)
+		return nil, false, s.mapErr(err)
 	}
 	if analysis.DocumentID != documentID {
-		return nil, apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
+		return nil, false, apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
 	}
 	updated, err := s.applyResolutions(cases, items)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var result *domain.Analysis
 	err = s.tx.Do(ctx, func(txctx context.Context) error {
@@ -209,10 +230,10 @@ func (s *Service) SubmitResolutions(
 		return e
 	})
 	if err != nil {
-		return nil, apperr.Database("Không thể lưu hướng giải quyết").WithCause(err)
+		return nil, false, apperr.Database("Không thể lưu hướng giải quyết").WithCause(err)
 	}
 	if result.ResolvedCases < result.TotalCases {
-		return result, nil
+		return result, false, nil
 	}
 	return s.finalizeAnalysis(ctx, projectID, documentID, result)
 }
@@ -246,37 +267,52 @@ func (s *Service) applyResolutions(
 // finalizeAnalysis tạo phiên bản URD mới bằng cách merge nội dung edge case
 // (mô tả + hướng giải quyết) vào cuối file .docx gốc, rồi đánh dấu phân tích
 // hoàn tất. Chạy SAU khi resolved_cases == total_cases.
+//
+// Tài liệu KHÔNG phải .docx vẫn phân tích và nhập hướng giải quyết bình thường,
+// chỉ bỏ qua bước tạo phiên bản mới — docxmerge chỉ chèn được vào .docx. Trước
+// đây bước merge cứ chạy rồi hỏng, trả SYS_500 và để phân tích kẹt
+// awaiting_input với resolved==total: người dùng mất trắng công đã nhập, phân
+// tích lại thì bị URD_ANALYSIS_ACTIVE chặn, gửi lại thì hỏng y hệt (đo trên
+// production 2026-09-16 với một URD dạng PDF — mục #28 trong báo cáo lỗi).
+//
+// Trả thêm cờ "đã tạo phiên bản mới chưa" để client nói đúng với người dùng
+// thay vì mặc định coi như đã có file mới.
 func (s *Service) finalizeAnalysis(
 	ctx context.Context, projectID, documentID uuid.UUID, a *domain.Analysis,
-) (*domain.Analysis, error) {
+) (*domain.Analysis, bool, error) {
 	_, cases, err := s.repo.GetAnalysis(ctx, a.ID)
 	if err != nil {
-		return nil, s.mapErr(err)
+		return nil, false, s.mapErr(err)
 	}
 	revision, reader, err := s.docSvc.Download(ctx, projectID, documentID, a.RevisionID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	original, err := io.ReadAll(reader)
 	reader.Close()
 	if err != nil {
-		return nil, apperr.Internal("Không thể đọc tài liệu URD gốc").WithCause(err)
+		return nil, false, apperr.Internal("Không thể đọc tài liệu URD gốc").WithCause(err)
 	}
-	merged, err := docxmerge.Merge(original, cases)
-	if err != nil {
-		return nil, apperr.Internal("Không thể tạo phiên bản URD mới: định dạng .docx gốc không được hỗ trợ để tự động chèn nội dung").
-			WithCause(err)
-	}
-	if _, _, err = s.docSvc.CreateRevisionFromBytes(
-		ctx, projectID, documentID, revision.Scope, revision.FileName, revision.MediaType, merged,
-	); err != nil {
-		return nil, err
+	taoPhienBanMoi := revision.MediaType == mediaTypeDOCX
+	if taoPhienBanMoi {
+		merged, mergeErr := docxmerge.Merge(original, cases)
+		if mergeErr != nil {
+			return nil, false, apperr.Internal(
+				"Không thể tạo phiên bản URD mới: cấu trúc file .docx gốc không được hỗ trợ để tự động chèn nội dung").
+				WithCause(mergeErr)
+		}
+		if _, _, err = s.docSvc.CreateRevisionFromBytes(
+			ctx, projectID, documentID, revision.Scope, revision.DocumentVersion,
+			revision.FileName, revision.MediaType, merged,
+		); err != nil {
+			return nil, false, err
+		}
 	}
 	completed, err := s.repo.MarkCompleted(ctx, a.ID)
 	if err != nil {
-		return nil, apperr.Database("Không thể cập nhật trạng thái hoàn tất").WithCause(err)
+		return nil, false, apperr.Database("Không thể cập nhật trạng thái hoàn tất").WithCause(err)
 	}
-	return completed, nil
+	return completed, taoPhienBanMoi, nil
 }
 
 // Get trả 1 phân tích cụ thể (để FE mở lại modal đang dở hoặc xem lịch sử).

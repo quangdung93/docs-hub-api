@@ -43,10 +43,27 @@ type SubmitResolutionsRequest struct {
 	Items []ResolutionItem `json:"items" binding:"required,min=1,dive"`
 }
 
+// SubmitResolutionsResponse kèm cờ NewRevisionCreated để FE nói đúng với người
+// dùng: chỉ tài liệu .docx mới tự sinh được phiên bản URD mới, còn PDF/MD/TXT
+// thì hướng giải quyết vẫn được lưu và phân tích vẫn hoàn tất, chỉ không có
+// file mới. Thiếu cờ này FE sẽ báo "đã tạo phiên bản mới" cho cả hai trường hợp.
+//
+// Cờ nằm ở tầng delivery vì nó suy ra từ định dạng file, không phải trạng thái
+// lưu trong DB của phân tích.
+type SubmitResolutionsResponse struct {
+	Analysis           *domain.Analysis `json:"analysis"`
+	NewRevisionCreated bool             `json:"new_revision_created"`
+}
+
 // SummaryItem là 1 dòng tóm tắt độ hoàn thiện URD — cột "Hoàn thiện" trong
 // bảng Quản lý dự án.
+//
+// AnalysisID cho FE mở thẳng phân tích đang dở từ bảng danh sách. Thiếu nó thì
+// id chỉ tồn tại trong response của lần Analyze đầu tiên, mất là tài liệu khoá
+// vĩnh viễn (xem chú thích ở usecase.Analyze).
 type SummaryItem struct {
 	DocumentID    uuid.UUID `json:"document_id"`
+	AnalysisID    uuid.UUID `json:"analysis_id"`
 	Status        string    `json:"status"`
 	TotalCases    int       `json:"total_cases"`
 	ResolvedCases int       `json:"resolved_cases"`
@@ -160,6 +177,8 @@ func (h *Handler) UploadCaseImage(c *gin.Context) {
 // @Summary Lưu hướng giải quyết cho các edge case; tạo phiên bản URD mới khi đã đủ
 // @Description Khi resolved_cases đạt total_cases sau lời gọi này, hệ thống tự động
 // @Description merge nội dung vào cuối file .docx gốc và tạo revision mới.
+// @Description Tài liệu không phải .docx vẫn hoàn tất bình thường nhưng KHÔNG sinh
+// @Description revision mới — xem cờ new_revision_created trong data.
 // @Tags urd
 // @Security BearerAuth
 // @Accept json
@@ -168,7 +187,7 @@ func (h *Handler) UploadCaseImage(c *gin.Context) {
 // @Param document_id path string true "Document ID" format(uuid)
 // @Param analysis_id path string true "Analysis ID" format(uuid)
 // @Param body body SubmitResolutionsRequest true "Hướng giải quyết từng case"
-// @Success 200 {object} response.Envelope{data=domain.Analysis}
+// @Success 200 {object} response.Envelope{data=SubmitResolutionsResponse}
 // @Failure 400 {object} response.Envelope
 // @Failure 401 {object} response.Envelope
 // @Failure 403 {object} response.Envelope
@@ -194,12 +213,12 @@ func (h *Handler) SubmitResolutions(c *gin.Context) {
 			CaseID: caseID, Resolution: item.Resolution, ImageObjectKey: item.ImageObjectKey,
 		}
 	}
-	a, err := h.svc.SubmitResolutions(c.Request.Context(), pid, did, aid, items)
+	a, daTaoPhienBanMoi, err := h.svc.SubmitResolutions(c.Request.Context(), pid, did, aid, items)
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	response.OK(c, a)
+	response.OK(c, SubmitResolutionsResponse{Analysis: a, NewRevisionCreated: daTaoPhienBanMoi})
 }
 
 // ListSummaries godoc
@@ -227,7 +246,7 @@ func (h *Handler) ListSummaries(c *gin.Context) {
 	items := make([]SummaryItem, 0, len(summaries))
 	for documentID, a := range summaries {
 		items = append(items, SummaryItem{
-			DocumentID: documentID, Status: a.Status,
+			DocumentID: documentID, AnalysisID: a.ID, Status: a.Status,
 			TotalCases: a.TotalCases, ResolvedCases: a.ResolvedCases,
 		})
 	}

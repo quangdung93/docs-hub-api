@@ -326,12 +326,20 @@ func TestAnalyze_DangCoPhanTichActive(t *testing.T) {
 		},
 	}
 	urdRepo := newFakeUrdRepo()
-	urdRepo.active = &domain.Analysis{ID: uuid.New(), DocumentID: did, Status: domain.StatusAwaitingInput}
+	activeID := uuid.New()
+	urdRepo.active = &domain.Analysis{ID: activeID, DocumentID: did, Status: domain.StatusAwaitingInput}
 	svc := newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{})
 
 	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
 
 	require.Equal(t, errcode.URDAnalysisActive, businessCode(t, err))
+	// Lỗi PHẢI kèm analysis_id: không có nó thì người dùng mất đường vào phân
+	// tích đang dở và tài liệu kẹt vĩnh viễn (đo trên production 2026-09-16).
+	var be *apperr.BusinessError
+	require.ErrorAs(t, err, &be)
+	details, ok := be.Details.(map[string]any)
+	require.True(t, ok, "details phải là object để client đọc analysis_id")
+	require.Equal(t, activeID, details["analysis_id"])
 }
 
 func TestAnalyze_ThanhCong_TaoPhanTich(t *testing.T) {
@@ -356,6 +364,39 @@ func TestAnalyze_ThanhCong_TaoPhanTich(t *testing.T) {
 	require.Equal(t, "Case A", cases[0].Description)
 }
 
+// TestAnalyze_TraVeCoMocThoiGian canh lỗi đã đo ở local 2026-09-16: response
+// của Analyze mang created_at/updated_at rỗng ("0001-01-01T00:00:00Z") vì
+// usecase dựng struct rồi trả luôn, để DB tự điền giờ. Client đọc ra ngày năm
+// 1, còn GET analyses sau đó lại ra giờ thật — hai nơi lệch nhau.
+func TestAnalyze_TraVeCoMocThoiGian(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD, Title: "URD Demo"},
+		revisions: []documentdomain.Revision{
+			{ID: rid, Status: revisionStatusReady, CanonicalTextKey: "canon"},
+		},
+	}
+	store := newFakeStore()
+	store.objects["canon"] = []byte("Noi dung URD da trich xuat")
+	rag := &fakeRAG{completeChatContent: `{"cases":[{"description":"Case A"}]}`}
+	urdRepo := newFakeUrdRepo()
+	svc := newTestService(t, docRepo, store, urdRepo, rag)
+	truoc := time.Now().UTC().Add(-time.Second)
+
+	a, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.NoError(t, err)
+	require.False(t, a.CreatedAt.IsZero(), "created_at không được rỗng")
+	require.False(t, a.UpdatedAt.IsZero(), "updated_at không được rỗng")
+	require.True(t, a.CreatedAt.After(truoc), "created_at phải là giờ hiện tại")
+	// Giá trị trả cho client phải đúng bằng giá trị đưa xuống repository, để
+	// bản ghi trong DB và response không lệch nhau.
+	daLuu := urdRepo.analyses[a.ID]
+	require.NotNil(t, daLuu, "phân tích phải được lưu xuống repository")
+	require.Equal(t, daLuu.CreatedAt, a.CreatedAt)
+	require.Equal(t, daLuu.UpdatedAt, a.UpdatedAt)
+}
+
 func TestSubmitResolutions_CaseKhongThuocPhanTich(t *testing.T) {
 	pid, did := uuid.New(), uuid.New()
 	analysisID, caseID := uuid.New(), uuid.New()
@@ -365,7 +406,7 @@ func TestSubmitResolutions_CaseKhongThuocPhanTich(t *testing.T) {
 	docRepo := &fakeDocRepo{doc: documentdomain.Document{ID: did, ProjectID: pid}}
 	svc := newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{})
 
-	_, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+	_, _, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
 		[]ResolutionInput{{CaseID: uuid.New(), Resolution: "abc"}})
 
 	var te *apperr.TechnicalError
@@ -381,7 +422,7 @@ func TestSubmitResolutions_ThieuHuongGiaiQuyet(t *testing.T) {
 	docRepo := &fakeDocRepo{doc: documentdomain.Document{ID: did, ProjectID: pid}}
 	svc := newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{})
 
-	_, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+	_, _, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
 		[]ResolutionInput{{CaseID: caseID, Resolution: "  "}})
 
 	var te *apperr.TechnicalError
@@ -415,10 +456,11 @@ func TestSubmitResolutions_HoanTat_TaoPhienBanURDMoi(t *testing.T) {
 
 	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
 
-	result, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
 		[]ResolutionInput{{CaseID: caseID, Resolution: "Validate dinh dang dd/mm/yyyy"}})
 
 	require.NoError(t, err)
+	require.True(t, daTaoPhienBanMoi, ".docx thì phải sinh phiên bản URD mới")
 	require.Equal(t, domain.StatusCompleted, result.Status)
 	require.Equal(t, 1, result.ResolvedCases)
 	// finalizeAnalysis phải đã tạo 1 revision mới qua docSvc.CreateRevisionFromBytes.
@@ -434,6 +476,72 @@ func TestSubmitResolutions_HoanTat_TaoPhienBanURDMoi(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(content), "Nhap sai dinh dang ngay thang")
 	require.Contains(t, string(content), "Validate dinh dang dd/mm/yyyy")
+}
+
+// URD dạng PDF: vẫn nhập đủ hướng giải quyết và hoàn tất bình thường, chỉ KHÔNG
+// sinh phiên bản mới. Trước bản sửa, docxmerge chạy trên file PDF rồi hỏng, trả
+// SYS_500 và để phân tích kẹt awaiting_input với resolved==total — tài liệu khoá
+// vĩnh viễn, đã tái lập trên production 2026-09-16 (mục #28).
+func TestSubmitResolutions_KhongPhaiDocx_HoanTatMaKhongTaoPhienBanMoi(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, caseID := uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.pdf", MediaType: "application/pdf", ObjectKey: "orig-key",
+				Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	// Nội dung KHÔNG phải zip: docxmerge sẽ hỏng nếu bị gọi tới.
+	store.objects["orig-key"] = []byte("%PDF-1.4 noi dung gia lap")
+
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 1,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		{ID: caseID, AnalysisID: analysisID, SequenceNo: 1, Description: "Chua neu cach xu ly khi het cho"},
+	}
+
+	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
+
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{{CaseID: caseID, Resolution: "Bao het cho va goi y khung gio khac"}})
+
+	require.NoError(t, err, "PDF không được làm hỏng cả lời gọi")
+	require.False(t, daTaoPhienBanMoi, "PDF thì không sinh phiên bản URD mới")
+	require.Equal(t, domain.StatusCompleted, result.Status, "phân tích vẫn phải hoàn tất, không kẹt awaiting_input")
+	require.Equal(t, 1, result.ResolvedCases)
+	require.Len(t, docRepo.revisions, 1, "không được tạo thêm revision nào")
+}
+
+// Chưa nhập đủ hướng giải quyết thì chưa chạy tới bước tạo phiên bản mới.
+func TestSubmitResolutions_ChuaDu_ThiChuaTaoPhienBanMoi(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, case1, case2 := uuid.New(), uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{doc: documentdomain.Document{ID: did, ProjectID: pid}}
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 2,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		{ID: case1, AnalysisID: analysisID, SequenceNo: 1},
+		{ID: case2, AnalysisID: analysisID, SequenceNo: 2},
+	}
+	svc := newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{})
+
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{{CaseID: case1, Resolution: "Xu ly A"}})
+
+	require.NoError(t, err)
+	require.False(t, daTaoPhienBanMoi)
+	require.Equal(t, domain.StatusAwaitingInput, result.Status)
 }
 
 func uuidPtr(id uuid.UUID) *uuid.UUID { return &id }

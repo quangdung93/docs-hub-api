@@ -62,17 +62,17 @@ func New(repo domain.Repository, tx port.TxManager, store port.ObjectStore, cloc
 }
 
 type UploadInput struct {
-	ProjectID, DocumentID                   uuid.UUID
-	Scope                                   domain.Scope
-	Title, Description, FileName, MediaType string
-	SizeBytes                               int64
-	Reader                                  io.Reader
+	ProjectID, DocumentID                                    uuid.UUID
+	Scope                                                    domain.Scope
+	Title, Description, DocumentVersion, FileName, MediaType string
+	SizeBytes                                                int64
+	Reader                                                   io.Reader
 }
 type PresignInput struct {
-	ProjectID, DocumentID                   uuid.UUID
-	Scope                                   domain.Scope
-	Title, Description, FileName, MediaType string
-	SizeBytes                               int64
+	ProjectID, DocumentID                                    uuid.UUID
+	Scope                                                    domain.Scope
+	Title, Description, DocumentVersion, FileName, MediaType string
+	SizeBytes                                                int64
 }
 type PresignResult struct {
 	UploadID  uuid.UUID `json:"upload_id"`
@@ -92,6 +92,10 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 	}
 	if len([]rune(in.Title)) > 255 {
 		return nil, nil, "", apperr.BadRequest("Title không được vượt quá 255 ký tự")
+	}
+	in.DocumentVersion = strings.TrimSpace(in.DocumentVersion)
+	if len([]rune(in.DocumentVersion)) > 255 {
+		return nil, nil, "", apperr.BadRequest("Phiên bản tài liệu không được vượt quá 255 ký tự")
 	}
 	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes); err != nil {
 		return nil, nil, "", err
@@ -121,7 +125,7 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 		params := domain.CreateRevisionParams{
 			DocumentID: in.DocumentID, RevisionID: rid, ProjectID: in.ProjectID,
 			ActorID: actor, Scope: in.Scope, Title: in.Title, Description: in.Description,
-			FileName: safeName(in.FileName), MediaType: in.MediaType,
+			DocumentVersion: in.DocumentVersion, FileName: safeName(in.FileName), MediaType: in.MediaType,
 			SHA256: actualSHA256, ObjectKey: stored.Key, SizeBytes: stored.Size,
 		}
 		d, rev, e = s.repo.CreateRevision(txctx, params)
@@ -147,7 +151,8 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 // AI hợp nhất thêm nội dung edge case (URD v1.2 mục XI), tái dùng đúng luồng
 // ghi object store + repo.CreateRevision như Upload.
 func (s *Service) CreateRevisionFromBytes(
-	ctx context.Context, pid, did uuid.UUID, scope domain.Scope, fileName, mediaType string, data []byte,
+	ctx context.Context, pid, did uuid.UUID, scope domain.Scope,
+	documentVersion, fileName, mediaType string, data []byte,
 ) (*domain.Document, *domain.Revision, error) {
 	actor, err := s.authorize(ctx, pid, true)
 	if err != nil {
@@ -168,7 +173,8 @@ func (s *Service) CreateRevisionFromBytes(
 		var e error
 		params := domain.CreateRevisionParams{
 			DocumentID: did, RevisionID: rid, ProjectID: pid, ActorID: actor, Scope: scope,
-			FileName: safeName(fileName), MediaType: mediaType,
+			DocumentVersion: strings.TrimSpace(documentVersion),
+			FileName:        safeName(fileName), MediaType: mediaType,
 			SHA256: hex.EncodeToString(hash[:]), ObjectKey: key, SizeBytes: int64(len(data)),
 		}
 		d, rev, e = s.repo.CreateRevision(txctx, params)
@@ -225,6 +231,10 @@ func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult,
 	if len([]rune(in.Title)) > 255 {
 		return nil, apperr.BadRequest("Title không được vượt quá 255 ký tự")
 	}
+	in.DocumentVersion = strings.TrimSpace(in.DocumentVersion)
+	if len([]rune(in.DocumentVersion)) > 255 {
+		return nil, apperr.BadRequest("Phiên bản tài liệu không được vượt quá 255 ký tự")
+	}
 	if err = s.validate(ctx, in.ProjectID, in.Scope, in.FileName, in.MediaType, in.SizeBytes); err != nil {
 		return nil, err
 	}
@@ -234,7 +244,8 @@ func (s *Service) Presign(ctx context.Context, in PresignInput) (*PresignResult,
 	u := &domain.Upload{
 		ID: uuid.New(), ProjectID: in.ProjectID, DocumentID: in.DocumentID,
 		RevisionID: uuid.New(), CreatedBy: actor, Scope: in.Scope,
-		Title: in.Title, Description: in.Description, FileName: safeName(in.FileName),
+		Title: in.Title, Description: in.Description, DocumentVersion: in.DocumentVersion,
+		FileName:  safeName(in.FileName),
 		MediaType: in.MediaType, SizeBytes: in.SizeBytes,
 		Status: "pending", ExpiresAt: s.clock.Now().Add(15 * time.Minute),
 	}
@@ -345,6 +356,7 @@ func (s *Service) List(
 	if _, err := s.authorize(ctx, pid, false); err != nil {
 		return nil, pagination.Meta{}, err
 	}
+	f.DocumentVersion = strings.TrimSpace(f.DocumentVersion)
 	items, total, err := s.repo.List(ctx, pid, f, p.Normalize())
 	p = p.Normalize()
 	return items, pagination.NewMeta(p.Page, p.Limit, total), err

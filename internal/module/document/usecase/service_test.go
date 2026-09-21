@@ -22,6 +22,7 @@ type fakeRepo struct {
 	role     string
 	scope    bool
 	created  *domain.CreateRevisionParams
+	upload   *domain.Upload
 	revision *domain.Revision
 	uatItems []domain.UATItem
 	// createErr: lỗi mà CreateRevision trả về thay cho kết quả thành công. Để
@@ -42,7 +43,10 @@ func (f *fakeRepo) CreateRevision(_ context.Context, in domain.CreateRevisionPar
 	f.created = &in
 	return &domain.Document{ID: in.DocumentID}, &domain.Revision{ID: in.RevisionID, ObjectKey: in.ObjectKey}, nil
 }
-func (*fakeRepo) CreateUpload(context.Context, *domain.Upload) error { return nil }
+func (f *fakeRepo) CreateUpload(_ context.Context, upload *domain.Upload) error {
+	f.upload = upload
+	return nil
+}
 func (*fakeRepo) FindUpload(context.Context, uuid.UUID, uuid.UUID) (*domain.Upload, error) {
 	return nil, domain.ErrNotFound
 }
@@ -126,7 +130,8 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
 	input := UploadInput{
 		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "Tai lieu",
-		FileName: "../../yeu cau.md", MediaType: mimeMarkdown, SizeBytes: int64(len(data)),
+		DocumentVersion: "  bản 2.1  ",
+		FileName:        "../../yeu cau.md", MediaType: mimeMarkdown, SizeBytes: int64(len(data)),
 		Reader: bytes.NewReader(data),
 	}
 	d, r, _, err := svc.Upload(ctx, input)
@@ -136,6 +141,7 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 	require.NotNil(t, repo.created)
 	require.Contains(t, repo.created.ObjectKey, "projects/"+pid.String()+"/documents/")
 	require.NotContains(t, repo.created.ObjectKey, "..")
+	require.Equal(t, "bản 2.1", repo.created.DocumentVersion)
 	require.Equal(t, data, store.data)
 	require.Equal(t, "7ae5326a1eec0c66c7c5567308167187d9bad2eecd4712d7f7cedad8a1565b64", repo.created.SHA256)
 }
@@ -218,6 +224,23 @@ func TestPresign_FilesystemYeuCauDungMultipart(t *testing.T) {
 	var technical *apperr.TechnicalError
 	require.ErrorAs(t, err, &technical)
 	require.Equal(t, 400, technical.HTTPStatus)
+}
+
+func TestPresign_LuuDocumentVersionTuFrontend(t *testing.T) {
+	actor, pid, vid := uuid.New(), uuid.New(), uuid.New()
+	repo := &fakeRepo{role: "editor", scope: true}
+	svc := New(repo, fakeTx{}, &fakeStore{}, fakeClock{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actor.String()})
+
+	_, err := svc.Presign(ctx, PresignInput{
+		ProjectID: pid, Scope: domain.Scope{VersionID: &vid}, Title: "x",
+		DocumentVersion: "  release candidate  ",
+		FileName:        "x.txt", MediaType: mimeTextPlain, SizeBytes: 3,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.upload)
+	require.Equal(t, "release candidate", repo.upload.DocumentVersion)
 }
 
 func TestVerifyObject_TuTinhSHA256(t *testing.T) {
