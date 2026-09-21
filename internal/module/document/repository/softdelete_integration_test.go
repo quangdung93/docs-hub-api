@@ -151,9 +151,15 @@ func TestList_LocDocumentVersionGomRevisionTrungVaSortTheoNgayUpload(t *testing.
 	ctx := context.Background()
 	pid, firstDocumentID, firstRevisionID, actor := dungDuLieu(t, db)
 
-	var projectVersionID uuid.UUID
+	// Đích scan phải là string rồi mới parse: uuid.UUID là mảng [16]byte, mà
+	// GORM thấy đích kiểu mảng thì hiểu là DANH SÁCH kết quả nên quét từng
+	// phần tử uint8 — hỏng với "converting driver.Value type string to a
+	// uint8". Toàn repo cũng đang scan cột uuid vào string (xem các
+	// repository), giữ cho nhất quán.
+	var projectVersionID string
 	require.NoError(t, db.Raw(`SELECT id FROM project_versions WHERE project_id=? LIMIT 1`, pid).
 		Scan(&projectVersionID).Error)
+	require.NotEmpty(t, projectVersionID, "dungDuLieu phải tạo sẵn project_version cho dự án")
 
 	day1 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	day2 := day1.Add(24 * time.Hour)
