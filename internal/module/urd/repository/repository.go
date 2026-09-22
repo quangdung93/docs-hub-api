@@ -31,14 +31,16 @@ type analysisModel struct {
 func (analysisModel) TableName() string { return "urd_analyses" }
 
 type edgeCaseModel struct {
-	ID, AnalysisID string
-	SequenceNo     int
-	Description    string
-	Resolution     string
-	ImageObjectKey *string
-	Resolved       bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID, AnalysisID    string
+	SequenceNo        int
+	Description       string
+	Resolution        string
+	ImageObjectKey    *string
+	Resolved          bool
+	IncludeInDocument bool
+	TargetHeading     string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 func (edgeCaseModel) TableName() string { return "urd_edge_cases" }
@@ -116,6 +118,7 @@ func (r *Repository) SaveResolutions(ctx context.Context, analysisID uuid.UUID, 
 	for _, c := range cases {
 		updates := map[string]any{
 			"resolution": c.Resolution, "resolved": true, "updated_at": time.Now().UTC(),
+			"include_in_document": c.IncludeInDocument,
 		}
 		if c.ImageObjectKey != "" {
 			updates["image_object_key"] = c.ImageObjectKey
@@ -255,6 +258,7 @@ func fromEdgeCase(c domain.EdgeCase) edgeCaseModel {
 	m := edgeCaseModel{
 		ID: c.ID.String(), AnalysisID: c.AnalysisID.String(), SequenceNo: c.SequenceNo,
 		Description: c.Description, Resolution: c.Resolution, Resolved: c.Resolved,
+		IncludeInDocument: c.IncludeInDocument, TargetHeading: c.TargetHeading,
 	}
 	if c.ImageObjectKey != "" {
 		key := c.ImageObjectKey
@@ -267,6 +271,7 @@ func toEdgeCase(m edgeCaseModel) domain.EdgeCase {
 	c := domain.EdgeCase{
 		ID: uuid.MustParse(m.ID), AnalysisID: uuid.MustParse(m.AnalysisID), SequenceNo: m.SequenceNo,
 		Description: m.Description, Resolution: m.Resolution, Resolved: m.Resolved,
+		IncludeInDocument: m.IncludeInDocument, TargetHeading: m.TargetHeading,
 	}
 	if m.ImageObjectKey != nil {
 		c.ImageObjectKey = *m.ImageObjectKey

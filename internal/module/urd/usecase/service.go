@@ -114,20 +114,23 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 	if noDataAnswer(raw) {
 		return nil, nil, noDataError(raw)
 	}
-	descriptions, err := parseEdgeCases(raw)
+	parsed, err := parseEdgeCases(raw)
 	if err != nil {
 		return nil, nil, apperr.External("RAGFlow trả nội dung không đúng định dạng JSON mong đợi").WithCause(err)
 	}
-	return s.saveAnalysis(ctx, documentID, revision.ID, actorID, descriptions)
+	return s.saveAnalysis(ctx, documentID, revision.ID, actorID, parsed)
 }
 
 func (s *Service) saveAnalysis(
-	ctx context.Context, documentID, revisionID, actorID uuid.UUID, descriptions []string,
+	ctx context.Context, documentID, revisionID, actorID uuid.UUID, parsed []parsedCase,
 ) (*domain.Analysis, []domain.EdgeCase, error) {
 	analysisID := uuid.New()
-	cases := make([]domain.EdgeCase, len(descriptions))
-	for i, desc := range descriptions {
-		cases[i] = domain.EdgeCase{ID: uuid.New(), AnalysisID: analysisID, SequenceNo: i + 1, Description: desc}
+	cases := make([]domain.EdgeCase, len(parsed))
+	for i, p := range parsed {
+		cases[i] = domain.EdgeCase{
+			ID: uuid.New(), AnalysisID: analysisID, SequenceNo: i + 1,
+			Description: p.description, TargetHeading: p.targetHeading,
+		}
 	}
 	status := domain.StatusAwaitingInput
 	if len(cases) == 0 {
@@ -161,6 +164,10 @@ type ResolutionInput struct {
 	CaseID         uuid.UUID
 	Resolution     string
 	ImageObjectKey string
+	// IncludeInDocument: case có được đưa vào phụ lục URD mới hay không —
+	// nil nghĩa là client không gửi (giữ hành vi cũ: đưa vào tài liệu). Xem
+	// domain.EdgeCase.IncludeInDocument.
+	IncludeInDocument *bool
 }
 
 // UploadCaseImage lưu ảnh minh hoạ cho 1 edge case, trả object key để client
@@ -191,6 +198,20 @@ func (s *Service) UploadCaseImage(
 	return key, nil
 }
 
+// casesForDocument lọc ra các case được chọn đưa vào phụ lục URD mới — case
+// có hướng giải quyết nhưng đánh dấu IncludeInDocument=false (vd "không áp
+// dụng"/"chưa có chức năng") chỉ được lưu lại làm hồ sơ, không đưa vào tài
+// liệu (xem domain.EdgeCase.IncludeInDocument).
+func casesForDocument(cases []domain.EdgeCase) []domain.EdgeCase {
+	out := make([]domain.EdgeCase, 0, len(cases))
+	for _, c := range cases {
+		if c.IncludeInDocument {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func containsCase(cases []domain.EdgeCase, caseID uuid.UUID) bool {
 	for _, c := range cases {
 		if c.ID == caseID {
@@ -202,10 +223,13 @@ func containsCase(cases []domain.EdgeCase, caseID uuid.UUID) bool {
 
 // SubmitResolutions lưu hướng giải quyết cho các case chỉ định. Khi đã đủ
 // hướng giải quyết cho TOÀN BỘ case của phân tích, tự động tạo phiên bản URD
-// mới (merge nội dung vào .docx gốc) và đánh dấu phân tích hoàn tất.
+// mới (merge nội dung các case có IncludeInDocument=true vào .docx gốc) và
+// đánh dấu phân tích hoàn tất.
 //
 // Giá trị bool trả về: đã tạo phiên bản URD mới hay chưa. Luôn false khi chưa
-// nhập đủ hướng giải quyết, và cả khi tài liệu gốc không phải .docx.
+// nhập đủ hướng giải quyết, khi tài liệu gốc không phải .docx, và khi mọi
+// case đều bị loại khỏi tài liệu (IncludeInDocument=false, vd "không áp
+// dụng").
 func (s *Service) SubmitResolutions(
 	ctx context.Context, projectID, documentID, analysisID uuid.UUID, items []ResolutionInput,
 ) (*domain.Analysis, bool, error) {
@@ -256,6 +280,16 @@ func (s *Service) applyResolutions(
 		}
 		existing.Resolution = item.Resolution
 		existing.Resolved = true
+		switch {
+		case item.IncludeInDocument != nil:
+			// Client gửi tường minh — luôn ưu tiên, bỏ qua suy đoán.
+			existing.IncludeInDocument = *item.IncludeInDocument
+		default:
+			// Không gửi: tự suy đoán từ nội dung câu trả lời (xem
+			// no_action_resolution.go) — cho phép loại trừ hoạt động được mà
+			// không cần FE đổi gì.
+			existing.IncludeInDocument = !isNoActionResolution(item.Resolution)
+		}
 		if item.ImageObjectKey != "" {
 			existing.ImageObjectKey = item.ImageObjectKey
 		}
@@ -293,9 +327,12 @@ func (s *Service) finalizeAnalysis(
 	if err != nil {
 		return nil, false, apperr.Internal("Không thể đọc tài liệu URD gốc").WithCause(err)
 	}
-	taoPhienBanMoi := revision.MediaType == mediaTypeDOCX
+	casesToInclude := casesForDocument(cases)
+	// Không sinh phiên bản mới nếu không còn case nào được chọn đưa vào tài
+	// liệu — vd toàn bộ case đều có hướng giải quyết dạng "không áp dụng".
+	taoPhienBanMoi := revision.MediaType == mediaTypeDOCX && len(casesToInclude) > 0
 	if taoPhienBanMoi {
-		merged, mergeErr := docxmerge.Merge(original, cases)
+		merged, mergeErr := docxmerge.Merge(original, casesToInclude)
 		if mergeErr != nil {
 			return nil, false, apperr.Internal(
 				"Không thể tạo phiên bản URD mới: cấu trúc file .docx gốc không được hỗ trợ để tự động chèn nội dung").

@@ -58,6 +58,20 @@ type EdgeCase struct {
 	Resolution     string    `json:"resolution"`
 	ImageObjectKey string    `json:"image_object_key,omitempty"`
 	Resolved       bool      `json:"resolved"`
+	// IncludeInDocument: case có được đưa vào phụ lục của phiên bản URD mới
+	// hay không. Không phải mọi case "đã nhập hướng giải quyết" đều có nội
+	// dung đáng đưa vào tài liệu — hướng giải quyết kiểu "Không"/"Chưa có
+	// chức năng này" là một câu trả lời hợp lệ nhưng không phải nội dung cần
+	// bổ sung vào URD. Client (FE) có thể gửi tường minh khi submit; nếu
+	// không gửi, usecase tự suy đoán từ nội dung Resolution (xem
+	// usecase/no_action_resolution.go) — không cần FE đổi gì vẫn hoạt động.
+	IncludeInDocument bool `json:"include_in_document"`
+	// TargetHeading là tiêu đề mục (AC/BR/...) mà AI ĐỀ XUẤT bổ sung nội dung
+	// xử lý case này vào, copy nguyên văn từ tài liệu. Chỉ là đề xuất:
+	// docxmerge còn phải đối chiếu với tiêu đề thật trong word/document.xml
+	// mới chèn thẳng vào mục đó, không khớp thì lùi về phụ lục cuối tài liệu.
+	// Rỗng = AI không xác định được mục nào.
+	TargetHeading string `json:"target_heading,omitempty"`
 }
 
 // Repository là cổng ra ngoài (Postgres) mà usecase phụ thuộc.

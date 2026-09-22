@@ -209,12 +209,19 @@ func (r *Repository) List(ctx context.Context, pid uuid.UUID, f domain.Filter, p
 		q = q.Where("title ILIKE ?", "%"+f.Query+"%")
 	}
 	if f.Status != "" || f.MediaType != "" || f.DocumentVersion != "" || f.VersionID != nil || f.ChangeRequestID != nil {
+		// ::uuid tường minh cho 2 vế cuối — CÙNG lý do đã ghi ở UATItems: pgx
+		// dùng extended query protocol, tham số chỉ xuất hiện trong "? IS NULL"
+		// không có cột nào để suy kiểu nên Postgres trả 42P18 "could not
+		// determine data type of parameter". Lỗi chỉ nổ khi lọc theo
+		// status/media_type/document_version mà KHÔNG lọc theo version/change
+		// request (hai tham số kia là NULL) — nên nó lọt qua tới tận lúc màn
+		// hình danh sách lọc theo phiên bản tài liệu mới lộ ra.
 		const revisionFilter = `EXISTS (SELECT 1 FROM document_revisions r
 			WHERE r.document_id=documents.id AND (?='' OR r.status=?)
 			AND (?='' OR r.media_type=?)
 			AND (?='' OR LOWER(r.document_version)=LOWER(?))
-			AND (? IS NULL OR r.project_version_id=?)
-			AND (? IS NULL OR r.change_request_id=?))`
+			AND (?::uuid IS NULL OR r.project_version_id=?::uuid)
+			AND (?::uuid IS NULL OR r.change_request_id=?::uuid))`
 		q = q.Where(revisionFilter, f.Status, f.Status, f.MediaType, f.MediaType,
 			f.DocumentVersion, f.DocumentVersion, f.VersionID, f.VersionID,
 			f.ChangeRequestID, f.ChangeRequestID)

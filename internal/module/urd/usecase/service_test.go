@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -478,6 +479,210 @@ func TestSubmitResolutions_HoanTat_TaoPhienBanURDMoi(t *testing.T) {
 	require.Contains(t, string(content), "Validate dinh dang dd/mm/yyyy")
 }
 
+// Case có hướng giải quyết dạng "không áp dụng" (IncludeInDocument=false) thì
+// vẫn được lưu resolved bình thường nhưng KHÔNG xuất hiện trong phụ lục URD
+// mới — chỉ case còn lại (IncludeInDocument mặc định true vì không gửi) mới
+// được đưa vào tài liệu.
+func TestSubmitResolutions_CaseKhongDuaVaoTaiLieu_BiLoaiKhoiPhuLuc(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, caseDua, caseKhongDua := uuid.New(), uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.docx", MediaType: testMediaTypeDOCX, ObjectKey: "orig-key",
+				Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	store.objects["orig-key"] = minimalDocx(t)
+
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 2,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		{ID: caseDua, AnalysisID: analysisID, SequenceNo: 1, Description: "Nhap sai dinh dang ngay thang"},
+		{ID: caseKhongDua, AnalysisID: analysisID, SequenceNo: 2, Description: "Dang nhap qua nhieu lan"},
+	}
+
+	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
+	khongDua := false
+
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{
+			{CaseID: caseDua, Resolution: "Validate dinh dang dd/mm/yyyy"},
+			{CaseID: caseKhongDua, Resolution: "Khong", IncludeInDocument: &khongDua},
+		})
+
+	require.NoError(t, err)
+	require.True(t, daTaoPhienBanMoi, "còn case được chọn đưa vào tài liệu thì vẫn phải sinh phiên bản mới")
+	require.Equal(t, domain.StatusCompleted, result.Status)
+	require.Equal(t, 2, result.ResolvedCases, "cả 2 case đều được lưu resolved")
+
+	require.Len(t, docRepo.revisions, 2)
+	newRevision := docRepo.revisions[1]
+	merged := store.objects[newRevision.ObjectKey]
+	zr, err := zip.NewReader(bytes.NewReader(merged), int64(len(merged)))
+	require.NoError(t, err)
+	f, err := zr.Open("word/document.xml")
+	require.NoError(t, err)
+	content, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "Nhap sai dinh dang ngay thang")
+	require.NotContains(t, string(content), "Dang nhap qua nhieu lan",
+		"case IncludeInDocument=false không được đưa vào phụ lục")
+}
+
+// Không cần FE gửi include_in_document: hướng giải quyết dạng "Không" khớp
+// danh sách no_action_resolution.go thì TỰ ĐỘNG bị loại khỏi phụ lục, còn
+// hướng giải quyết có nội dung thật thì tự động được đưa vào — chỉ dựa vào
+// text người dùng đã gõ sẵn.
+func TestSubmitResolutions_TuDongLoaiKhoiTaiLieu_KhongCanFEGuiCoTuongMinh(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, caseDua, caseKhongDua := uuid.New(), uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.docx", MediaType: testMediaTypeDOCX, ObjectKey: "orig-key",
+				Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	store.objects["orig-key"] = minimalDocx(t)
+
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 2,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		{ID: caseDua, AnalysisID: analysisID, SequenceNo: 1, Description: "Nhap sai dinh dang ngay thang"},
+		{ID: caseKhongDua, AnalysisID: analysisID, SequenceNo: 2, Description: "Dang nhap qua nhieu lan"},
+	}
+
+	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
+
+	// KHÔNG set IncludeInDocument ở cả 2 item — không phải FE nào cũng gửi.
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{
+			{CaseID: caseDua, Resolution: "Validate dinh dang dd/mm/yyyy"},
+			{CaseID: caseKhongDua, Resolution: "Không"},
+		})
+
+	require.NoError(t, err)
+	require.True(t, daTaoPhienBanMoi)
+	require.Equal(t, domain.StatusCompleted, result.Status)
+	require.Equal(t, 2, result.ResolvedCases, "cả 2 case đều lưu resolved dù 1 case không vào tài liệu")
+
+	newRevision := docRepo.revisions[1]
+	merged := store.objects[newRevision.ObjectKey]
+	zr, err := zip.NewReader(bytes.NewReader(merged), int64(len(merged)))
+	require.NoError(t, err)
+	f, err := zr.Open("word/document.xml")
+	require.NoError(t, err)
+	content, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "Nhap sai dinh dang ngay thang")
+	require.NotContains(t, string(content), "Dang nhap qua nhieu lan",
+		"hướng giải quyết 'Không' phải tự động bị loại dù FE không gửi include_in_document")
+}
+
+// FE gửi include_in_document tường minh thì luôn thắng suy đoán tự động từ
+// nội dung Resolution — kể cả khi suy đoán và giá trị gửi lên trái ngược nhau.
+func TestSubmitResolutions_CoTuongMinhThangSuyDoanTuDong(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, caseID := uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.docx", MediaType: testMediaTypeDOCX, ObjectKey: "orig-key",
+				Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	store.objects["orig-key"] = minimalDocx(t)
+
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 1,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		// "Không" tự suy đoán ra sẽ bị loại — nhưng FE ép include=true.
+		{ID: caseID, AnalysisID: analysisID, SequenceNo: 1, Description: "Co tu dong gia han khong"},
+	}
+
+	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
+	epInclude := true
+
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{{CaseID: caseID, Resolution: "Không", IncludeInDocument: &epInclude}})
+
+	require.NoError(t, err)
+	require.True(t, daTaoPhienBanMoi, "gửi tường minh true thì phải thắng suy đoán tự động")
+	require.Equal(t, domain.StatusCompleted, result.Status)
+
+	newRevision := docRepo.revisions[1]
+	merged := store.objects[newRevision.ObjectKey]
+	zr, err := zip.NewReader(bytes.NewReader(merged), int64(len(merged)))
+	require.NoError(t, err)
+	f, err := zr.Open("word/document.xml")
+	require.NoError(t, err)
+	content, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "Co tu dong gia han khong")
+}
+
+// Toàn bộ case đều đánh dấu "không đưa vào tài liệu" (vd không áp dụng) thì
+// không có nội dung gì để bổ sung — dù tài liệu gốc là .docx cũng không sinh
+// phiên bản mới, tránh tạo ra 1 file mới rỗng nội dung bổ sung.
+func TestSubmitResolutions_ToanBoKhongDuaVaoTaiLieu_KhongTaoPhienBanMoi(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	analysisID, caseID := uuid.New(), uuid.New()
+
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.docx", MediaType: testMediaTypeDOCX, ObjectKey: "orig-key",
+				Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	store.objects["orig-key"] = minimalDocx(t)
+
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[analysisID] = &domain.Analysis{
+		ID: analysisID, DocumentID: did, RevisionID: rid, Status: domain.StatusAwaitingInput, TotalCases: 1,
+	}
+	urdRepo.cases[analysisID] = []domain.EdgeCase{
+		{ID: caseID, AnalysisID: analysisID, SequenceNo: 1, Description: "Dang nhap qua nhieu lan"},
+	}
+
+	svc := newTestService(t, docRepo, store, urdRepo, &fakeRAG{})
+	khongDua := false
+
+	result, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, analysisID,
+		[]ResolutionInput{{CaseID: caseID, Resolution: "Khong", IncludeInDocument: &khongDua}})
+
+	require.NoError(t, err)
+	require.False(t, daTaoPhienBanMoi, "không còn case nào để đưa vào tài liệu thì không sinh phiên bản mới")
+	require.Equal(t, domain.StatusCompleted, result.Status)
+	require.Len(t, docRepo.revisions, 1, "không được tạo thêm revision nào")
+}
+
 // URD dạng PDF: vẫn nhập đủ hướng giải quyết và hoàn tất bình thường, chỉ KHÔNG
 // sinh phiên bản mới. Trước bản sửa, docxmerge chạy trên file PDF rồi hỏng, trả
 // SYS_500 và để phân tích kẹt awaiting_input với resolved==total — tài liệu khoá
@@ -545,3 +750,79 @@ func TestSubmitResolutions_ChuaDu_ThiChuaTaoPhienBanMoi(t *testing.T) {
 }
 
 func uuidPtr(id uuid.UUID) *uuid.UUID { return &id }
+
+// structuredDocx dựng .docx có tiêu đề mục (style Heading) để kiểm tra chèn
+// nội dung THẲNG vào mục thay vì gom vào phụ lục.
+func structuredDocx(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("word/document.xml")
+	require.NoError(t, err)
+	_, err = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Chuc nang Dang nhap</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Tieu chi chap nhan</w:t></w:r></w:p>
+<w:p><w:r><w:t>AC-01 Dang nhap dung thi vao trang chu</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Quy tac nghiep vu</w:t></w:r></w:p>
+<w:p><w:r><w:t>BR-01 Mat khau toi thieu 8 ky tu</w:t></w:r></w:p>
+<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:body></w:document>`))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// Chuỗi đầy đủ, KHÔNG cần FE gửi thêm gì: AI trả kèm target_heading khi phân
+// tích → lưu xuống case → lúc tạo phiên bản mới, nội dung được chèn thẳng
+// vào đúng mục AC, không sinh phụ lục.
+func TestAnalyzeRoiSubmit_ChenThangVaoMucAC_KhongCanFE(t *testing.T) {
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{
+			ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD, Title: "URD Dang nhap",
+		},
+		revisions: []documentdomain.Revision{
+			{
+				ID: rid, DocumentID: did, ProjectID: pid, Status: revisionStatusReady,
+				FileName: "urd.docx", MediaType: testMediaTypeDOCX, ObjectKey: "orig-key",
+				CanonicalTextKey: "canon", Scope: documentdomain.Scope{VersionID: uuidPtr(uuid.New())},
+			},
+		},
+	}
+	store := newFakeStore()
+	store.objects["orig-key"] = structuredDocx(t)
+	store.objects["canon"] = []byte("# Chuc nang Dang nhap\n## Tieu chi chap nhan\nAC-01 ...")
+	rag := &fakeRAG{completeChatContent: `{"cases":[
+		{"description":"Dang nhap sai qua 5 lan thi sao?","target_heading":"Tieu chi chap nhan"}
+	]}`}
+	urdRepo := newFakeUrdRepo()
+	svc := newTestService(t, docRepo, store, urdRepo, rag)
+
+	a, cases, err := svc.Analyze(withActor(context.Background()), pid, did)
+	require.NoError(t, err)
+	require.Len(t, cases, 1)
+	require.Equal(t, "Tieu chi chap nhan", cases[0].TargetHeading, "target_heading phải được lưu lại")
+
+	// FE gửi ĐÚNG payload như cũ: chỉ case_id + resolution.
+	_, daTaoPhienBanMoi, err := svc.SubmitResolutions(withActor(context.Background()), pid, did, a.ID,
+		[]ResolutionInput{{CaseID: cases[0].ID, Resolution: "Khoa tai khoan 15 phut"}})
+
+	require.NoError(t, err)
+	require.True(t, daTaoPhienBanMoi)
+	require.Len(t, docRepo.revisions, 2)
+	merged := store.objects[docRepo.revisions[1].ObjectKey]
+	zr, err := zip.NewReader(bytes.NewReader(merged), int64(len(merged)))
+	require.NoError(t, err)
+	f, err := zr.Open("word/document.xml")
+	require.NoError(t, err)
+	raw, err := io.ReadAll(f)
+	require.NoError(t, err)
+	content := string(raw)
+
+	require.NotContains(t, content, "Phụ lục", "phải chèn thẳng vào mục, không tạo phụ lục")
+	require.Greater(t, strings.Index(content, "Khoa tai khoan 15 phut"),
+		strings.Index(content, "AC-01 Dang nhap dung thi vao trang chu"))
+	require.Less(t, strings.Index(content, "Khoa tai khoan 15 phut"),
+		strings.Index(content, "Quy tac nghiep vu"))
+}

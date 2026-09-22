@@ -151,9 +151,15 @@ func TestList_LocDocumentVersionGomRevisionTrungVaSortTheoNgayUpload(t *testing.
 	ctx := context.Background()
 	pid, firstDocumentID, firstRevisionID, actor := dungDuLieu(t, db)
 
-	var projectVersionID uuid.UUID
+	// Đích scan phải là string rồi mới parse: uuid.UUID là mảng [16]byte, mà
+	// GORM thấy đích kiểu mảng thì hiểu là DANH SÁCH kết quả nên quét từng
+	// phần tử uint8 — hỏng với "converting driver.Value type string to a
+	// uint8". Toàn repo cũng đang scan cột uuid vào string (xem các
+	// repository), giữ cho nhất quán.
+	var projectVersionID string
 	require.NoError(t, db.Raw(`SELECT id FROM project_versions WHERE project_id=? LIMIT 1`, pid).
 		Scan(&projectVersionID).Error)
+	require.NotEmpty(t, projectVersionID, "dungDuLieu phải tạo sẵn project_version cho dự án")
 
 	day1 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	day2 := day1.Add(24 * time.Hour)
@@ -189,6 +195,10 @@ func TestList_LocDocumentVersionGomRevisionTrungVaSortTheoNgayUpload(t *testing.
 	require.Len(t, items, 2)
 	require.Equal(t, firstDocumentID, items[0].ID)
 	require.Equal(t, "release 1", items[0].DocumentVersion)
-	require.Equal(t, day3, *items[0].UploadedAt)
+	// So sánh theo MỐC THỜI GIAN chứ không dùng require.Equal: require.Equal
+	// so từng field của time.Time nên cùng một mốc nhưng khác Location vẫn
+	// báo lệch. Driver trả về giờ theo time.Local, nên test chỉ xanh trên máy
+	// UTC (CI) và luôn đỏ trên máy dev múi giờ +07.
+	require.WithinDuration(t, day3, *items[0].UploadedAt, 0)
 	require.Equal(t, secondDocumentID, items[1].ID)
 }
