@@ -114,6 +114,7 @@ type CreateRevisionParams struct {
 	Scope                                                                       Scope
 	Title, Description, DocumentVersion, FileName, MediaType, SHA256, ObjectKey string
 	SizeBytes                                                                   int64
+	AutoVersion                                                                 bool
 }
 
 type Repository interface {

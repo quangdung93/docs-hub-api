@@ -125,8 +125,8 @@ func (s *Service) Upload(ctx context.Context, in UploadInput) (*domain.Document,
 		params := domain.CreateRevisionParams{
 			DocumentID: in.DocumentID, RevisionID: rid, ProjectID: in.ProjectID,
 			ActorID: actor, Scope: in.Scope, Title: in.Title, Description: in.Description,
-			DocumentVersion: in.DocumentVersion, FileName: safeName(in.FileName), MediaType: in.MediaType,
-			SHA256: actualSHA256, ObjectKey: stored.Key, SizeBytes: stored.Size,
+			FileName: safeName(in.FileName), MediaType: in.MediaType,
+			SHA256: actualSHA256, ObjectKey: stored.Key, SizeBytes: stored.Size, AutoVersion: true,
 		}
 		d, rev, e = s.repo.CreateRevision(txctx, params)
 		if e != nil {
@@ -173,8 +173,7 @@ func (s *Service) CreateRevisionFromBytes(
 		var e error
 		params := domain.CreateRevisionParams{
 			DocumentID: did, RevisionID: rid, ProjectID: pid, ActorID: actor, Scope: scope,
-			DocumentVersion: strings.TrimSpace(documentVersion),
-			FileName:        safeName(fileName), MediaType: mediaType,
+			DocumentVersion: strings.TrimSpace(documentVersion), FileName: safeName(fileName), MediaType: mediaType,
 			SHA256: hex.EncodeToString(hash[:]), ObjectKey: key, SizeBytes: int64(len(data)),
 		}
 		d, rev, e = s.repo.CreateRevision(txctx, params)

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,9 +102,36 @@ func (r *Repository) ScopeExists(ctx context.Context, projectID uuid.UUID, s dom
 }
 func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisionParams) (*domain.Document, *domain.Revision, error) {
 	db := postgres.DBFrom(ctx, r.db)
+	// Serialize uploads by project and normalized file name so concurrent
+	// requests cannot allocate the same document version.
+	if in.AutoVersion {
+		fileIdentity := in.ProjectID.String() + ":" + strings.ToLower(in.FileName)
+		if err := db.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, fileIdentity).Error; err != nil {
+			return nil, nil, fmt.Errorf("khoa version tai lieu: %w", err)
+		}
+	}
 	var d documentModel
 	err := db.First(&d, "id=? AND project_id=?", in.DocumentID, in.ProjectID).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, gorm.ErrRecordNotFound) && in.AutoVersion {
+		// Reuse the active logical document when the sanitized file name matches.
+		err = db.Table("documents AS d").Select("d.*").
+			Joins("JOIN document_revisions r ON r.document_id=d.id").
+			Where("d.project_id=? AND d.deleted_at IS NULL AND LOWER(r.file_name)=LOWER(?)", in.ProjectID, in.FileName).
+			Order("r.revision_no DESC").Limit(1).Scan(&d).Error
+		if err != nil {
+			return nil, nil, mapErr(err)
+		}
+		if d.ID == "" {
+			d = documentModel{
+				ID: in.DocumentID.String(), ProjectID: in.ProjectID.String(), Title: in.Title,
+				DocumentKey: in.DocumentID.String(), Description: in.Description,
+				SourceType: "upload", CreatedBy: in.ActorID.String(), Version: 1,
+			}
+			if err := db.Create(&d).Error; err != nil {
+				return nil, nil, fmt.Errorf("tạo document: %w", err)
+			}
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		d = documentModel{
 			ID: in.DocumentID.String(), ProjectID: in.ProjectID.String(), Title: in.Title,
 			DocumentKey: in.DocumentID.String(), Description: in.Description,
@@ -118,9 +147,13 @@ func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisio
 	if err := db.Model(&revisionModel{}).Where("document_id=?", d.ID).Count(&n).Error; err != nil {
 		return nil, nil, err
 	}
+	documentVersion := in.DocumentVersion
+	if in.AutoVersion {
+		documentVersion = strconv.FormatInt(n+1, 10)
+	}
 	m := revisionModel{
 		ID: in.RevisionID.String(), DocumentID: d.ID, ProjectID: in.ProjectID.String(),
-		RevisionNo: int(n) + 1, DocumentVersion: in.DocumentVersion,
+		RevisionNo: int(n) + 1, DocumentVersion: documentVersion,
 		FileName: in.FileName, MediaType: in.MediaType,
 		SizeBytes: in.SizeBytes, SHA256: in.SHA256, ObjectKey: in.ObjectKey,
 		Status: "queued", CreatedBy: in.ActorID.String(),
@@ -181,8 +214,8 @@ func (r *Repository) CompleteUpload(ctx context.Context, u *domain.Upload) (*dom
 	params := domain.CreateRevisionParams{
 		DocumentID: u.DocumentID, RevisionID: u.RevisionID, ProjectID: u.ProjectID,
 		ActorID: u.CreatedBy, Scope: u.Scope, Title: u.Title, Description: u.Description,
-		DocumentVersion: u.DocumentVersion, FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
-		ObjectKey: u.ObjectKey, SizeBytes: u.SizeBytes,
+		FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
+		ObjectKey: u.ObjectKey, SizeBytes: u.SizeBytes, AutoVersion: true,
 	}
 	d, rev, err := r.CreateRevision(ctx, params)
 	if err != nil {

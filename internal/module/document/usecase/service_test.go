@@ -141,7 +141,6 @@ func TestUpload_TaoRevisionVaObjectKeyAnToan(t *testing.T) {
 	require.NotNil(t, repo.created)
 	require.Contains(t, repo.created.ObjectKey, "projects/"+pid.String()+"/documents/")
 	require.NotContains(t, repo.created.ObjectKey, "..")
-	require.Equal(t, "bản 2.1", repo.created.DocumentVersion)
 	require.Equal(t, data, store.data)
 	require.Equal(t, "7ae5326a1eec0c66c7c5567308167187d9bad2eecd4712d7f7cedad8a1565b64", repo.created.SHA256)
 }

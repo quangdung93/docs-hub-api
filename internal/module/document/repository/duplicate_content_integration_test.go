@@ -132,3 +132,26 @@ func TestCreateRevision_TrungObjectKeyVanLaLoiKyThuat(t *testing.T) {
 	require.NotErrorIs(t, err, domain.ErrDuplicateContent,
 		"trùng object_key là lỗi nội bộ, không được đội lốt lỗi nghiệp vụ")
 }
+
+func TestCreateRevision_TrungTenTuTangVersion(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, versionA, versionB, _, actor := duLieuScope(t, db)
+
+	first := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("same-name-v1"))
+	first.FileName = "Spec.TXT"
+	first.AutoVersion = true
+	doc1, rev1, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+	require.Equal(t, "1", rev1.DocumentVersion)
+
+	second := thamSo(pid, actor, domain.Scope{VersionID: &versionB}, sha64("same-name-v2"))
+	second.FileName = "spec.txt"
+	second.AutoVersion = true
+	doc2, rev2, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.Equal(t, doc1.ID, doc2.ID)
+	require.Equal(t, 2, rev2.RevisionNo)
+	require.Equal(t, "2", rev2.DocumentVersion)
+}
