@@ -43,6 +43,9 @@ COPY --from=builder /out/worker /app/worker
 COPY --from=builder /src/configs /app/configs
 COPY --from=builder /src/migrations /app/migrations
 
+# Runtime chạy bằng non-root; tạo trước các thư mục mà config dùng đường dẫn tương đối.
+RUN mkdir -p /app/logs /app/var/storage && chown -R app:app /app/logs /app/var
+
 USER app
 
 EXPOSE 8080 9090
