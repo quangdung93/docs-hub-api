@@ -23,6 +23,21 @@ type Repository struct{ db *gorm.DB }
 
 func New(db *gorm.DB) *Repository { return &Repository{db: db} }
 
+// Tên cột của bảng audit_logs và giá trị entity_type. Gom thành hằng vì file
+// này ghi audit ở BA chỗ (Retry, SetDocType, SoftDelete) — gõ tay mỗi chỗ thì
+// sai một ký tự là dòng audit vào nhầm cột mà không ai biết, và goconst cũng
+// chặn khi một chuỗi lặp từ 3 lần trở lên.
+const (
+	cotActorUserID = "actor_user_id"
+	cotProjectID   = "project_id"
+	cotAction      = "action"
+	cotEntityType  = "entity_type"
+	cotEntityID    = "entity_id"
+	cotMetadata    = "metadata"
+
+	entityDocument = "document"
+)
+
 type documentModel struct {
 	ID, ProjectID, Title, DocumentKey, Description, SourceType, CreatedBy string
 	DocType                                                               string
@@ -186,8 +201,8 @@ func (r *Repository) enqueue(ctx context.Context, m *revisionModel, actor uuid.U
 		return fmt.Errorf("tạo outbox: %w", err)
 	}
 	audit := map[string]any{
-		"id": auditID, "actor_user_id": actor, "project_id": m.ProjectID,
-		"action": action, "entity_type": "document_revision", "entity_id": m.ID, "metadata": "{}",
+		"id": auditID, cotActorUserID: actor, cotProjectID: m.ProjectID,
+		cotAction: action, cotEntityType: "document_revision", cotEntityID: m.ID, cotMetadata: "{}",
 	}
 	return db.Table("audit_logs").Create(audit).Error
 }
@@ -328,17 +343,39 @@ func (r *Repository) Update(ctx context.Context, pid, did uuid.UUID, title, desc
 	d, _, err := r.FindDocument(ctx, pid, did)
 	return d, err
 }
-func (r *Repository) SetDocType(ctx context.Context, pid, did uuid.UUID, docType string, v int) (*domain.Document, error) {
+func (r *Repository) SetDocType(
+	ctx context.Context, pid, did uuid.UUID, docType string, v int, actor uuid.UUID,
+) (*domain.Document, error) {
+	db := postgres.DBFrom(ctx, r.db)
+	// Đọc giá trị cũ TRƯỚC khi ghi đè — audit chỉ ghi giá trị mới thì không
+	// phân biệt được "gán nhãn lần đầu" với "gỡ nhãn người khác vừa đặt".
+	var truoc string
+	if err := db.Table("documents").Select("COALESCE(doc_type,'')").
+		Where("id=? AND project_id=?", did, pid).Scan(&truoc).Error; err != nil {
+		return nil, err
+	}
 	updates := map[string]any{
 		"doc_type": docType, "version": gorm.Expr("version+1"), "updated_at": time.Now().UTC(),
 	}
-	res := postgres.DBFrom(ctx, r.db).Model(&documentModel{}).
+	res := db.Model(&documentModel{}).
 		Where("id=? AND project_id=? AND version=?", did, pid, v).Updates(updates)
 	if res.Error != nil {
 		return nil, res.Error
 	}
 	if res.RowsAffected == 0 {
 		return nil, domain.ErrConflict
+	}
+	metadata, err := json.Marshal(map[string]string{"from": truoc, "to": docType})
+	if err != nil {
+		return nil, fmt.Errorf("dựng metadata audit doc_type: %w", err)
+	}
+	audit := map[string]any{
+		"id": uuid.New(), cotActorUserID: actor, cotProjectID: pid,
+		cotAction: "document.doc_type_changed", cotEntityType: entityDocument,
+		cotEntityID: did, cotMetadata: string(metadata),
+	}
+	if err := db.Table("audit_logs").Create(audit).Error; err != nil {
+		return nil, fmt.Errorf("ghi audit doc_type: %w", err)
 	}
 	d, _, err := r.FindDocument(ctx, pid, did)
 	return d, err
@@ -374,8 +411,8 @@ func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) 
 		return fmt.Errorf("tạo cleanup event: %w", err)
 	}
 	audit := map[string]any{
-		"id": uuid.New(), "actor_user_id": actor, "project_id": pid,
-		"action": "document.deleted", "entity_type": "document", "entity_id": did, "metadata": "{}",
+		"id": uuid.New(), cotActorUserID: actor, cotProjectID: pid,
+		cotAction: "document.deleted", cotEntityType: entityDocument, cotEntityID: did, cotMetadata: "{}",
 	}
 	return postgres.DBFrom(ctx, r.db).Table("audit_logs").Create(audit).Error
 }

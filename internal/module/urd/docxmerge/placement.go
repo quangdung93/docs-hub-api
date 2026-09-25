@@ -232,20 +232,36 @@ func matchHeading(paragraphs []bodyParagraph, targetHeading string) int {
 	return found
 }
 
-// sectionInsertPoint trả vị trí chèn (cuối mục, ngay trước tiêu đề cùng cấp
-// hoặc cấp cao hơn tiếp theo) và pPr của đoạn nội dung cuối cùng trong mục
-// để đoạn chèn mới kế thừa đúng bullet/đánh số.
+// sectionInsertPoint trả vị trí chèn — cuối phần nội dung nằm TRỰC TIẾP dưới
+// tiêu đề, tức ngay trước tiêu đề kế tiếp BẤT KỲ CẤP NÀO — kèm pPr của đoạn
+// nội dung cuối cùng trong phần đó để đoạn chèn mới kế thừa đúng bullet/đánh
+// số.
+//
+// Cố ý dừng ở mọi tiêu đề chứ không riêng tiêu đề cùng cấp hoặc cấp cao hơn.
+// Bản đầu dừng theo cấp, nên với tài liệu kiểu "mỗi chức năng một khối, trong
+// khối có Workflow / Business rules (BR) / Wireframe" thì điểm chèn trượt qua
+// hết mục con và rơi xuống cuối mục con CUỐI CÙNG. Đo trên bản sao URD Mobix
+// 2026-09-24: 15/15 dòng rơi vào "Wireframe, Screen description:" thay vì
+// "Business rules (BR):", kèm theo kế thừa luôn định dạng căn giữa của dòng
+// chú thích ảnh đứng cuối mục đó (8/15 dòng hiện ra như chú thích ảnh).
+//
+// Dừng ở tiêu đề đầu tiên gặp phải thì nội dung nằm ngay dưới tên mục AI chỉ
+// định, và pPr kế thừa cũng là của đoạn văn thật trong mục chứ không phải của
+// chú thích ảnh ở một mục con khác.
+//
+// Mục không có nội dung trực tiếp (tiêu đề cha đi liền tiêu đề con) thì offset
+// rơi đúng vào tiêu đề con đầu tiên và pPr rỗng — đoạn chèn thành dòng đầu
+// tiên của mục, không kế thừa style của ai.
 func sectionInsertPoint(paragraphs []bodyParagraph, index, bodyEnd int) (offset int, pPr []byte) {
-	level := paragraphs[index].headingLevel
 	offset = bodyEnd
 	for j := index + 1; j < len(paragraphs); j++ {
-		if paragraphs[j].headingLevel > 0 && paragraphs[j].headingLevel <= level {
+		// Mọi tiêu đề đều là điểm dừng, nên vòng lặp này chỉ đi qua đoạn văn
+		// thường — không có nguy cơ kế thừa pPr của một tiêu đề.
+		if paragraphs[j].headingLevel > 0 {
 			offset = paragraphs[j].start
 			break
 		}
-		// Chỉ kế thừa style từ đoạn nội dung thường, không lấy của tiêu đề
-		// con — nếu không đoạn chèn sẽ thành 1 tiêu đề mới.
-		if paragraphs[j].headingLevel == 0 && paragraphs[j].pPr != nil {
+		if paragraphs[j].pPr != nil {
 			pPr = paragraphs[j].pPr
 		}
 	}
