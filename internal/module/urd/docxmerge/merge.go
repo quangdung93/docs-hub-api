@@ -2,9 +2,13 @@
 // file .docx mới — dùng cho bước "tạo phiên bản URD mới" của tính năng Nhận
 // diện & Phân tích Edge Case cho URD (URD v1.2 mục XI).
 //
-// Nội dung được chèn THẲNG vào cuối mục mà AI chỉ định (TargetHeading, ví dụ
-// mục tiêu chí chấp nhận/quy tắc nghiệp vụ của chức năng liên quan) thay vì
-// gom hết vào một phụ lục cuối tài liệu. Đề xuất của AI KHÔNG được tin ngay:
+// Nội dung được chèn THẲNG vào mục mà AI chỉ định (TargetHeading, ví dụ mục
+// tiêu chí chấp nhận/quy tắc nghiệp vụ của chức năng liên quan) thay vì gom
+// hết vào một phụ lục cuối tài liệu. Điểm chèn là cuối phần nội dung nằm
+// TRỰC TIẾP dưới tiêu đề đó — ngay trước tiêu đề kế tiếp bất kỳ cấp nào — nên
+// mục có mục con thì nội dung vẫn nằm dưới tên mục chứ không trôi xuống mục
+// con cuối cùng (xem sectionInsertPoint để biết vì sao). Đề xuất của AI
+// KHÔNG được tin ngay:
 // placement.go đối chiếu nó với tiêu đề thật trong word/document.xml, chỉ
 // chèn khi khớp đúng 1 mục; không khớp/khớp nhiều mục thì case đó lùi về phụ
 // lục cuối tài liệu — thà để người đọc thấy ở phụ lục còn hơn chèn nhầm mục

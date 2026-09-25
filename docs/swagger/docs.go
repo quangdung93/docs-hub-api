@@ -1043,7 +1043,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Dùng hiển thị cột \"Hoàn thiện\" trong bảng Quản lý dự án — chỉ tài\nliệu nào đã từng phân tích mới xuất hiện trong kết quả.",
+                "description": "Dùng hiển thị cột \"Hoàn thiện\" trong bảng Quản lý dự án — chỉ tài\nliệu nào đã từng phân tích mới xuất hiện trong kết quả.\nTrả phân tích MỚI NHẤT của mỗi tài liệu, kể cả status=\"cancelled\"\n(người dùng đã huỷ). Hiển thị dòng cancelled như \"Chưa phân tích\":\ntài liệu đó phân tích lại được ngay, không còn bị khoá.",
                 "produces": [
                     "application/json"
                 ],
@@ -1847,6 +1847,85 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/http.AnalysisResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gỡ khoá tài liệu để phân tích lại. Dùng khi bấm phân tích nhầm tài\nliệu, hoặc không muốn nhập hết hướng giải quyết cho danh sách case\nđã sinh ra. Bản ghi được chuyển sang status=\"cancelled\" chứ không xoá,\ntoàn bộ hướng giải quyết đã nhập sẽ KHÔNG dùng được nữa.\nPhân tích đã completed/failed/cancelled trả URD_ANALYSIS_NOT_ACTIVE.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Huỷ 1 phân tích edge case đang dở",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Analysis ID",
+                        "name": "analysis_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.Analysis"
                                         }
                                     }
                                 }

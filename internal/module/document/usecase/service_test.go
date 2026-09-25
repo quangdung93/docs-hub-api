@@ -65,7 +65,9 @@ func (f *fakeRepo) FindRevision(context.Context, uuid.UUID, uuid.UUID, uuid.UUID
 func (*fakeRepo) Update(context.Context, uuid.UUID, uuid.UUID, string, string, int) (*domain.Document, error) {
 	return nil, nil
 }
-func (*fakeRepo) SetDocType(context.Context, uuid.UUID, uuid.UUID, string, int) (*domain.Document, error) {
+func (*fakeRepo) SetDocType(
+	context.Context, uuid.UUID, uuid.UUID, string, int, uuid.UUID,
+) (*domain.Document, error) {
 	return nil, nil
 }
 func (*fakeRepo) Retry(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error { return nil }

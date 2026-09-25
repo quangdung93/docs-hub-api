@@ -352,6 +352,36 @@ func (s *Service) finalizeAnalysis(
 	return completed, taoPhienBanMoi, nil
 }
 
+// Cancel huỷ một phân tích edge case đang dở, gỡ khoá tài liệu.
+//
+// Trước khi có API này, phân tích chỉ rời awaiting_input bằng ĐÚNG MỘT đường:
+// nhập đủ hướng giải quyết cho mọi case. Mà uk_urd_analyses_active chặn phân
+// tích lại, nên một lần bấm nhầm là tài liệu kẹt cho tới khi có người ngồi
+// nhập cho hết. Ca thật ngày 25/09: tài liệu kỹ thuật mcp-integration.md bị
+// gán nhãn URD rồi phân tích, kẹt awaiting_input với 29 case phải nhập.
+//
+// Cần quyền ghi như Analyze: huỷ cũng là thao tác làm mất dữ liệu người khác
+// đang nhập dở, không thể để người chỉ có quyền đọc làm được.
+func (s *Service) Cancel(ctx context.Context, projectID, documentID, analysisID uuid.UUID) (*domain.Analysis, error) {
+	if _, err := s.authorize(ctx, projectID, true); err != nil {
+		return nil, err
+	}
+	a, _, err := s.repo.GetAnalysis(ctx, analysisID)
+	if err != nil {
+		return nil, s.mapErr(err)
+	}
+	// Chặn huỷ chéo tài liệu: id phân tích đúng nhưng thuộc tài liệu khác thì
+	// coi như không tồn tại, giống Get.
+	if a.DocumentID != documentID {
+		return nil, apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
+	}
+	cancelled, err := s.repo.Cancel(ctx, analysisID)
+	if err != nil {
+		return nil, s.mapErr(err)
+	}
+	return cancelled, nil
+}
+
 // Get trả 1 phân tích cụ thể (để FE mở lại modal đang dở hoặc xem lịch sử).
 func (s *Service) Get(ctx context.Context, projectID, documentID, analysisID uuid.UUID) (*domain.Analysis, []domain.EdgeCase, error) {
 	if _, err := s.authorize(ctx, projectID, false); err != nil {
@@ -484,6 +514,10 @@ func (s *Service) mapErr(err error) error {
 	}
 	if errors.Is(err, domain.ErrNotFound) {
 		return apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
+	}
+	if errors.Is(err, domain.ErrAnalysisNotActive) {
+		return apperr.NewBusiness(errcode.URDAnalysisNotActive,
+			"Phân tích này đã kết thúc, không còn gì để huỷ", false)
 	}
 	return apperr.Database("Lỗi đọc dữ liệu phân tích").WithCause(err)
 }

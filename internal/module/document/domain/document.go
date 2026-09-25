@@ -130,7 +130,15 @@ type Repository interface {
 	Update(ctx context.Context, projectID, documentID uuid.UUID, title, description string, version int) (*Document, error)
 	// SetDocType xác nhận/đổi loại tài liệu (optimistic lock qua version, cùng
 	// cơ chế với Update) — dùng cho luồng xác nhận URD (URD v1.2 mục XI).
-	SetDocType(ctx context.Context, projectID, documentID uuid.UUID, docType string, version int) (*Document, error)
+	//
+	// Nhận actor để ghi audit log: đây là thao tác mở khoá cả luồng phân tích
+	// AI và có thể gán sai loại cho tài liệu của người khác, nhưng trước đây
+	// KHÔNG để lại dấu vết nào (Retry và SoftDelete đều có ghi). Ngày 25/09 có
+	// ba tài liệu bị gán nhãn URD nhầm mà không tra được ai gán lúc nào, phải
+	// suy ngược từ cột version và updated_at.
+	SetDocType(
+		ctx context.Context, projectID, documentID uuid.UUID, docType string, version int, actor uuid.UUID,
+	) (*Document, error)
 	Retry(ctx context.Context, projectID, documentID, revisionID, actorID uuid.UUID) error
 	SoftDelete(ctx context.Context, projectID, documentID, actorID uuid.UUID) error
 

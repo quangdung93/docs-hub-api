@@ -1580,6 +1580,61 @@ paths:
       tags:
       - documents
   /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}:
+    delete:
+      description: |-
+        Gỡ khoá tài liệu để phân tích lại. Dùng khi bấm phân tích nhầm tài
+        liệu, hoặc không muốn nhập hết hướng giải quyết cho danh sách case
+        đã sinh ra. Bản ghi được chuyển sang status="cancelled" chứ không xoá,
+        toàn bộ hướng giải quyết đã nhập sẽ KHÔNG dùng được nữa.
+        Phân tích đã completed/failed/cancelled trả URD_ANALYSIS_NOT_ACTIVE.
+      parameters:
+      - description: Project ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        format: uuid
+        in: path
+        name: document_id
+        required: true
+        type: string
+      - description: Analysis ID
+        format: uuid
+        in: path
+        name: analysis_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Analysis'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Huỷ 1 phân tích edge case đang dở
+      tags:
+      - urd
     get:
       parameters:
       - description: Project ID
@@ -2029,6 +2084,9 @@ paths:
       description: |-
         Dùng hiển thị cột "Hoàn thiện" trong bảng Quản lý dự án — chỉ tài
         liệu nào đã từng phân tích mới xuất hiện trong kết quả.
+        Trả phân tích MỚI NHẤT của mỗi tài liệu, kể cả status="cancelled"
+        (người dùng đã huỷ). Hiển thị dòng cancelled như "Chưa phân tích":
+        tài liệu đó phân tích lại được ngay, không còn bị khoá.
       parameters:
       - description: Project ID
         format: uuid
