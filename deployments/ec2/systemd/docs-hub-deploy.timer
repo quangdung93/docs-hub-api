@@ -1,0 +1,12 @@
+# Kiểm tra origin/main mỗi 2 phút. Không có commit mới thì script thoát ngay
+# sau `git fetch`, gần như không tốn tài nguyên.
+[Unit]
+Description=docs-hub: kiểm tra commit mới định kỳ
+
+[Timer]
+OnBootSec=2min
+# Đếm từ lúc lượt trước KẾT THÚC nên hai lượt không bao giờ chồng nhau.
+OnUnitInactiveSec=2min
+
+[Install]
+WantedBy=timers.target

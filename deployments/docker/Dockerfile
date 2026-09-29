@@ -28,6 +28,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ---------- Stage runtime ----------
 FROM debian:bookworm-slim
 
+# Mirror apt thay cho deb.debian.org, ví dụ http://mirror.bizflycloud.vn/debian.
+# Để trống = giữ nguồn mặc định. Chỉ dùng khi máy build không ra được
+# deb.debian.org (VPS CloudZ); khi đặt, repo debian-security bị bỏ vì mirror
+# trong nước thường không có.
+ARG APT_MIRROR=""
+RUN if [ -n "$APT_MIRROR" ]; then \
+    printf 'Types: deb\nURIs: %s\nSuites: bookworm bookworm-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
+    "$APT_MIRROR" > /etc/apt/sources.list.d/debian.sources; \
+    fi
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates poppler-utils && \
     rm -rf /var/lib/apt/lists/* && \

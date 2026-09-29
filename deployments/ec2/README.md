@@ -134,6 +134,37 @@ Runner nằm trong máy nên không cần SSH key, và GHCR đăng nhập bằng
 `GITHUB_TOKEN` của workflow. Secret ứng dụng được quản lý bằng GitHub Actions
 Secrets như mô tả ở mục 3.
 
+## 7. Tự động deploy trên VPS không có CI
+
+Máy đang chạy (VPS CloudZ `103.77.214.27`) không ra được GitHub Actions, GHCR,
+Docker Hub và `deb.debian.org`, nên job deploy ở mục 6 không chạy được. Thay vào
+đó máy **tự kéo code**: systemd timer 2 phút một lần gọi `deploy.sh`, script
+`git fetch` repo api + web, repo nào có commit mới trên `main` thì build tại chỗ
+rồi khởi động lại. Merge PR xong khoảng 2–5 phút là site cập nhật.
+
+- Build lỗi → container cũ vẫn chạy. Build xong mà `/readyz` (api) hoặc `:3000`
+  (web) không lên sau 90s → tự quay về image trước (tag `:prev`).
+- `git reset --hard origin/main` mỗi lượt: **đừng sửa tay file đã commit trên
+  máy**, sẽ bị ghi đè. Cấu hình riêng của máy đặt trong `.env.ec2`.
+- Image nền kéo qua mirror: `/etc/docker/daemon.json` có
+  `{"registry-mirrors": ["https://mirror.gcr.io"]}`; `.env.ec2` có
+  `APT_MIRROR=http://mirror.bizflycloud.vn/debian`.
+
+Cài (một lần, bằng root):
+
+```bash
+cp deployments/ec2/systemd/docs-hub-deploy.{service,timer} /etc/systemd/system/
+chown -R ubuntu:ubuntu /home/web
+systemctl daemon-reload && systemctl enable --now docs-hub-deploy.timer
+```
+
+Từ máy dev:
+
+```bash
+make vps-deploy            # deploy ngay, không chờ timer (T=api|web để giới hạn)
+make vps-deploy-logs       # log các lượt tự deploy
+```
+
 ## Lưu ý khác biệt so với local
 
 - **`configs/config.ec2.yaml`** dùng `app.env: dev` (loader chỉ nhận

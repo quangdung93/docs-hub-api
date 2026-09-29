@@ -173,6 +173,21 @@ ec2-ps: ## Trạng thái stack EC2
 ec2-restart: ## Build lại api sau khi pull code mới
 	docker compose -f $(EC2_COMPOSE) --env-file $(EC2_ENV) up -d --build migrate api
 
+## ------------------------------------------------------------------ VPS
+# Chạy từ MÁY DEV: điều khiển VPS qua SSH. Bình thường không cần — timer trên
+# VPS tự deploy khi main có commit mới (deployments/ec2/deploy.sh).
+VPS_SSH ?= ssh -i ~/.ssh/docshub_vps root@103.77.214.27
+# Giới hạn một repo: make vps-deploy T=api (hoặc web). Bỏ trống = cả hai.
+T ?=
+
+.PHONY: vps-deploy
+vps-deploy: ## Deploy ngay bản main mới nhất lên VPS (không chờ timer)
+	$(VPS_SSH) 'sudo -u ubuntu /home/web/docs-hub-api/deployments/ec2/deploy.sh --force $(T)'
+
+.PHONY: vps-deploy-logs
+vps-deploy-logs: ## Xem log các lượt tự deploy trên VPS
+	$(VPS_SSH) 'journalctl -u docs-hub-deploy.service -n 100 --no-pager'
+
 ## ------------------------------------------------------------------ Docker
 .PHONY: docker-build
 docker-build: ## Build Docker image
