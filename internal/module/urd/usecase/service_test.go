@@ -225,6 +225,7 @@ func (*fakeUrdRepo) SaveRAGFlowChatID(_ context.Context, _ uuid.UUID, proposed s
 type fakeRAG struct {
 	completeChatContent string
 	completeChatErr     error
+	promptDaGui         string
 }
 
 func (*fakeRAG) Health(context.Context) error { return nil }
@@ -260,8 +261,13 @@ func (*fakeRAG) FindChatByName(context.Context, string) (*port.RAGChat, error) {
 }
 func (*fakeRAG) UpdateChatDatasets(context.Context, string, []string) error { return nil }
 func (f *fakeRAG) CompleteChat(
-	context.Context, port.RAGChatCompletionRequest,
+	_ context.Context, req port.RAGChatCompletionRequest,
 ) (port.RAGChatCompletionResult, error) {
+	// Giữ lại prompt đã gửi để test soi được nội dung — phần duy nhất quyết
+	// định AI hiểu đang đọc loại tài liệu nào.
+	if len(req.Messages) > 0 {
+		f.promptDaGui = req.Messages[len(req.Messages)-1].Content
+	}
 	if f.completeChatErr != nil {
 		return port.RAGChatCompletionResult{}, f.completeChatErr
 	}
@@ -370,6 +376,59 @@ func TestAnalyze_ChuaXacNhanURD(t *testing.T) {
 	pid, did := uuid.New(), uuid.New()
 	docRepo := &fakeDocRepo{doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: ""}}
 	svc := newTestService(t, docRepo, newFakeStore(), newFakeUrdRepo(), &fakeRAG{})
+
+	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.Equal(t, errcode.URDNotConfirmed, businessCode(t, err))
+}
+
+// dungTaiLieuSanSang dựng tài liệu đã ingest xong, sẵn sàng phân tích, với
+// loại tài liệu cho trước.
+func dungTaiLieuSanSang(t *testing.T, docType string) (*Service, *fakeRAG, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: docType, Title: "Tai lieu Demo"},
+		revisions: []documentdomain.Revision{
+			{ID: rid, Status: revisionStatusReady, CanonicalTextKey: "canon"},
+		},
+	}
+	store := newFakeStore()
+	store.objects["canon"] = []byte("Noi dung da trich xuat")
+	rag := &fakeRAG{completeChatContent: `{"cases":[{"description":"Case A"}]}`}
+	return newTestService(t, docRepo, store, newFakeUrdRepo(), rag), rag, pid, did
+}
+
+// PRD phân tích được y như URD — cùng luồng, cùng cổng vào.
+func TestAnalyze_PRDPhanTichDuocNhuURD(t *testing.T) {
+	svc, _, pid, did := dungTaiLieuSanSang(t, documentdomain.DocTypePRD)
+
+	a, cases, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.NoError(t, err)
+	require.Len(t, cases, 1)
+	require.Equal(t, domain.StatusAwaitingInput, a.Status)
+}
+
+// Prompt phải gọi đúng tên loại tài liệu đang phân tích. Gửi tài liệu PRD mà
+// bảo AI "đây là URD" là đẩy nó đi sai trọng tâm.
+func TestAnalyze_PromptGoiDungLoaiTaiLieu(t *testing.T) {
+	svc, rag, pid, did := dungTaiLieuSanSang(t, documentdomain.DocTypePRD)
+	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+	require.NoError(t, err)
+	require.Contains(t, rag.promptDaGui, "PRD (Product Requirement Document)")
+	require.NotContains(t, rag.promptDaGui, "URD")
+
+	svcURD, ragURD, pidURD, didURD := dungTaiLieuSanSang(t, documentdomain.DocTypeURD)
+	_, _, err = svcURD.Analyze(withActor(context.Background()), pidURD, didURD)
+	require.NoError(t, err)
+	require.Contains(t, ragURD.promptDaGui, "URD (User Requirement Document)")
+}
+
+// Loại tài liệu ngoài danh sách phân tích được thì chặn, không phải cứ khác
+// rỗng là cho qua.
+func TestAnalyze_LoaiTaiLieuNgoaiDanhSachThiChan(t *testing.T) {
+	svc, _, pid, did := dungTaiLieuSanSang(t, "srs")
 
 	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
 

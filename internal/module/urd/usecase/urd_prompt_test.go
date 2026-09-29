@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	documentdomain "github.com/quangdung93/docs-hub-api/internal/module/document/domain"
 )
 
 // AI phải trả kèm target_heading (mục nên bổ sung nội dung vào) — thiếu nó
@@ -46,9 +48,22 @@ func TestParseEdgeCases_BoQuaCaseThieuMoTa(t *testing.T) {
 // Prompt phải nêu rõ yêu cầu copy nguyên văn tiêu đề: AI tự nghĩ ra tiêu đề
 // mới thì docxmerge không khớp được mục nào, tính năng chèn thẳng vô hiệu.
 func TestUrdPrompt_YeuCauCopyNguyenVanTieuDe(t *testing.T) {
-	prompt := urdPrompt("Du an X", "# Tiêu chí chấp nhận\nAC-01 ...")
+	prompt := urdPrompt(documentdomain.DocTypeURD, "Du an X", "# Tiêu chí chấp nhận\nAC-01 ...")
 
 	require.Contains(t, prompt, "target_heading")
 	require.Contains(t, prompt, "COPY NGUYÊN VĂN")
 	require.Contains(t, prompt, "Du an X")
+}
+
+// Prompt phải gọi đúng tên loại tài liệu. Gọi tài liệu PRD là "URD" sẽ đẩy AI
+// đi sai trọng tâm — yêu cầu người dùng khác yêu cầu sản phẩm.
+func TestUrdPrompt_GoiDungTenLoaiTaiLieu(t *testing.T) {
+	urd := urdPrompt(documentdomain.DocTypeURD, "Du an X", "noi dung")
+	require.Contains(t, urd, "URD (User Requirement Document)")
+	require.NotContains(t, urd, "PRD")
+
+	prd := urdPrompt(documentdomain.DocTypePRD, "Du an X", "noi dung")
+	require.Contains(t, prd, "PRD (Product Requirement Document)")
+	require.NotContains(t, prd, "URD",
+		"tài liệu PRD thì trong prompt không được nhắc tới URD")
 }

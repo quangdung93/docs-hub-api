@@ -3,6 +3,8 @@ package usecase
 import (
 	"encoding/json"
 	"fmt"
+
+	documentdomain "github.com/quangdung93/docs-hub-api/internal/module/document/domain"
 )
 
 // maxEdgeCases giới hạn số case AI liệt kê — tránh 1 phiên bản URD mới bị
@@ -14,14 +16,18 @@ const maxEdgeCases = 30
 // TOÀN VĂN tài liệu URD vì cần AI đọc hết để tìm chỗ còn thiếu edge case).
 const maxCanonicalTextChars = 40000
 
-// urdPromptTemplate yêu cầu RAGFlow đọc toàn văn tài liệu URD (nhúng thẳng
-// trong prompt, không qua truy hồi RAG) và liệt kê edge case chưa được đề cập
-// — URD v1.2 mục XI.
-const urdPromptTemplate = `Bạn là trợ lý phân tích tài liệu URD (User Requirement Document) của dự án phần mềm "%s".
+// urdPromptTemplate yêu cầu RAGFlow đọc toàn văn tài liệu yêu cầu (nhúng
+// thẳng trong prompt, không qua truy hồi RAG) và liệt kê edge case chưa được
+// đề cập — URD v1.2 mục XI.
+//
+// Tên loại tài liệu là tham số chứ không viết cứng "URD": luồng này nay nhận
+// cả PRD, mà gọi tài liệu PRD là "URD" trong prompt sẽ đẩy AI đi sai hướng —
+// hai loại có trọng tâm khác nhau (yêu cầu người dùng với yêu cầu sản phẩm).
+const urdPromptTemplate = `Bạn là trợ lý phân tích tài liệu %[1]s của dự án phần mềm "%[2]s".
 
-Dưới đây là toàn bộ nội dung tài liệu URD (đã trích xuất thành văn bản thuần):
+Dưới đây là toàn bộ nội dung tài liệu %[1]s (đã trích xuất thành văn bản thuần):
 ---
-%s
+%[3]s
 ---
 
 Nhiệm vụ: đọc kỹ tài liệu trên và liệt kê các "edge case" (trường hợp biên,
@@ -34,7 +40,7 @@ thêm markdown code fence:
 
 Yêu cầu:
 - Trả lời bằng tiếng Việt.
-- Tối đa %d edge case, ưu tiên các trường hợp quan trọng/rủi ro cao nhất.
+- Tối đa %[4]d edge case, ưu tiên các trường hợp quan trọng/rủi ro cao nhất.
 - Mỗi description phải cụ thể, bám sát nội dung THẬT của tài liệu, không bịa đặt.
 - target_heading phải COPY NGUYÊN VĂN một dòng tiêu đề ĐANG CÓ trong tài liệu
   trên (các dòng bắt đầu bằng dấu "#"), bỏ phần dấu "#" và khoảng trắng đầu
@@ -45,11 +51,12 @@ Yêu cầu:
   không xác định chắc chắn case thuộc mục nào, để target_heading là chuỗi rỗng "".
 - Nếu tài liệu đã đủ chi tiết, không còn edge case đáng chú ý nào, trả về {"cases":[]}.`
 
-func urdPrompt(documentTitle, canonicalText string) string {
+func urdPrompt(docType, documentTitle, canonicalText string) string {
 	if len([]rune(canonicalText)) > maxCanonicalTextChars {
 		canonicalText = string([]rune(canonicalText)[:maxCanonicalTextChars])
 	}
-	return fmt.Sprintf(urdPromptTemplate, documentTitle, canonicalText, maxEdgeCases)
+	return fmt.Sprintf(urdPromptTemplate,
+		documentdomain.DocTypeLabel(docType), documentTitle, canonicalText, maxEdgeCases)
 }
 
 type urdRAGCase struct {

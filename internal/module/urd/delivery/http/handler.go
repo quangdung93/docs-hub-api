@@ -77,9 +77,10 @@ type SummaryItem struct {
 }
 
 // Analyze godoc
-// @Summary Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD
-// @Description Tài liệu phải đã được xác nhận doc_type=urd (PATCH .../documents/{document_id}/doc-type)
-// @Description và có revision mới nhất đã ingest xong (status=ready).
+// @Summary Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD/PRD
+// @Description Tài liệu phải đã được xác nhận doc_type="urd" hoặc "prd"
+// @Description (PATCH .../documents/{document_id}/doc-type) và có revision mới nhất
+// @Description đã ingest xong (status=ready). Prompt gửi AI nêu đúng loại tài liệu.
 // @Tags urd
 // @Security BearerAuth
 // @Produce json
