@@ -403,6 +403,21 @@ func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) 
 	if res.RowsAffected == 0 {
 		return domain.ErrNotFound
 	}
+	// Nhả sha256 của tài liệu vừa xoá. Hai chỉ số uk_revisions_*_hash là chỉ số
+	// RIÊNG PHẦN loại trừ 'archived', nên không đánh dấu ở đây thì nội dung đã
+	// xoá bị khoá VĨNH VIỄN — người dùng xoá rồi tải lại đúng file đó vẫn bị báo
+	// trùng, mà không còn cách nào gỡ ngoài sửa tay trong database.
+	//
+	// Cố ý làm ĐỒNG BỘ ở đây chứ không để worker dọn dẹp làm: usecase đã bọc
+	// tx.Do nên việc này nằm cùng giao dịch với lệnh xoá, nhả được ngay cả khi
+	// RAGFlow chết hoặc worker đang kẹt.
+	if err := postgres.DBFrom(ctx, r.db).Model(&revisionModel{}).
+		Where("document_id=? AND status<>?", did, domain.RevisionStatusArchived).
+		Updates(map[string]any{
+			"status": domain.RevisionStatusArchived, "updated_at": time.Now().UTC(),
+		}).Error; err != nil {
+		return fmt.Errorf("lưu trữ revision: %w", err)
+	}
 	payload, _ := json.Marshal(map[string]string{"document_id": did.String(), "project_id": pid.String()})
 	if err := postgres.DBFrom(ctx, r.db).Table("outbox_events").Create(map[string]any{
 		"id": uuid.New(), "topic": "document.cleanup", "aggregate_type": "document",

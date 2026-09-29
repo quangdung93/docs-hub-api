@@ -34,6 +34,16 @@ const (
 	ScopeKindChangeRequest = "change_request"
 )
 
+// RevisionStatusArchived là trạng thái đánh dấu revision đã bị lưu trữ vì tài
+// liệu chứa nó bị xoá. Giá trị này KHÔNG phải một trạng thái ingest — nó là
+// điều kiện của hai chỉ số duy nhất nội dung trong migrations/000007:
+//
+//	WHERE ... AND status <> 'archived'
+//
+// nên đánh dấu ở đây là nhả sha256, cho phép tải lại đúng file đó lên sau khi
+// xoá. Đổi chuỗi này là phải đổi cả hai chỉ số kia.
+const RevisionStatusArchived = "archived"
+
 // Giá trị Document.DocType khi người dùng xác nhận loại tài liệu — mở khoá
 // luồng AI phân tích edge case (xem URD v1.2 mục XI).
 const (
