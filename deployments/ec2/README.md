@@ -148,7 +148,8 @@ rồi khởi động lại. Merge PR xong khoảng 2–5 phút là site cập nh
   máy**, sẽ bị ghi đè. Cấu hình riêng của máy đặt trong `.env.ec2`.
 - Image nền kéo qua mirror: `/etc/docker/daemon.json` có
   `{"registry-mirrors": ["https://mirror.gcr.io"]}`; `.env.ec2` có
-  `APT_MIRROR=http://mirror.bizflycloud.vn/debian`.
+  `APT_MIRROR=http://mirror.bizflycloud.vn/debian` và
+  `GOPROXY=https://proxy.golang.com.cn|https://proxy.golang.org`.
 
 Cài (một lần, bằng root):
 

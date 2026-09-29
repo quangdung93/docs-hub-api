@@ -7,6 +7,11 @@ FROM golang:1.25 AS builder
 
 WORKDIR /src
 
+# Ghi đè khi máy build không tới được proxy.golang.org (VPS CloudZ bị chặn
+# storage.googleapis.com). Proxy khác vẫn an toàn vì go.sum kiểm tra checksum.
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
+
 # Cache module: copy go.mod/go.sum trước để tận dụng layer cache.
 COPY go.mod go.sum ./
 RUN go mod download

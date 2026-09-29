@@ -95,6 +95,7 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args:
         APT_MIRROR: ${APT_MIRROR:-}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     # CI đặt API_IMAGE=ghcr.io/<owner>/docs-hub-api:<sha> rồi `compose pull`.
     # Không có biến đó (chạy tay trên máy) thì rơi về image build tại chỗ.
     image: ${API_IMAGE:-docs-hub-api:ec2}
@@ -111,6 +112,7 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args:
         APT_MIRROR: ${APT_MIRROR:-}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     image: ${API_IMAGE:-docs-hub-api:ec2}
     restart: unless-stopped
     # Chỉ truyền ĐỐI SỐ: Dockerfile đã có ENTRYPOINT ["/app/api"]. Lặp lại
@@ -150,6 +152,7 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args:
         APT_MIRROR: ${APT_MIRROR:-}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     image: ${API_IMAGE:-docs-hub-api:ec2}
     restart: unless-stopped
     # Dockerfile đặt ENTRYPOINT ["/app/api"] nên phải ghi đè hẳn entrypoint,
