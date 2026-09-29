@@ -34,9 +34,43 @@ const (
 	ScopeKindChangeRequest = "change_request"
 )
 
-// DocTypeURD là giá trị Document.DocType khi người dùng xác nhận tài liệu là
-// URD (xem URD v1.2 mục XI) — mở khoá luồng AI phân tích edge case.
-const DocTypeURD = "urd"
+// Giá trị Document.DocType khi người dùng xác nhận loại tài liệu — mở khoá
+// luồng AI phân tích edge case (xem URD v1.2 mục XI).
+const (
+	DocTypeURD = "urd" // User Requirement Document
+	DocTypePRD = "prd" // Product Requirement Document
+)
+
+// AnalyzableDocTypes là các loại tài liệu được phân tích edge case. Một danh
+// sách duy nhất cho toàn repo: module urd hỏi "tài liệu này phân tích được
+// không", còn ConfirmDocType hỏi "giá trị này hợp lệ không" — trước đây hai
+// câu hỏi đó được viết rời thành hai điều kiện so sánh thẳng với hằng, thêm
+// loại mới là phải nhớ sửa cả hai chỗ.
+func AnalyzableDocTypes() []string { return []string{DocTypeURD, DocTypePRD} }
+
+// IsAnalyzableDocType báo doc_type có thuộc nhóm phân tích được hay không.
+// Chuỗi rỗng (chưa xác nhận) trả false.
+func IsAnalyzableDocType(docType string) bool {
+	for _, t := range AnalyzableDocTypes() {
+		if docType == t {
+			return true
+		}
+	}
+	return false
+}
+
+// DocTypeLabel trả tên đầy đủ dùng trong prompt gửi AI và thông báo cho người
+// dùng. Loại lạ trả về chính giá trị đó để không nuốt mất thông tin.
+func DocTypeLabel(docType string) string {
+	switch docType {
+	case DocTypeURD:
+		return "URD (User Requirement Document)"
+	case DocTypePRD:
+		return "PRD (Product Requirement Document)"
+	default:
+		return docType
+	}
+}
 
 type Document struct {
 	ID          uuid.UUID `json:"id"`
@@ -45,8 +79,8 @@ type Document struct {
 	Title       string    `json:"title"`
 	Key         string    `json:"document_key"`
 	Description string    `json:"description"`
-	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
-	// "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
+	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; giá trị hợp lệ là
+	// "urd" hoặc "prd", do người dùng xác nhận qua ConfirmDocType.
 	DocType string `json:"doc_type,omitempty"`
 	Version int    `json:"version"`
 	// DocumentVersion và UploadedAt là metadata của revision được upload gần

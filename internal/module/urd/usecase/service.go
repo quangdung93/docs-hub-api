@@ -76,8 +76,9 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 	if err != nil {
 		return nil, nil, err
 	}
-	if d.DocType != documentdomain.DocTypeURD {
-		return nil, nil, apperr.NewBusiness(errcode.URDNotConfirmed, "Tài liệu chưa được xác nhận là URD", false)
+	if !documentdomain.IsAnalyzableDocType(d.DocType) {
+		return nil, nil, apperr.NewBusiness(errcode.URDNotConfirmed,
+			"Tài liệu chưa được xác nhận là URD hoặc PRD", false)
 	}
 	revision := latestReadyRevision(revisions)
 	if revision == nil {
@@ -107,7 +108,7 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 	if err != nil {
 		return nil, nil, apperr.Internal("Không thể đọc nội dung tài liệu").WithCause(err)
 	}
-	raw, err := s.completeChat(ctx, projectID, d.Title, string(text))
+	raw, err := s.completeChat(ctx, projectID, d.DocType, d.Title, string(text))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -415,7 +416,9 @@ func (s *Service) ListSummaries(ctx context.Context, projectID uuid.UUID) (map[u
 // RAG theo câu hỏi — toàn văn tài liệu URD được nhúng thẳng vào prompt vì cần
 // AI đọc hết để tìm chỗ còn thiếu edge case, không phải trả lời 1 câu hỏi cụ
 // thể trên tập tài liệu dự án.
-func (s *Service) completeChat(ctx context.Context, projectID uuid.UUID, documentTitle, canonicalText string) (string, error) {
+func (s *Service) completeChat(
+	ctx context.Context, projectID uuid.UUID, docType, documentTitle, canonicalText string,
+) (string, error) {
 	datasetID, err := s.repo.RAGFlowDatasetID(ctx, projectID)
 	if err != nil {
 		return "", apperr.Database("Không thể đọc RAGFlow dataset mapping").WithCause(err)
@@ -429,7 +432,7 @@ func (s *Service) completeChat(ctx context.Context, projectID uuid.UUID, documen
 	}
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
 		ChatID:   chatID,
-		Messages: []port.RAGChatMessage{{Role: "user", Content: urdPrompt(documentTitle, canonicalText)}},
+		Messages: []port.RAGChatMessage{{Role: "user", Content: urdPrompt(docType, documentTitle, canonicalText)}},
 		// Không cần trích dẫn: chỉ parse Content thành JSON (xem report/usecase
 		// completeChat — cùng lý do).
 		WantReference: false,

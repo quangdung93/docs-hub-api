@@ -203,8 +203,13 @@ func suggestDocType(title, fileName, currentDocType string) string {
 		return ""
 	}
 	needle := strings.ToLower(title + " " + fileName)
-	if strings.Contains(needle, "urd") {
-		return domain.DocTypeURD
+	// Xét URD trước PRD: tên kiểu "URD-PRD-mapping.docx" chứa cả hai, mà luồng
+	// phân tích edge case sinh ra là để phục vụ URD (URD v1.2 mục XI) nên URD
+	// thắng. Thứ tự này là quyết định có chủ đích, đừng đảo khi thêm loại mới.
+	for _, docType := range domain.AnalyzableDocTypes() {
+		if strings.Contains(needle, docType) {
+			return docType
+		}
 	}
 	return ""
 }
@@ -303,14 +308,17 @@ func (s *Service) Complete(ctx context.Context, pid, uid uuid.UUID) (*domain.Doc
 
 // ConfirmDocType xác nhận (hoặc từ chối, docType="") loại tài liệu sau khi FE
 // hiện popup gợi ý — mở khoá luồng AI phân tích edge case của module urd
-// (URD v1.2 mục XI). Optimistic lock giống Update.
+// (URD v1.2 mục XI). Nhận "urd" hoặc "prd", xem domain.AnalyzableDocTypes.
+// Optimistic lock giống Update.
 func (s *Service) ConfirmDocType(ctx context.Context, pid, did uuid.UUID, docType string, v int) (*domain.Document, error) {
 	actor, err := s.authorize(ctx, pid, true)
 	if err != nil {
 		return nil, err
 	}
-	if docType != "" && docType != domain.DocTypeURD {
-		return nil, apperr.BadRequest("doc_type chỉ hỗ trợ giá trị rỗng hoặc \"urd\"")
+	if docType != "" && !domain.IsAnalyzableDocType(docType) {
+		return nil, apperr.BadRequest(fmt.Sprintf(
+			"doc_type chỉ hỗ trợ giá trị rỗng hoặc một trong: %s",
+			strings.Join(domain.AnalyzableDocTypes(), ", ")))
 	}
 	// Bọc transaction vì SetDocType nay ghi thêm audit log: đổi được doc_type
 	// mà audit hỏng thì thao tác coi như thất bại với client trong khi dữ
