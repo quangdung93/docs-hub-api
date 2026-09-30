@@ -10,6 +10,13 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/module/urd/domain"
 )
 
+// Tên thẻ WordprocessingML dùng ở nhiều chỗ khi duyệt document.xml.
+const (
+	tagTable      = "tbl"
+	tagCellProps  = "tcPr"
+	tagParagProps = "pPr"
+)
+
 // rowIDPattern khớp ô mã ở cột đầu của bảng BR/AC: "BR-19", "AC-11", "BR_01",
 // "UC 3". Chỉ bảng có cột mã kiểu này mới được thêm dòng — bảng khác (STT
 // thuần số, bảng thông tin chung…) vẫn chèn đoạn văn sau bảng như cũ, vì
@@ -166,7 +173,7 @@ func (s *tableScanner) handle(token xml.Token, start, end int) {
 
 func (s *tableScanner) startElement(node xml.StartElement, start int) {
 	name := node.Name.Local
-	if name == "tbl" {
+	if name == tagTable {
 		s.depth++
 		if s.depth == 1 {
 			s.table = bodyTable{start: start}
@@ -194,7 +201,7 @@ func (s *tableScanner) startElement(node xml.StartElement, start int) {
 	case "t":
 		s.inText = true
 	case "vMerge":
-		if s.row != nil && s.capture == "tcPr" {
+		if s.row != nil && s.capture == tagCellProps {
 			s.row.hasVMerge = true
 		}
 	}
@@ -210,8 +217,8 @@ func (s *tableScanner) beginCapture(name string, start int) {
 	}
 	switch {
 	case name == "trPr" && s.row != nil && s.cell == nil,
-		name == "tcPr" && s.cell != nil,
-		name == "pPr" && s.cell != nil && s.cellParas == 1 && s.cell.pPr == nil,
+		name == tagCellProps && s.cell != nil,
+		name == tagParagProps && s.cell != nil && s.cellParas == 1 && s.cell.pPr == nil,
 		name == "rPr" && s.cell != nil && s.cellParas == 1 && s.inRun && s.cell.rPr == nil:
 		s.capture, s.captureStart = name, start
 	}
@@ -219,7 +226,7 @@ func (s *tableScanner) beginCapture(name string, start int) {
 
 func (s *tableScanner) endElement(node xml.EndElement, start, end int) {
 	name := node.Name.Local
-	if name == "tbl" {
+	if name == tagTable {
 		if s.depth == 1 {
 			s.table.end = start
 			s.tables = append(s.tables, s.table)
@@ -257,9 +264,9 @@ func (s *tableScanner) endCapture(raw []byte) {
 	switch s.capture {
 	case "trPr":
 		s.row.trPr = raw
-	case "tcPr":
+	case tagCellProps:
 		s.cell.tcPr = raw
-	case "pPr":
+	case tagParagProps:
 		s.cell.pPr = raw
 	case "rPr":
 		s.cell.rPr = raw

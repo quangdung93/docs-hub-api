@@ -385,8 +385,11 @@ const bangBRACXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>ID</w:t></w:r></w:p></w:tc>
 <w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Quy tắc</w:t></w:r></w:p></w:tc></w:tr>
 <w:tr><w:trPr><w:cantSplit/></w:trPr>
-<w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>BR-19</w:t></w:r></w:p></w:tc>
-<w:tc><w:tcPr><w:tcW w:w="8100" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>Nội dung BR-19</w:t></w:r></w:p>
+<w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>BR-19</w:t></w:r></w:p></w:tc>
+<w:tc><w:tcPr><w:tcW w:w="8100" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:spacing w:after="0"/><w:rPr><w:b/></w:rPr></w:pPr>
+<w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>Nội dung BR-19</w:t></w:r></w:p>
 <w:p><w:r><w:t>Dòng thứ hai của ô</w:t></w:r></w:p></w:tc></w:tr>
 </w:tbl>
 <w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>IV. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)</w:t></w:r></w:p>
@@ -498,7 +501,8 @@ func TestMerge_BangKhongCoCotMaHoacGopODoc_ChenDoanSauBang(t *testing.T) {
 		name, lastRow string
 	}{
 		{"cột đầu là STT", `<w:tr><w:tc><w:p><w:r><w:t>4</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`},
-		{"dòng cuối gộp ô dọc", `<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p><w:r><w:t>BR-02</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`},
+		{"dòng cuối gộp ô dọc", `<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p><w:r><w:t>BR-02</w:t></w:r></w:p></w:tc>` +
+			`<w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

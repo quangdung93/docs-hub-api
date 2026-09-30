@@ -112,7 +112,7 @@ func (s *bodyScanner) handle(token xml.Token, start, end int) {
 
 func (s *bodyScanner) startElement(node xml.StartElement, start int) {
 	switch node.Name.Local {
-	case "tbl":
+	case tagTable:
 		s.tableDepth++
 	case "p":
 		if s.tableDepth == 0 && s.current == nil {
@@ -132,7 +132,7 @@ func (s *bodyScanner) startElement(node xml.StartElement, start int) {
 // startParagraphChild xử lý các thẻ nằm trong 1 đoạn văn cấp body đang mở.
 func (s *bodyScanner) startParagraphChild(node xml.StartElement, start int) {
 	switch node.Name.Local {
-	case "pPr":
+	case tagParagProps:
 		if s.current.pPr == nil && !s.inPPr {
 			s.inPPr = true
 			s.pPrStart = start
@@ -157,11 +157,11 @@ func (s *bodyScanner) endElement(node xml.EndElement, end int) {
 		s.tracker.End(node)
 	}
 	switch node.Name.Local {
-	case "tbl":
+	case tagTable:
 		s.tableDepth--
 	case "t":
 		s.inText = false
-	case "pPr":
+	case tagParagProps:
 		if s.inPPr {
 			s.inPPr = false
 			if !s.pPrHasSect {
