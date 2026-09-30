@@ -18,9 +18,9 @@ import (
 // mới ngay trước nó.
 //
 // Đoạn văn trong bảng bị loại khỏi danh sách này vì chèn 1 <w:p> vào giữa
-// bảng sẽ rơi vào TRONG ô, không phải nội dung tiếp theo của mục. Hệ quả:
-// mục có nội dung nằm hết trong bảng thì điểm chèn rơi xuống sau bảng —
-// vẫn đúng mục, chỉ không chèn thành 1 dòng mới của bảng.
+// bảng sẽ rơi vào TRONG ô, không phải nội dung tiếp theo của mục. Bảng được
+// theo dõi riêng (xem table.go): mục có bảng BR/AC thì case thành 1 dòng mới
+// của bảng, bảng khác thì điểm chèn rơi xuống sau bảng.
 type bodyParagraph struct {
 	// start là vị trí byte của ký tự "<" trong "<w:p".
 	start int
@@ -46,10 +46,11 @@ type insertion struct {
 }
 
 // scanBody đọc document.xml và trả về danh sách đoạn văn cấp <w:body> theo
-// đúng thứ tự xuất hiện, kèm vị trí byte và cấp tiêu đề.
-func scanBody(documentXML []byte, styles docxheading.Styles) ([]bodyParagraph, error) {
+// đúng thứ tự xuất hiện, kèm vị trí byte và cấp tiêu đề, cùng danh sách bảng
+// cấp body.
+func scanBody(documentXML []byte, styles docxheading.Styles) ([]bodyParagraph, []bodyTable, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(documentXML))
-	s := bodyScanner{documentXML: documentXML}
+	s := bodyScanner{documentXML: documentXML, tables: tableScanner{documentXML: documentXML}}
 	for {
 		// InputOffset() TRƯỚC khi đọc token = vị trí bắt đầu của token sắp
 		// đọc (khoảng trắng giữa các thẻ cũng là 1 token CharData riêng).
@@ -59,12 +60,13 @@ func scanBody(documentXML []byte, styles docxheading.Styles) ([]bodyParagraph, e
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", documentXMLPath, err)
+			return nil, nil, fmt.Errorf("parse %s: %w", documentXMLPath, err)
 		}
 		s.handle(token, offset, int(decoder.InputOffset()))
+		s.tables.handle(token, offset, int(decoder.InputOffset()))
 	}
 	assignHeadingLevels(s.paragraphs, styles)
-	return s.paragraphs, nil
+	return s.paragraphs, s.tables.tables, nil
 }
 
 // assignHeadingLevels điền headingLevel cho từng đoạn. Chỉ có đoạn cấp body
@@ -86,6 +88,7 @@ type bodyScanner struct {
 	current     *bodyParagraph
 	text        strings.Builder
 	tracker     docxheading.Tracker
+	tables      tableScanner
 	tableDepth  int
 	pPrStart    int
 	inPPr       bool
@@ -109,7 +112,7 @@ func (s *bodyScanner) handle(token xml.Token, start, end int) {
 
 func (s *bodyScanner) startElement(node xml.StartElement, start int) {
 	switch node.Name.Local {
-	case "tbl":
+	case tagTable:
 		s.tableDepth++
 	case "p":
 		if s.tableDepth == 0 && s.current == nil {
@@ -129,7 +132,7 @@ func (s *bodyScanner) startElement(node xml.StartElement, start int) {
 // startParagraphChild xử lý các thẻ nằm trong 1 đoạn văn cấp body đang mở.
 func (s *bodyScanner) startParagraphChild(node xml.StartElement, start int) {
 	switch node.Name.Local {
-	case "pPr":
+	case tagParagProps:
 		if s.current.pPr == nil && !s.inPPr {
 			s.inPPr = true
 			s.pPrStart = start
@@ -154,11 +157,11 @@ func (s *bodyScanner) endElement(node xml.EndElement, end int) {
 		s.tracker.End(node)
 	}
 	switch node.Name.Local {
-	case "tbl":
+	case tagTable:
 		s.tableDepth--
 	case "t":
 		s.inText = false
-	case "pPr":
+	case tagParagProps:
 		if s.inPPr {
 			s.inPPr = false
 			if !s.pPrHasSect {
@@ -199,10 +202,15 @@ func normalizeHeading(heading string) string {
 // planInsertions chia cases làm 2 nhóm: nhóm chèn THẲNG được vào mục AI chỉ
 // định, và nhóm còn lại (leftover) phải gom xuống phụ lục cuối tài liệu.
 //
+// Mục có bảng BR/AC (cột đầu là mã "BR-19"…) thì case thành 1 dòng mới cuối
+// bảng, đánh số nối tiếp; nhiều case cùng bảng thì số tăng dần theo thứ tự
+// case. Mục không có bảng như vậy thì chèn đoạn văn cuối mục như trước.
+//
 // bodyEnd là vị trí kết thúc phần nội dung (ngay trước <w:sectPr> của body).
 func planInsertions(
-	paragraphs []bodyParagraph, bodyEnd int, cases []domain.EdgeCase,
+	paragraphs []bodyParagraph, tables []bodyTable, bodyEnd int, cases []domain.EdgeCase,
 ) (inserts []insertion, leftover []domain.EdgeCase) {
+	addedRows := map[int]int{}
 	for _, c := range cases {
 		index := matchHeading(paragraphs, c.TargetHeading)
 		if index < 0 {
@@ -210,9 +218,22 @@ func planInsertions(
 			continue
 		}
 		offset, pPr := sectionInsertPoint(paragraphs, index, bodyEnd)
+		if t := sectionTable(tables, paragraphs[index].start, offset); t >= 0 {
+			addedRows[t]++
+			inserts = append(inserts, tableRowInsertion(tables[t], addedRows[t], c))
+			continue
+		}
 		inserts = append(inserts, insertion{offset: offset, xml: []byte(inlineParagraph(pPr, caseText(c)))})
 	}
 	return inserts, leftover
+}
+
+// tableRowInsertion dựng lần chèn dòng thứ n (tính từ 1) vào cuối bảng.
+func tableRowInsertion(t bodyTable, n int, c domain.EdgeCase) insertion {
+	template, _ := t.rowTemplate()
+	row := t.lastRow
+	texts := rowCellTexts(len(row.cells), template.id(n), c)
+	return insertion{offset: t.end, xml: buildRowXML(row, texts)}
 }
 
 // matchHeading tìm đoạn tiêu đề khớp với đề xuất của AI, trả -1 nếu không

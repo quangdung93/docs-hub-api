@@ -374,3 +374,173 @@ func TestNormalizeHeading(t *testing.T) {
 		})
 	}
 }
+
+// bangBRACXML mô phỏng đúng mục BR/AC của URD app bác sĩ: tiêu đề bôi đậm có
+// số mục, nội dung là bảng có dòng tiêu đề + cột mã "BR-19"/"AC-11".
+const bangBRACXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)</w:t></w:r></w:p>
+<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/></w:tblPr>
+<w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>ID</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Quy tắc</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:trPr><w:cantSplit/></w:trPr>
+<w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>BR-19</w:t></w:r></w:p></w:tc>
+<w:tc><w:tcPr><w:tcW w:w="8100" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:spacing w:after="0"/><w:rPr><w:b/></w:rPr></w:pPr>
+<w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>Nội dung BR-19</w:t></w:r></w:p>
+<w:p><w:r><w:t>Dòng thứ hai của ô</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>IV. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)</w:t></w:r></w:p>
+<w:tbl>
+<w:tr><w:tc><w:p><w:r><w:t>ID</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Given</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>When</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Then</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>AC-11</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Đang xem hồ sơ</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>Chạm ngừng theo dõi</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Gỡ khỏi danh sách</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>D. THIẾT KẾ (UI/UX)</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+
+// bangThu trả nguyên văn bảng thứ n (tính từ 0) trong document.xml.
+func bangThu(t *testing.T, content string, n int) string {
+	t.Helper()
+	rest := content
+	for i := 0; ; i++ {
+		dau := strings.Index(rest, "<w:tbl>")
+		require.GreaterOrEqual(t, dau, 0, "không tìm thấy bảng thứ %d", n)
+		cuoi := strings.Index(rest[dau:], "</w:tbl>")
+		require.GreaterOrEqual(t, cuoi, 0)
+		if i == n {
+			return rest[dau : dau+cuoi+len("</w:tbl>")]
+		}
+		rest = rest[dau+cuoi:]
+	}
+}
+
+// Mục BR là bảng 2 cột: case thành dòng BR-20 mới trong bảng — không phải đoạn
+// văn trơ sau bảng — và mang định dạng của dòng dữ liệu cuối (độ rộng cột,
+// căn lề, cỡ chữ) chứ không phải của dòng tiêu đề.
+func TestMerge_BangBR_ThemDongMoiDanhSoNoiTiep(t *testing.T) {
+	content := mergeStructured(t, bangBRACXML, []domain.EdgeCase{
+		edgeCase("Hủy bảng chọn không gian?", "Bắt buộc chọn trước",
+			"III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)"),
+	})
+
+	require.NotContains(t, content, "Phụ lục: Edge Case bổ sung (AI)")
+	bang := bangThu(t, content, 0)
+	require.Contains(t, bang,
+		`<w:tr><w:trPr><w:cantSplit/></w:trPr>`+
+			`<w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr>`+
+			`<w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t xml:space="preserve">BR-20</w:t></w:r></w:p></w:tc>`+
+			`<w:tc><w:tcPr><w:tcW w:w="8100" w:type="dxa"/></w:tcPr>`+
+			`<w:p><w:pPr><w:spacing w:after="0"/><w:rPr><w:b/></w:rPr></w:pPr>`+
+			`<w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t xml:space="preserve">`+
+			`Hủy bảng chọn không gian? Hướng xử lý: Bắt buộc chọn trước (AI)</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`)
+	require.NotContains(t, bang, "Dòng thứ hai của ô</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:trPr><w:tblHeader/>",
+		"không được copy định dạng dòng tiêu đề")
+	require.NotContains(t, bangThu(t, content, 1), "Bắt buộc chọn trước", "không được lọt sang bảng AC")
+}
+
+// Bảng AC nhiều cột (ID | Given | When | Then): mô tả vào Given, hướng xử lý
+// vào Then, When để trống cho người review — không bịa nội dung.
+func TestMerge_BangAC_MoTaVaoGivenHuongXuLyVaoThen(t *testing.T) {
+	content := mergeStructured(t, bangBRACXML, []domain.EdgeCase{
+		edgeCase("Người bệnh thu hồi đồng ý", "Cập nhật trạng thái ngay",
+			"IV. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)"),
+	})
+
+	require.Contains(t, bangThu(t, content, 1),
+		`<w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">AC-12</w:t></w:r></w:p></w:tc>`+
+			`<w:tc><w:p><w:r><w:t xml:space="preserve">Người bệnh thu hồi đồng ý</w:t></w:r></w:p></w:tc>`+
+			`<w:tc><w:p></w:p></w:tc>`+
+			`<w:tc><w:p><w:r><w:t xml:space="preserve">Cập nhật trạng thái ngay (AI)</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`)
+}
+
+// Nhiều case cùng 1 bảng: số tăng dần theo đúng thứ tự case; case vào bảng
+// khác thì đánh số theo bảng đó, không dùng chung bộ đếm.
+func TestMerge_NhieuCaseCungBang_SoTangDanTheoThuTu(t *testing.T) {
+	content := mergeStructured(t, bangBRACXML, []domain.EdgeCase{
+		edgeCase("Case một", "Xử lý một", "III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)"),
+		edgeCase("Case AC", "Xử lý AC", "IV. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)"),
+		edgeCase("Case hai", "Xử lý hai", "III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)"),
+	})
+
+	bangBR := bangThu(t, content, 0)
+	require.Less(t, strings.Index(bangBR, "BR-20"), strings.Index(bangBR, "Xử lý một"))
+	require.Less(t, strings.Index(bangBR, "Xử lý một"), strings.Index(bangBR, "BR-21"))
+	require.Less(t, strings.Index(bangBR, "BR-21"), strings.Index(bangBR, "Xử lý hai"))
+	require.Contains(t, bangThu(t, content, 1), "AC-12")
+	require.NotContains(t, content, "AC-13")
+}
+
+func TestIDTemplate_GiuTienToDauNoiVaSoChuSo(t *testing.T) {
+	tests := []struct {
+		name, last, want string
+	}{
+		{"gạch nối", "BR-19", "BR-20"},
+		{"giữ số 0 đầu", "AC-09", "AC-10"},
+		{"gạch dưới", "UC_001", "UC_002"},
+		{"không dấu nối", "BR7", "BR8"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			table := bodyTable{rowCount: 2, lastRow: tableRow{cells: []tableCell{{text: tc.last}, {text: "x"}}}}
+			template, ok := table.rowTemplate()
+			require.True(t, ok)
+			require.Equal(t, tc.want, template.id(1))
+		})
+	}
+}
+
+// Bảng không dùng làm đích thêm dòng được thì case vẫn là đoạn văn SAU bảng:
+// cột đầu không phải mã, chỉ có 1 dòng, hoặc dòng cuối gộp ô dọc (copy vMerge
+// sẽ gộp ô mới vào ô phía trên).
+func TestMerge_BangKhongCoCotMaHoacGopODoc_ChenDoanSauBang(t *testing.T) {
+	tests := []struct {
+		name, lastRow string
+	}{
+		{"cột đầu là STT", `<w:tr><w:tc><w:p><w:r><w:t>4</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`},
+		{"dòng cuối gộp ô dọc", `<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p><w:r><w:t>BR-02</w:t></w:r></w:p></w:tc>` +
+			`<w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			documentXML := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Quy tac</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>ID</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Noi dung</w:t></w:r></w:p></w:tc></w:tr>` +
+				tc.lastRow + `</w:tbl>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Muc ke tiep</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+
+			content := mergeStructured(t, documentXML, []domain.EdgeCase{edgeCase("Case", "Xu ly", "Quy tac")})
+
+			require.Greater(t, strings.Index(content, "Xu ly"), strings.Index(content, "</w:tbl>"),
+				"không thêm dòng vào bảng này")
+			require.Less(t, strings.Index(content, "Xu ly"), strings.Index(content, "Muc ke tiep"))
+		})
+	}
+}
+
+// Bảng lồng trong ô không được tính là bảng của mục: dòng cuối của bảng con
+// không phải dòng cuối của bảng BR.
+func TestMerge_BangLongTrongO_KhongLamLechDongCuoi(t *testing.T) {
+	const longBang = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Quy tac</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>ID</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Noi dung</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>BR-05</w:t></w:r></w:p></w:tc><w:tc>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>X-1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>con</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<w:p/></w:tc></w:tr></w:tbl>
+<w:sectPr/></w:body></w:document>`
+
+	content := mergeStructured(t, longBang, []domain.EdgeCase{edgeCase("Case", "Xu ly", "Quy tac")})
+
+	require.Contains(t, content, `<w:t xml:space="preserve">BR-06</w:t>`)
+	require.True(t, strings.HasSuffix(strings.TrimSpace(content[:strings.Index(content, "<w:sectPr")]),
+		`Case Hướng xử lý: Xu ly (AI)</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`),
+		"dòng mới phải nằm cuối bảng ngoài, không lọt vào bảng con")
+}
