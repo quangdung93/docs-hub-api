@@ -103,11 +103,11 @@ func TestRetry_KhongChayLaiChoTaiLieuDaXoa(t *testing.T) {
 		did).Scan(&sau).Error)
 	require.Equal(t, truoc, sau, "không được đẩy thêm job ingestion nào")
 
-	// Trạng thái revision cũng phải giữ nguyên 'failed', không bị đổi sang 'queued'.
+	// Revision đã xoá phải được archive để giải phóng hash, không bị retry sang 'queued'.
 	var trangThai string
 	require.NoError(t, db.Raw(`SELECT status FROM document_revisions WHERE id=?`,
 		rid).Scan(&trangThai).Error)
-	require.Equal(t, "failed", trangThai)
+	require.Equal(t, "archived", trangThai)
 }
 
 // Chốt chặn mới không được làm hỏng đường đi bình thường.

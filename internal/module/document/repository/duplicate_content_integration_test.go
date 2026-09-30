@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/repository"
 )
@@ -93,6 +94,46 @@ func TestCreateRevision_TrungNoiDungTrongCungChangeRequest(t *testing.T) {
 
 	_, _, err = repo.CreateRevision(ctx, thamSo(pid, actor, domain.Scope{ChangeRequestID: &cr}, sha))
 	require.ErrorIs(t, err, domain.ErrDuplicateContent)
+}
+
+// Xoá mềm phải giải phóng hash ở cả hai unique index, nhưng vẫn giữ revision
+// cũ để cleanup RAGFlow có thể đọc remote ID sau khi transaction commit.
+func TestSoftDelete_ChoPhepUploadLaiCungNoiDung(t *testing.T) {
+	for _, kind := range []string{"version", "change_request"} {
+		t.Run(kind, func(t *testing.T) {
+			db := openTestDB(t)
+			repo := repository.New(db)
+			ctx := context.Background()
+			pid, vid, _, cr, actor := duLieuScope(t, db)
+			scope := domain.Scope{VersionID: &vid}
+			if kind == "change_request" {
+				scope = domain.Scope{ChangeRequestID: &cr}
+			}
+			sha := sha64("deleted-" + kind + "-" + pid.String())
+			first, oldRevision, err := repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.NoError(t, err)
+
+			err = postgres.NewTxManager(db).Do(ctx, func(txctx context.Context) error {
+				return repo.SoftDelete(txctx, pid, first.ID, actor)
+			})
+			require.NoError(t, err)
+			var oldStatus string
+			require.NoError(t, db.Table("document_revisions").Select("status").
+				Where("id=?", oldRevision.ID).Scan(&oldStatus).Error)
+			require.Equal(t, "archived", oldStatus)
+			var cleanupCount int64
+			require.NoError(t, db.Table("outbox_events").Where("aggregate_id=? AND topic='document.cleanup'", first.ID).
+				Count(&cleanupCount).Error)
+			require.Equal(t, int64(1), cleanupCount)
+
+			second, _, err := repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.NoError(t, err, "tài liệu đã xoá không còn chặn hash trong cùng scope")
+			require.NotEqual(t, first.ID, second.ID)
+			_, _, err = repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.ErrorIs(t, err, domain.ErrDuplicateContent,
+				"revision của tài liệu còn sống vẫn phải chặn trùng")
+		})
+	}
 }
 
 // Chỉ số là RIÊNG PHẦN theo scope: cùng nội dung nhưng khác version thì hợp lệ.

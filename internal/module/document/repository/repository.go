@@ -396,15 +396,25 @@ func (r *Repository) Retry(ctx context.Context, pid, did, rid, actor uuid.UUID) 
 	return r.enqueue(ctx, &m, actor, "document.retry")
 }
 func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) error {
-	res := postgres.DBFrom(ctx, r.db).Where("id=? AND project_id=?", did, pid).Delete(&documentModel{})
+	db := postgres.DBFrom(ctx, r.db)
+	res := db.Where("id=? AND project_id=?", did, pid).Delete(&documentModel{})
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
 		return domain.ErrNotFound
 	}
+	// Hai unique index theo scope/hash chỉ loại revision có status='archived'.
+	// Xoá mềm document mà giữ nguyên status sẽ khiến file đã xoá vẫn chặn
+	// upload lại cùng nội dung. Thực hiện trong cùng transaction với xoá mềm
+	// và outbox (Service.Delete bọc TxManager) để không giải phóng hash nếu
+	// thao tác xoá thất bại.
+	if err := db.Table("document_revisions").Where("document_id=? AND project_id=?", did, pid).
+		Updates(map[string]any{"status": "archived", "updated_at": time.Now().UTC()}).Error; err != nil {
+		return fmt.Errorf("lưu trữ revisions của document đã xoá: %w", err)
+	}
 	payload, _ := json.Marshal(map[string]string{"document_id": did.String(), "project_id": pid.String()})
-	if err := postgres.DBFrom(ctx, r.db).Table("outbox_events").Create(map[string]any{
+	if err := db.Table("outbox_events").Create(map[string]any{
 		"id": uuid.New(), "topic": "document.cleanup", "aggregate_type": "document",
 		"aggregate_id": did, "payload": string(payload), "status": "pending",
 	}).Error; err != nil {
@@ -414,7 +424,7 @@ func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) 
 		"id": uuid.New(), cotActorUserID: actor, cotProjectID: pid,
 		cotAction: "document.deleted", cotEntityType: entityDocument, cotEntityID: did, cotMetadata: "{}",
 	}
-	return postgres.DBFrom(ctx, r.db).Table("audit_logs").Create(audit).Error
+	return db.Table("audit_logs").Create(audit).Error
 }
 func (r *Repository) ProjectMeta(ctx context.Context, pid uuid.UUID) (string, string, error) {
 	var m struct{ Name, Code string }
