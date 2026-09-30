@@ -23,7 +23,6 @@ var noActionResolutions = map[string]bool{ //nolint:gochecknoglobals // bảng t
 	"không":                 true,
 	"không có":              true,
 	"không có gì":           true,
-	"không áp dụng":         true,
 	"không hỗ trợ":          true,
 	"chưa hỗ trợ":           true,
 	"chưa có":               true,
@@ -32,33 +31,19 @@ var noActionResolutions = map[string]bool{ //nolint:gochecknoglobals // bảng t
 	"chưa có tính năng":     true,
 	"chưa có tính năng này": true,
 	"không cần thiết":       true,
-	"không xử lý":           true,
-	"chưa xử lý":            true,
 	"không thực hiện":       true,
 	"n/a":                   true,
 	"na":                    true,
-	"bỏ qua":                true,
 	"không cần":             true,
-	"không cần xử lý":       true,
 	"không ảnh hưởng":       true,
-	"ngoài phạm vi":         true,
-	"chấp nhận rủi ro":      true,
-	"hành vi người dùng":    true,
 	"skip":                  true,
 	"ignore":                true,
-	"out of scope":          true,
-	// "Không có hướng giải quyết" = case đã được xem xét nhưng không có nội
-	// dung nào để bổ sung — không ghi nhận vào URD.
-	"không có hướng giải quyết": true,
-	"chưa có hướng giải quyết":  true,
-	"không có hướng xử lý":      true,
-	"chưa có hướng xử lý":       true,
-	"không có giải pháp":        true,
-	"chưa có giải pháp":         true,
 }
 
-// noActionPrefixes là các cụm vẫn mang nghĩa "không bổ sung gì" khi người dùng
-// ghi thêm lý do phía sau, vd "Bỏ qua do lỗi gửi thông báo". CHỈ gồm cụm không
+// noActionPrefixes là các cụm mang nghĩa "không bổ sung gì" — đứng một mình
+// hoặc khi người dùng ghi thêm lý do phía sau, vd "Bỏ qua do lỗi gửi thông
+// báo". Nhóm "không/chưa có hướng giải quyết" là case đã được xem xét nhưng
+// không có nội dung nào để ghi nhận vào URD. CHỈ gồm cụm không
 // thể mở đầu một quyết định nghiệp vụ; "không" bị loại có chủ đích vì "Không,
 // hệ thống khoá tài khoản" là nội dung thật cần đưa vào URD.
 var noActionPrefixes = []string{ //nolint:gochecknoglobals // bảng tra cứu bất biến
@@ -87,6 +72,9 @@ func isNoActionResolution(resolution string) bool {
 		rest, ok := strings.CutPrefix(normalized, prefix)
 		if !ok {
 			continue
+		}
+		if rest == "" {
+			return true
 		}
 		for _, sep := range noActionReasonSeparators {
 			if strings.HasPrefix(rest, sep) {

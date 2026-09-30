@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"sort"
@@ -75,33 +76,44 @@ type Paragraph struct {
 // tài liệu vẫn xử lý được nhờ styleId "HeadingN" và heuristic dự phòng, không
 // có lý do biến nó thành lỗi cứng.
 func ParseStyles(stylesXML []byte) Styles {
-	type rawStyle struct {
-		name, basedOn string
-		outline       int
+	raw, err := parseRawStyles(stylesXML)
+	if err != nil {
+		return Styles{}
 	}
+	styles := Styles{}
+	for styleID := range raw {
+		if level := resolveStyleLevel(raw, styleID); level > 0 {
+			styles[styleID] = level
+		}
+	}
+	return styles
+}
+
+// rawStyle là 1 <w:style> đọc thô, chưa xét kế thừa basedOn.
+type rawStyle struct {
+	name, basedOn string
+	outline       int
+}
+
+func parseRawStyles(stylesXML []byte) (map[string]rawStyle, error) {
 	raw := map[string]rawStyle{}
 	decoder := xml.NewDecoder(bytes.NewReader(stylesXML))
 	var id string
 	var current rawStyle
 	for {
 		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return raw, nil
+		}
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				return Styles{}
-			}
-			break
+			return nil, fmt.Errorf("parse styles.xml: %w", err)
 		}
 		switch node := token.(type) {
 		case xml.StartElement:
-			switch node.Name.Local {
-			case "style":
+			if node.Name.Local == "style" {
 				id, current = attr(node.Attr, "styleId"), rawStyle{}
-			case "name":
-				current.name = attr(node.Attr, "val")
-			case "basedOn":
-				current.basedOn = attr(node.Attr, "val")
-			case "outlineLvl":
-				current.outline = outlineLevel(attr(node.Attr, "val"))
+			} else {
+				current.apply(node)
 			}
 		case xml.EndElement:
 			if node.Name.Local == "style" && id != "" {
@@ -110,33 +122,48 @@ func ParseStyles(stylesXML []byte) Styles {
 			}
 		}
 	}
+}
 
-	styles := Styles{}
-	for styleID := range raw {
-		next := styleID
-		for range maxStyleChain {
-			s, ok := raw[next]
-			if !ok {
-				break
-			}
-			level := s.outline
-			if level == 0 {
-				level = levelFromName(s.name)
-			}
-			if level == 0 {
-				level = levelFromName(next)
-			}
-			if level > 0 {
-				styles[styleID] = level
-				break
-			}
-			if s.basedOn == "" {
-				break
-			}
-			next = s.basedOn
-		}
+// apply ghi nhận các thẻ con của <w:style> liên quan tới cấp tiêu đề.
+func (s *rawStyle) apply(node xml.StartElement) {
+	switch node.Name.Local {
+	case "name":
+		s.name = attr(node.Attr, "val")
+	case "basedOn":
+		s.basedOn = attr(node.Attr, "val")
+	case "outlineLvl":
+		s.outline = outlineLevel(attr(node.Attr, "val"))
 	}
-	return styles
+}
+
+// resolveStyleLevel tìm cấp tiêu đề của style, lần theo chuỗi basedOn.
+func resolveStyleLevel(raw map[string]rawStyle, styleID string) int {
+	next := styleID
+	for range maxStyleChain {
+		s, ok := raw[next]
+		if !ok {
+			return 0
+		}
+		if level := s.ownLevel(next); level > 0 {
+			return level
+		}
+		if s.basedOn == "" {
+			return 0
+		}
+		next = s.basedOn
+	}
+	return 0
+}
+
+// ownLevel là cấp tiêu đề style tự khai báo, không tính kế thừa.
+func (s rawStyle) ownLevel(styleID string) int {
+	if s.outline > 0 {
+		return s.outline
+	}
+	if level := levelFromName(s.name); level > 0 {
+		return level
+	}
+	return levelFromName(styleID)
 }
 
 // Levels trả cấp tiêu đề cho từng đoạn (cùng thứ tự đầu vào), 0 nếu không phải

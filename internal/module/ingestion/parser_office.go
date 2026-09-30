@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -86,57 +87,70 @@ func (docxParser) Parse(_ context.Context, reader io.Reader) (ParsedDocument, er
 // theo thứ tự xuất hiện, kèm style và định dạng để nhận diện tiêu đề.
 func scanDOCXParagraphs(documentXML []byte) ([]docxheading.Paragraph, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(documentXML))
-	var paragraphs []docxheading.Paragraph
-	var paragraph strings.Builder
-	var tracker docxheading.Tracker
-	var style string
-	inText := false
-	tableDepth := 0
+	var s docxScanner
 	for {
-		token, decodeErr := decoder.Token()
-		if decodeErr == io.EOF {
-			return paragraphs, nil
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return s.paragraphs, nil
 		}
-		if decodeErr != nil {
-			return nil, fmt.Errorf("parse DOCX XML: %w", decodeErr)
+		if err != nil {
+			return nil, fmt.Errorf("parse DOCX XML: %w", err)
 		}
 		switch node := token.(type) {
 		case xml.StartElement:
-			switch node.Name.Local {
-			case "tbl":
-				tableDepth++
-			case "p":
-				paragraph.Reset()
-				tracker.Reset()
-				style = ""
-			case "pStyle":
-				style = xmlAttribute(node.Attr, "val")
-			case "t":
-				inText = true
-			case "tab":
-				paragraph.WriteByte('\t')
-			case "br", "cr":
-				paragraph.WriteByte('\n')
-			}
-			tracker.Start(node)
+			s.start(node)
 		case xml.CharData:
-			if inText {
-				paragraph.Write([]byte(node))
-				tracker.Text(node)
+			if s.inText {
+				s.text.Write(node)
+				s.tracker.Text(node)
 			}
 		case xml.EndElement:
-			tracker.End(node)
-			switch node.Name.Local {
-			case "tbl":
-				tableDepth--
-			case "t":
-				inText = false
-			case "p":
-				paragraphs = append(paragraphs, docxheading.Paragraph{
-					StyleID: style, Text: paragraph.String(), InTable: tableDepth > 0, Format: tracker.Format(),
-				})
-			}
+			s.end(node)
 		}
+	}
+}
+
+// docxScanner giữ trạng thái của đoạn văn đang đọc trong scanDOCXParagraphs.
+type docxScanner struct {
+	paragraphs []docxheading.Paragraph
+	text       strings.Builder
+	tracker    docxheading.Tracker
+	style      string
+	inText     bool
+	tableDepth int
+}
+
+func (s *docxScanner) start(node xml.StartElement) {
+	switch node.Name.Local {
+	case "tbl":
+		s.tableDepth++
+	case "p":
+		s.text.Reset()
+		s.tracker.Reset()
+		s.style = ""
+	case "pStyle":
+		s.style = xmlAttribute(node.Attr, "val")
+	case "t":
+		s.inText = true
+	case "tab":
+		s.text.WriteByte('\t')
+	case "br", "cr":
+		s.text.WriteByte('\n')
+	}
+	s.tracker.Start(node)
+}
+
+func (s *docxScanner) end(node xml.EndElement) {
+	s.tracker.End(node)
+	switch node.Name.Local {
+	case "tbl":
+		s.tableDepth--
+	case "t":
+		s.inText = false
+	case "p":
+		s.paragraphs = append(s.paragraphs, docxheading.Paragraph{
+			StyleID: s.style, Text: s.text.String(), InTable: s.tableDepth > 0, Format: s.tracker.Format(),
+		})
 	}
 }
 
