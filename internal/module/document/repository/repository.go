@@ -118,7 +118,8 @@ func (r *Repository) ScopeExists(ctx context.Context, projectID uuid.UUID, s dom
 func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisionParams) (*domain.Document, *domain.Revision, error) {
 	db := postgres.DBFrom(ctx, r.db)
 	// Serialize uploads by project and normalized file name so concurrent
-	// requests cannot allocate the same document version.
+	// requests cannot allocate the same document version (including explicit
+	// document_id uploads across different scopes).
 	if in.AutoVersion {
 		fileIdentity := in.ProjectID.String() + ":" + strings.ToLower(in.FileName)
 		if err := db.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, fileIdentity).Error; err != nil {
@@ -128,11 +129,17 @@ func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisio
 	var d documentModel
 	err := db.First(&d, "id=? AND project_id=?", in.DocumentID, in.ProjectID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) && in.AutoVersion {
-		// Reuse the active logical document when the sanitized file name matches.
-		err = db.Table("documents AS d").Select("d.*").
+		// Reuse only within the same project and selected version/change request.
+		// A file with the same name in another scope starts a new logical document.
+		q := db.Table("documents AS d").Select("d.*").
 			Joins("JOIN document_revisions r ON r.document_id=d.id").
-			Where("d.project_id=? AND d.deleted_at IS NULL AND LOWER(r.file_name)=LOWER(?)", in.ProjectID, in.FileName).
-			Order("r.revision_no DESC").Limit(1).Scan(&d).Error
+			Where("d.project_id=? AND d.deleted_at IS NULL AND LOWER(r.file_name)=LOWER(?)", in.ProjectID, in.FileName)
+		if in.Scope.VersionID != nil {
+			q = q.Where("r.project_version_id=?", *in.Scope.VersionID)
+		} else {
+			q = q.Where("r.change_request_id=?", *in.Scope.ChangeRequestID)
+		}
+		err = q.Order("r.revision_no DESC").Limit(1).Scan(&d).Error
 		if err != nil {
 			return nil, nil, mapErr(err)
 		}
