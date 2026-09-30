@@ -160,8 +160,18 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	}
 	availableScopes := mergeAvailableScopes(versionScopes, scopesFrom(refs))
 	plan := s.planQuestion(ctx, chatID, input.Question, availableScopes, scopeForced)
+	var compared []retrievaldomain.ResolvedScope
+	if !scopeForced {
+		plan, compared = comparisonPlan(plan, input.Question, versionScopes)
+	}
 	if !scopeForced {
 		plannedScope := scopeForPlan(plan, versionScopes)
+		if len(compared) > 0 {
+			plannedScope.VersionIDs = make([]uuid.UUID, len(compared))
+			for i, version := range compared {
+				plannedScope.VersionIDs[i] = version.ID
+			}
+		}
 		plannedResolved, plannedRefs, resolveErr := s.resolveScope(ctx, input.ProjectID, plannedScope)
 		if resolveErr != nil {
 			return nil, resolveErr
@@ -171,13 +181,26 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 			return s.save(ctx, input, *scope, resolved, plan.Intent,
 				"Không tìm thấy đủ thông tin trong phạm vi tài liệu đã chọn.", "", nil, false, started)
 		}
+		if len(compared) > 0 && !coversScopes(resolved, refs) {
+			return s.save(ctx, input, *scope, resolved, plan.Intent,
+				"Không đủ tài liệu đã index ở từng phiên bản dự án để so sánh.", "", nil, false, started)
+		}
 	}
 	if scope.Mode != retrievaldomain.ScopeAll {
 		if err = s.syncScopeMetadata(ctx, datasetID, refs); err != nil {
 			return nil, apperr.External("Không thể đồng bộ scope metadata sang RAGFlow").WithCause(err)
 		}
 	}
-	evidence := s.retrievePlannedEvidence(ctx, datasetID, refs, plan.Queries)
+	var evidence []port.RAGChunk
+	if plan.Intent == "evolution" && len(resolved) > 1 {
+		evidence = s.retrieveEvolutionEvidence(ctx, datasetID, resolved, refs, input.Question)
+	} else {
+		evidence = s.retrievePlannedEvidence(ctx, datasetID, refs, plan.Queries)
+	}
+	if len(compared) > 0 && !coversEvidence(resolved, refs, evidence) {
+		return s.save(ctx, input, *scope, resolved, plan.Intent,
+			"Không đủ bằng chứng ở từng phiên bản dự án để so sánh.", "", nil, false, started)
+	}
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
 		ChatID: chatID,
 		Messages: ragMessages(conversation.Messages, answerSystemPrompt(plan),
