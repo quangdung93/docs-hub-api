@@ -65,7 +65,24 @@ func TestParserRegistry_DOCX(t *testing.T) {
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes.NewReader(docx))
 	require.NoError(t, err)
 	require.Equal(t, "# Giới thiệu\nNội dung DOCX\n", parsed.Text)
-	require.Equal(t, "docx-v1", parsed.ParserVersion)
+	require.Equal(t, "docx-v2", parsed.ParserVersion)
+}
+
+// URD không dùng style tiêu đề (chỉ bôi đậm + tăng cỡ chữ): parser vẫn phải
+// đánh dấu "#" theo cấp để AI chép đúng tiêu đề cho docxmerge.
+func TestParserRegistry_DOCX_TieuDeInDamCoSoMuc(t *testing.T) {
+	docx := zipFixture(t, map[string]string{
+		"word/document.xml": `<w:document xmlns:w="urn:w"><w:body>
+			<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>A. GIỚI THIỆU</w:t></w:r></w:p>
+			<w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>I. Thông tin chung</w:t></w:r></w:p>
+			<w:tbl><w:tr><w:tc><w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>1. Ô trong bảng</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+			<w:p><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>Nội dung</w:t></w:r></w:p>
+		</w:body></w:document>`,
+	})
+	parsed, err := NewParserRegistry().Parse(context.Background(),
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes.NewReader(docx))
+	require.NoError(t, err)
+	require.Equal(t, "# A. GIỚI THIỆU\n## I. Thông tin chung\n1. Ô trong bảng\nNội dung\n", parsed.Text)
 }
 
 func TestParserRegistry_XLSX(t *testing.T) {

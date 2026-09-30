@@ -20,9 +20,10 @@
 // </w:body>, sẽ tạo ra file docx không hợp lệ).
 //
 // Giới hạn đã biết (cần nêu rõ với QA/PM): chỉ hỗ trợ tài liệu .docx dạng đơn
-// giản (1 section); nhận diện mục dựa vào style Heading1..Heading6, tài liệu
-// đánh tiêu đề bằng cách bôi đậm thủ công sẽ không khớp được mục nào và rơi
-// hết về phụ lục. Nội dung của mục nằm trong bảng thì đoạn mới được chèn sau
+// giản (1 section); nhận diện mục theo pkg/docxheading (style Heading/
+// outlineLvl, hoặc dự phòng là dòng in đậm có số mục như "A.", "I.", "F2 –"
+// khi tài liệu không dùng style tiêu đề). Tiêu đề không đánh số mà chỉ bôi
+// đậm thì vẫn không nhận ra. Nội dung của mục nằm trong bảng thì đoạn mới được chèn sau
 // bảng chứ không thành 1 dòng mới của bảng. Ảnh minh hoạ chỉ được nhắc tới
 // bằng tên object key dạng text, KHÔNG nhúng ảnh thật vào docx — nhúng ảnh
 // cần thêm quan hệ (relationships) + content types phức tạp hơn nhiều, để
@@ -38,9 +39,13 @@ import (
 	"io"
 
 	"github.com/quangdung93/docs-hub-api/internal/module/urd/domain"
+	"github.com/quangdung93/docs-hub-api/pkg/docxheading"
 )
 
-const documentXMLPath = "word/document.xml"
+const (
+	documentXMLPath = "word/document.xml"
+	stylesXMLPath   = "word/styles.xml"
+)
 
 // maxEntryBytes chặn decompression bomb khi giải nén từng entry trong .docx
 // (200 MiB thừa sức cho mọi tài liệu URD hợp lệ, nhưng chặn được 1 entry zip
@@ -64,11 +69,16 @@ func Merge(original []byte, cases []domain.EdgeCase) ([]byte, error) {
 		return nil, fmt.Errorf("đọc file .docx gốc: %w", err)
 	}
 
+	styles, err := readStyles(zr)
+	if err != nil {
+		return nil, err
+	}
+
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	found := false
 	for _, f := range zr.File {
-		if err := copyOrMergeEntry(zw, f, cases, &found); err != nil {
+		if err := copyOrMergeEntry(zw, f, cases, styles, &found); err != nil {
 			return nil, err
 		}
 	}
@@ -81,7 +91,30 @@ func Merge(original []byte, cases []domain.EdgeCase) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func copyOrMergeEntry(zw *zip.Writer, f *zip.File, cases []domain.EdgeCase, found *bool) error {
+// readStyles đọc word/styles.xml (nếu có) để nhận diện tiêu đề theo style —
+// phải đọc TRƯỚC vì trong zip nó có thể nằm sau document.xml.
+func readStyles(zr *zip.Reader) (docxheading.Styles, error) {
+	for _, f := range zr.File {
+		if f.Name != stylesXMLPath {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("đọc %s: %w", stylesXMLPath, err)
+		}
+		defer rc.Close()
+		data, err := readEntryLimited(rc)
+		if err != nil {
+			return nil, fmt.Errorf("đọc %s: %w", stylesXMLPath, err)
+		}
+		return docxheading.ParseStyles(data), nil
+	}
+	return docxheading.Styles{}, nil
+}
+
+func copyOrMergeEntry(
+	zw *zip.Writer, f *zip.File, cases []domain.EdgeCase, styles docxheading.Styles, found *bool,
+) error {
 	w, err := zw.CreateHeader(&zip.FileHeader{Name: f.Name, Method: f.Method})
 	if err != nil {
 		return fmt.Errorf("ghi entry %s: %w", f.Name, err)
@@ -102,7 +135,7 @@ func copyOrMergeEntry(zw *zip.Writer, f *zip.File, cases []domain.EdgeCase, foun
 	if err != nil {
 		return fmt.Errorf("đọc %s: %w", documentXMLPath, err)
 	}
-	merged, err := insertCases(content, cases)
+	merged, err := insertCases(content, cases, styles)
 	if err != nil {
 		return err
 	}
@@ -140,7 +173,7 @@ func readEntryLimited(r io.Reader) ([]byte, error) {
 
 // insertCases chèn từng case vào đúng mục AI chỉ định; case nào không định
 // vị được mục thì gom vào phụ lục cuối tài liệu.
-func insertCases(documentXML []byte, cases []domain.EdgeCase) ([]byte, error) {
+func insertCases(documentXML []byte, cases []domain.EdgeCase, styles docxheading.Styles) ([]byte, error) {
 	bodyEnd := appendixOffset(documentXML)
 	if bodyEnd == -1 {
 		return nil, ErrUnsupportedStructure
@@ -150,7 +183,7 @@ func insertCases(documentXML []byte, cases []domain.EdgeCase) ([]byte, error) {
 	// phiên bản URD mới — hỏng ở đây là người dùng mất trắng công đã nhập
 	// (đã xảy ra với URD dạng PDF, xem usecase.finalizeAnalysis), nên tuyệt
 	// đối không biến 1 tài liệu lạ cấu trúc thành lỗi cứng.
-	paragraphs, err := scanBody(documentXML)
+	paragraphs, err := scanBody(documentXML, styles)
 	if err != nil {
 		paragraphs = nil
 	}
