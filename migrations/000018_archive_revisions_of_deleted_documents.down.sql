@@ -1,0 +1,13 @@
+-- Cố ý KHÔNG hoàn nguyên.
+--
+-- Sau khi chạy up, không còn phân biệt được revision nào do migration này đánh
+-- dấu với revision nào do người dùng xoá tài liệu sau đó — cả hai đều mang
+-- status='archived'. Gỡ nhãn bừa sẽ khoá lại sha256 của những tài liệu vừa xoá
+-- và có thể dựng lại đúng lỗi mà bản sửa vừa chữa.
+--
+-- Trạng thái ingest cũ (ready/failed) của tài liệu đã xoá coi như mất hẳn.
+-- Không có đường API nào đọc được chúng: FindRevision, UATItems và Detail đều
+-- lọc documents.deleted_at IS NULL.
+--
+-- Cùng cách 000010_fix_empty_ragflow_references đã làm với dữ liệu nó sửa.
+SELECT 1;

@@ -404,14 +404,18 @@ func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) 
 	if res.RowsAffected == 0 {
 		return domain.ErrNotFound
 	}
-	// Hai unique index theo scope/hash chỉ loại revision có status='archived'.
-	// Xoá mềm document mà giữ nguyên status sẽ khiến file đã xoá vẫn chặn
-	// upload lại cùng nội dung. Thực hiện trong cùng transaction với xoá mềm
-	// và outbox (Service.Delete bọc TxManager) để không giải phóng hash nếu
-	// thao tác xoá thất bại.
-	if err := db.Table("document_revisions").Where("document_id=? AND project_id=?", did, pid).
-		Updates(map[string]any{"status": "archived", "updated_at": time.Now().UTC()}).Error; err != nil {
-		return fmt.Errorf("lưu trữ revisions của document đã xoá: %w", err)
+	// Nhả sha256 của tài liệu vừa xoá. Hai chỉ số uk_revisions_*_hash là chỉ số
+	// riêng phần loại trừ 'archived'; revision của tài liệu đã xoá không được
+	// tiếp tục chặn upload lại cùng nội dung.
+	//
+	// Làm đồng bộ trong cùng transaction với xoá mềm và outbox (Service.Delete
+	// bọc TxManager), không phụ thuộc vào worker dọn dẹp RAGFlow.
+	if err := db.Model(&revisionModel{}).
+		Where("document_id=? AND project_id=? AND status<>?", did, pid, domain.RevisionStatusArchived).
+		Updates(map[string]any{
+			"status": domain.RevisionStatusArchived, "updated_at": time.Now().UTC(),
+		}).Error; err != nil {
+		return fmt.Errorf("lưu trữ revision: %w", err)
 	}
 	payload, _ := json.Marshal(map[string]string{"document_id": did.String(), "project_id": pid.String()})
 	if err := db.Table("outbox_events").Create(map[string]any{
