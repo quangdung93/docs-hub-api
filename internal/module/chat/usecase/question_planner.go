@@ -15,6 +15,14 @@ import (
 	retrievaldomain "github.com/quangdung93/docs-hub-api/internal/module/retrieval/domain"
 )
 
+// Ý định câu hỏi do planner phân loại.
+const (
+	// intentEvolution: so sánh/thay đổi qua các version hoặc các bản.
+	intentEvolution = "evolution"
+	// intentCurrentState: trạng thái hiện tại theo version mới nhất.
+	intentCurrentState = "current_state"
+)
+
 const (
 	// Tổng ngân sách planner + retrieval phụ phải chừa đủ thời gian cho lượt
 	// CompleteChat cuối trong handler timeout 45 giây của cấu hình hiện tại.
@@ -37,6 +45,9 @@ Quy tắc:
 - Câu hỏi thay đổi thế nào, khác nhau ra sao, lịch sử/evolution/qua từng version: evolution + all_versions.
 - Nếu nêu hai hoặc nhiều version để so sánh: evolution + all_versions; không chọn một version_label duy nhất.
 - Nếu nêu rõ một version: specific_version và điền version_label đúng theo danh mục.
+- So sánh các bản/lần cập nhật của tài liệu trong CÙNG một version (vd "bản 1 và bản 2 của v1.1",
+  "bản mới so với bản trước", "sau khi cập nhật edge case có gì mới"): evolution + specific_version và điền
+  version_label; nếu không nêu version thì evolution + all_versions.
 - Nếu câu hỏi có nhiều vế hoặc mơ hồ nhưng vẫn có thể tra cứu: tách thành 2-3 truy vấn độc lập, cụ thể. Không hỏi ngược người dùng.
 - queries phải giữ nguyên tên chức năng/thực thể trong câu hỏi, không tự bịa tên.
 - Nếu không chắc, dùng ambiguous + all_scopes và tạo các truy vấn giúp bao phủ những cách hiểu hợp lý.`
@@ -107,13 +118,14 @@ func fallbackQuestionPlan(question string) questionPlan {
 	evolutionSignals := []string{
 		"thay đổi", "thay doi", "qua từng version", "qua tung version", "qua các version",
 		"qua cac version", "lịch sử", "lich su", "so sánh", "so sanh", "evolution", "khác nhau", "khac nhau",
+		"khác biệt", "khac biet", "bản cũ", "ban cu", "bản trước", "ban truoc", "bản mới", "ban moi",
 	}
 	for _, signal := range evolutionSignals {
 		if strings.Contains(normalized, signal) {
-			return questionPlan{Intent: "evolution", Scope: "all_versions", Queries: []string{question}}
+			return questionPlan{Intent: intentEvolution, Scope: "all_versions", Queries: []string{question}}
 		}
 	}
-	return questionPlan{Intent: "current_state", Scope: "latest_version", Queries: []string{question}}
+	return questionPlan{Intent: intentCurrentState, Scope: "latest_version", Queries: []string{question}}
 }
 
 // Explicit version labels in the question take precedence over the planner's
@@ -137,7 +149,7 @@ func comparisonPlan(plan questionPlan, question string, versions []retrievaldoma
 	if len(selected) < 2 {
 		return plan, nil
 	}
-	plan.Intent, plan.Scope, plan.VersionLabel = "evolution", "all_versions", ""
+	plan.Intent, plan.Scope, plan.VersionLabel = intentEvolution, "all_versions", ""
 	// Query the feature, not only the version numbers in the question.
 	plan.Queries = []string{question}
 	return plan, selected
@@ -288,12 +300,14 @@ func (s *Service) retrievePlannedEvidence(
 // Search each version independently: a global top-K can consist entirely of
 // v1.0 chunks even when the selected scope also contains v1.1.
 func (s *Service) retrieveEvolutionEvidence(
-	ctx context.Context, datasetID string, scopes []retrievaldomain.ResolvedScope,
-	refs []retrievaldomain.RevisionRef, question string,
+	ctx context.Context, datasetID string, units []evidenceUnit, question string,
 ) []port.RAGChunk {
+	if len(units) == 0 {
+		return nil
+	}
 	searchCtx, cancel := context.WithTimeout(ctx, evidenceTimeout)
 	defer cancel()
-	limit := maxEvidenceChunks / len(scopes)
+	limit := maxEvidenceChunks / len(units)
 	if limit < 1 {
 		limit = 1
 	}
@@ -301,16 +315,8 @@ func (s *Service) retrieveEvolutionEvidence(
 		limit = 6
 	}
 	result := make([]port.RAGChunk, 0, maxEvidenceChunks)
-	for _, scope := range scopes {
-		ids := make([]string, 0)
-		for _, ref := range refs {
-			if ref.Scope.ID == scope.ID && ref.RAGFlowDocumentID != "" {
-				ids = append(ids, ref.RAGFlowDocumentID)
-			}
-		}
-		if len(ids) == 0 {
-			continue
-		}
+	for _, unit := range units {
+		ids := unit.remoteIDs
 		found, err := s.rag.Retrieve(searchCtx, port.RAGRetrievalRequest{
 			Question: question, DatasetIDs: []string{datasetID}, DocumentIDs: ids,
 			Page: 1, PageSize: limit, SimilarityThreshold: 0.2, VectorSimilarityWeight: 0.3,
@@ -374,10 +380,15 @@ func coversEvidence(scopes []retrievaldomain.ResolvedScope, refs []retrievaldoma
 func answerSystemPrompt(plan questionPlan) string {
 	policy := "Trả lời trực tiếp, nêu rõ nếu tài liệu không đủ bằng chứng và không suy đoán."
 	switch plan.Intent {
-	case "current_state":
+	case intentCurrentState:
 		policy = "Chỉ kết luận trạng thái hiện tại từ version mới nhất trong scope; giải thích chức năng xử lý gì và mục đích của nó. Không dùng version cũ để ghi đè trạng thái mới."
-	case "evolution":
-		policy = "Đối chiếu bằng chứng của TỪNG version được chọn theo trình tự version cũ đến mới; nêu phần thêm, sửa, bỏ và mục đích/tác động chỉ khi có bằng chứng ở version tương ứng. Không suy ra nội dung version mới chỉ từ tài liệu version cũ. Nếu một version thiếu bằng chứng thì nói không đủ dữ liệu để so sánh, không khẳng định chúng giống nhau."
+	case intentEvolution:
+		policy = "Đối chiếu bằng chứng của TỪNG version được chọn theo trình tự version cũ đến mới; " +
+			"nêu phần thêm, sửa, bỏ và mục đích/tác động chỉ khi có bằng chứng ở version tương ứng. " +
+			"Không suy ra nội dung version mới chỉ từ tài liệu version cũ. " +
+			"Nếu một version thiếu bằng chứng thì nói không đủ dữ liệu để so sánh, không khẳng định chúng giống nhau. " +
+			"Nhãn bằng chứng dạng \"version · bản n/m\" là các bản của cùng tài liệu trong cùng version, " +
+			"bản số lớn hơn là bản cập nhật sau; khi câu hỏi nhắc tới các bản, so sánh giữa các bản đó."
 	case "specific_version":
 		policy = "Chỉ trả lời theo version được chọn, không trộn hành vi từ version khác."
 	case "ambiguous":
@@ -397,7 +408,9 @@ func finalQuestion(
 	builder.WriteString(question)
 	builder.WriteString("\nScope đã chọn (dữ liệu, theo thứ tự cũ đến mới):\n")
 	builder.WriteString(scopeCatalog(resolved))
-	if len(plan.Queries) < 2 && plan.Intent != "evolution" {
+	ordinals := revisionOrdinals(refs)
+	builder.WriteString(revisionCatalog(refs, ordinals))
+	if len(plan.Queries) < 2 && plan.Intent != intentEvolution {
 		return builder.String()
 	}
 	if len(plan.Queries) > 1 {
@@ -410,7 +423,7 @@ func finalQuestion(
 	for _, ref := range refs {
 		refByRemoteID[ref.RAGFlowDocumentID] = ref
 	}
-	if plan.Intent == "evolution" {
+	if plan.Intent == intentEvolution {
 		covered := make(map[uuid.UUID]bool)
 		for _, chunk := range evidence {
 			if ref, ok := refByRemoteID[chunk.DocumentID]; ok {
@@ -432,7 +445,7 @@ func finalQuestion(
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(&builder, "[%s | %s]\n%s\n", ref.Scope.Label, ref.FileName, strings.TrimSpace(chunk.Content))
+		fmt.Fprintf(&builder, "[%s | %s]\n%s\n", revisionLabel(ref, ordinals), ref.FileName, strings.TrimSpace(chunk.Content))
 		if builder.Len() >= maxEvidenceChars {
 			break
 		}

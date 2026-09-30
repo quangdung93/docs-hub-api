@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -86,7 +87,8 @@ func (r *Repository) DatasetID(ctx context.Context, projectID uuid.UUID) (string
 func (r *Repository) RevisionRefs(ctx context.Context, projectID uuid.UUID, scope domain.Scope) ([]domain.RevisionRef, error) {
 	query := postgres.DBFrom(ctx, r.db).Table("document_revisions r").
 		Select(`r.document_id,r.id AS revision_id,d.title,r.file_name,r.ragflow_document_id,
-			r.project_version_id,r.change_request_id,pv.label AS version_label,cr.code AS change_label`).
+			r.project_version_id,r.change_request_id,pv.label AS version_label,cr.code AS change_label,
+			r.revision_no,r.created_at`).
 		Joins("JOIN documents d ON d.id=r.document_id AND d.deleted_at IS NULL").
 		Joins("LEFT JOIN project_versions pv ON pv.id=r.project_version_id AND pv.project_id=r.project_id").
 		Joins("LEFT JOIN change_requests cr ON cr.id=r.change_request_id AND cr.project_id=r.project_id").
@@ -107,6 +109,8 @@ func (r *Repository) RevisionRefs(ctx context.Context, projectID uuid.UUID, scop
 		ChangeRequestID   *uuid.UUID `gorm:"column:change_request_id"`
 		VersionLabel      string     `gorm:"column:version_label"`
 		ChangeLabel       string     `gorm:"column:change_label"`
+		RevisionNo        int        `gorm:"column:revision_no"`
+		CreatedAt         time.Time  `gorm:"column:created_at"`
 	}
 	if err := query.Order(`COALESCE(pv.sequence_no,cr.sequence_no),
 		CASE WHEN r.project_version_id IS NOT NULL THEN 0 ELSE 1 END,r.document_id,r.revision_no DESC`).
@@ -125,6 +129,7 @@ func (r *Repository) RevisionRefs(ctx context.Context, projectID uuid.UUID, scop
 			DocumentID: row.DocumentID, RevisionID: row.RevisionID,
 			Title: row.Title, FileName: row.FileName, Scope: resolved,
 			RAGFlowDocumentID: row.RAGFlowDocumentID,
+			RevisionNo:        row.RevisionNo, CreatedAt: row.CreatedAt,
 		}
 	}
 	return out, nil

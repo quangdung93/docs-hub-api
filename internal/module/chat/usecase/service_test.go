@@ -191,6 +191,78 @@ func TestAsk_SoSanhHaiProjectVersionsLayBangChungTungVersion(t *testing.T) {
 	require.Len(t, answer.Citations, 2)
 }
 
+// URD ở v1.1 có bản gốc và bản đã hợp nhất edge case (cùng tài liệu, cùng tên
+// file). So sánh "bản 1 và bản 2 của v1.1" phải truy hồi riêng từng bản và gắn
+// nhãn số bản — trước đây cả hai bị gộp chung nhãn "v1.1 | URD.docx".
+func TestAsk_SoSanhHaiBanCuaCungTaiLieuTrongMotVersion(t *testing.T) {
+	t.Parallel()
+	projectID, actorID, documentID := uuid.New(), uuid.New(), uuid.New()
+	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.0"}
+	v11 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.1"}
+	uploaded := time.Date(2026, 9, 29, 9, 30, 0, 0, time.UTC)
+	repo := &fakeRepo{role: "viewer", chatID: "chat-1", conversation: &domain.Conversation{
+		ID: uuid.New(), ProjectID: projectID, UserID: actorID,
+	}}
+	scopes := &fakeScopeRepo{resolved: []retrievaldomain.ResolvedScope{v10, v11}, dataset: "ds-1",
+		refs: []retrievaldomain.RevisionRef{
+			{DocumentID: uuid.New(), RevisionID: uuid.New(), FileName: "PRD.docx", Scope: v10, RAGFlowDocumentID: "doc-10", RevisionNo: 1},
+			// Repository trả revision_no giảm dần — thứ tự đầu vào không được quyết định số bản.
+			{DocumentID: documentID, RevisionID: uuid.New(), Title: "URD app", FileName: "URD.docx", Scope: v11,
+				RAGFlowDocumentID: "rev-2", RevisionNo: 2, CreatedAt: uploaded.Add(time.Hour)},
+			{DocumentID: documentID, RevisionID: uuid.New(), Title: "URD app", FileName: "URD.docx", Scope: v11,
+				RAGFlowDocumentID: "rev-1", RevisionNo: 1, CreatedAt: uploaded},
+		}}
+	rag := &fakeRAG{completions: []port.RAGChatCompletionResult{
+		{Content: `{"intent":"evolution","scope":"specific_version","version_label":"v1.1","queries":["URD thay đổi"]}`},
+		{Content: "Bản 2 bổ sung xử lý mất mạng", Model: "qwen"},
+	}, retrievalByDoc: map[string]port.RAGRetrievalResult{
+		"rev-1": {Chunks: []port.RAGChunk{{ID: "c-1", DocumentID: "rev-1", DatasetID: "ds-1", Content: "Danh sách bệnh nhân"}}},
+		"rev-2": {Chunks: []port.RAGChunk{{
+			ID: "c-2", DocumentID: "rev-2", DatasetID: "ds-1", Content: "Hiển thị toast khi mất mạng (AI)",
+		}}},
+	}}
+	service := New(repo, scopes, rag, fixedClock{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actorID.String()})
+
+	answer, err := service.Ask(ctx, AskInput{
+		ProjectID: projectID, ConversationID: repo.conversation.ID,
+		Question: "Bản 1 và bản 2 của URD ở v1.1 khác nhau gì?",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "evolution", answer.Intent)
+	require.Equal(t, []uuid.UUID{v11.ID}, repo.saved.Scope.VersionIDs, "chỉ trong v1.1, không kéo v1.0 vào")
+	require.Len(t, rag.retrievalInputs, 2)
+	require.Equal(t, []string{"rev-1"}, rag.retrievalInputs[0].DocumentIDs)
+	require.Equal(t, []string{"rev-2"}, rag.retrievalInputs[1].DocumentIDs)
+	prompt := rag.completionInput.Messages[len(rag.completionInput.Messages)-1].Content
+	require.Contains(t, prompt, "[v1.1 · bản 1/2, upload 29/09/2026 16:30 | URD.docx]\nDanh sách bệnh nhân")
+	require.Contains(t, prompt, "[v1.1 · bản 2/2, mới nhất, upload 29/09/2026 17:30 | URD.docx]\nHiển thị toast khi mất mạng (AI)")
+	require.Contains(t, prompt, "- URD app: v1.1 · bản 1/2")
+	require.Len(t, answer.Citations, 2)
+}
+
+func TestEvidenceUnits_TachTheoBanChiKhiTaiLieuCoNhieuBan(t *testing.T) {
+	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.0"}
+	v11 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.1"}
+	urd, prd := uuid.New(), uuid.New()
+	refs := []retrievaldomain.RevisionRef{
+		{DocumentID: prd, Scope: v10, RAGFlowDocumentID: "prd-10", RevisionNo: 1},
+		{DocumentID: urd, Scope: v11, RAGFlowDocumentID: "urd-2", RevisionNo: 2},
+		{DocumentID: urd, Scope: v11, RAGFlowDocumentID: "urd-1", RevisionNo: 1},
+		{DocumentID: prd, Scope: v11, RAGFlowDocumentID: "prd-11", RevisionNo: 3},
+	}
+
+	units := evidenceUnits([]retrievaldomain.ResolvedScope{v10, v11}, refs, revisionOrdinals(refs))
+
+	require.Equal(t, []evidenceUnit{
+		{scopeID: v10.ID, remoteIDs: []string{"prd-10"}},
+		// Tài liệu chỉ có 1 bản ở v1.1 (PRD) đi cùng mốc đầu của v1.1.
+		{scopeID: v11.ID, remoteIDs: []string{"urd-1", "prd-11"}},
+		{scopeID: v11.ID, remoteIDs: []string{"urd-2"}},
+	}, units)
+}
+
 func TestComparedVersions_KhongNhanNhamVersionTienTo(t *testing.T) {
 	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.0"}
 	v101 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.0.1"}
@@ -281,7 +353,7 @@ func TestAsk_DungRAGFlowChatVaMapCitationLocal(t *testing.T) {
 	require.True(t, answer.Grounded)
 	require.Equal(t, "Quy trình đã được cập nhật.", answer.Answer)
 	require.Equal(t, "qwen@ragflow", repo.saved.Model)
-	require.Equal(t, "ragflow-chat-v2-planner", repo.saved.PromptVersion)
+	require.Equal(t, "ragflow-chat-v3-revisions", repo.saved.PromptVersion)
 	require.Len(t, repo.saved.Citations, 1)
 	require.Equal(t, documentID, repo.saved.Citations[0].DocumentID)
 	require.Equal(t, []string{"remote-doc-1"}, rag.metadataIDs)
