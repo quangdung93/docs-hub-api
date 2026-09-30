@@ -47,19 +47,22 @@ type UpdateRequest struct {
 }
 
 // UploadResponse mô tả document và revision vừa được đưa vào hàng đợi
-// ingestion. SuggestedDocType khác rỗng khi tiêu đề/tên file gợi ý đây là tài
-// liệu URD (URD v1.2 mục XI) và tài liệu chưa được xác nhận loại — FE hiện
-// popup xác nhận, gọi PATCH .../doc-type để chốt.
+// ingestion. SuggestedDocType là "urd" hoặc "prd" khi tiêu đề/tên file gợi ý
+// đây là tài liệu yêu cầu (URD v1.2 mục XI) và tài liệu chưa được xác nhận
+// loại — FE hiện popup xác nhận, gọi PATCH .../doc-type để chốt.
+//
+// Trường có omitempty: không gợi ý thì KEY BIẾN MẤT khỏi JSON, không phải
+// chuỗi rỗng. Client kiểm bằng so sánh giá trị, đừng giả định key luôn có.
 type UploadResponse struct {
 	Document         *domain.Document `json:"document"`
 	Revision         *domain.Revision `json:"revision"`
 	SuggestedDocType string           `json:"suggested_doc_type,omitempty"`
 }
 
-// ConfirmDocTypeRequest xác nhận (doc_type="urd") hoặc từ chối (doc_type="")
-// gợi ý loại tài liệu, kèm optimistic lock qua version.
+// ConfirmDocTypeRequest xác nhận (doc_type="urd" hoặc "prd") hoặc từ chối
+// (doc_type="") gợi ý loại tài liệu, kèm optimistic lock qua version.
 type ConfirmDocTypeRequest struct {
-	DocType string `json:"doc_type" binding:"omitempty,oneof=urd"`
+	DocType string `json:"doc_type" binding:"omitempty,oneof=urd prd"`
 	Version int    `json:"version" binding:"required,min=1"`
 }
 
@@ -342,7 +345,8 @@ func (h *Handler) Update(c *gin.Context) {
 // ConfirmDocType godoc
 // @Summary Xác nhận (hoặc từ chối) loại tài liệu URD
 // @Description Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).
-// @Description doc_type="urd" để xác nhận, để trống để từ chối gợi ý.
+// @Description doc_type="urd" hoặc "prd" để xác nhận, để trống để từ chối gợi ý.
+// @Description Cả hai loại đều mở khoá luồng AI phân tích edge case.
 // @Tags urd
 // @Security BearerAuth
 // @Accept json

@@ -34,9 +34,53 @@ const (
 	ScopeKindChangeRequest = "change_request"
 )
 
-// DocTypeURD là giá trị Document.DocType khi người dùng xác nhận tài liệu là
-// URD (xem URD v1.2 mục XI) — mở khoá luồng AI phân tích edge case.
-const DocTypeURD = "urd"
+// RevisionStatusArchived là trạng thái đánh dấu revision đã bị lưu trữ vì tài
+// liệu chứa nó bị xoá. Giá trị này KHÔNG phải một trạng thái ingest — nó là
+// điều kiện của hai chỉ số duy nhất nội dung trong migrations/000007:
+//
+//	WHERE ... AND status <> 'archived'
+//
+// nên đánh dấu ở đây là nhả sha256, cho phép tải lại đúng file đó lên sau khi
+// xoá. Đổi chuỗi này là phải đổi cả hai chỉ số kia.
+const RevisionStatusArchived = "archived"
+
+// Giá trị Document.DocType khi người dùng xác nhận loại tài liệu — mở khoá
+// luồng AI phân tích edge case (xem URD v1.2 mục XI).
+const (
+	DocTypeURD = "urd" // User Requirement Document
+	DocTypePRD = "prd" // Product Requirement Document
+)
+
+// AnalyzableDocTypes là các loại tài liệu được phân tích edge case. Một danh
+// sách duy nhất cho toàn repo: module urd hỏi "tài liệu này phân tích được
+// không", còn ConfirmDocType hỏi "giá trị này hợp lệ không" — trước đây hai
+// câu hỏi đó được viết rời thành hai điều kiện so sánh thẳng với hằng, thêm
+// loại mới là phải nhớ sửa cả hai chỗ.
+func AnalyzableDocTypes() []string { return []string{DocTypeURD, DocTypePRD} }
+
+// IsAnalyzableDocType báo doc_type có thuộc nhóm phân tích được hay không.
+// Chuỗi rỗng (chưa xác nhận) trả false.
+func IsAnalyzableDocType(docType string) bool {
+	for _, t := range AnalyzableDocTypes() {
+		if docType == t {
+			return true
+		}
+	}
+	return false
+}
+
+// DocTypeLabel trả tên đầy đủ dùng trong prompt gửi AI và thông báo cho người
+// dùng. Loại lạ trả về chính giá trị đó để không nuốt mất thông tin.
+func DocTypeLabel(docType string) string {
+	switch docType {
+	case DocTypeURD:
+		return "URD (User Requirement Document)"
+	case DocTypePRD:
+		return "PRD (Product Requirement Document)"
+	default:
+		return docType
+	}
+}
 
 type Document struct {
 	ID          uuid.UUID `json:"id"`
@@ -45,8 +89,8 @@ type Document struct {
 	Title       string    `json:"title"`
 	Key         string    `json:"document_key"`
 	Description string    `json:"description"`
-	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị
-	// "urd" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.
+	// DocType rỗng nghĩa là chưa xác định/chưa xác nhận; giá trị hợp lệ là
+	// "urd" hoặc "prd", do người dùng xác nhận qua ConfirmDocType.
 	DocType string `json:"doc_type,omitempty"`
 	Version int    `json:"version"`
 	// DocumentVersion và UploadedAt là metadata của revision được upload gần
@@ -114,6 +158,7 @@ type CreateRevisionParams struct {
 	Scope                                                                       Scope
 	Title, Description, DocumentVersion, FileName, MediaType, SHA256, ObjectKey string
 	SizeBytes                                                                   int64
+	AutoVersion                                                                 bool
 }
 
 type Repository interface {
@@ -129,7 +174,15 @@ type Repository interface {
 	Update(ctx context.Context, projectID, documentID uuid.UUID, title, description string, version int) (*Document, error)
 	// SetDocType xác nhận/đổi loại tài liệu (optimistic lock qua version, cùng
 	// cơ chế với Update) — dùng cho luồng xác nhận URD (URD v1.2 mục XI).
-	SetDocType(ctx context.Context, projectID, documentID uuid.UUID, docType string, version int) (*Document, error)
+	//
+	// Nhận actor để ghi audit log: đây là thao tác mở khoá cả luồng phân tích
+	// AI và có thể gán sai loại cho tài liệu của người khác, nhưng trước đây
+	// KHÔNG để lại dấu vết nào (Retry và SoftDelete đều có ghi). Ngày 25/09 có
+	// ba tài liệu bị gán nhãn URD nhầm mà không tra được ai gán lúc nào, phải
+	// suy ngược từ cột version và updated_at.
+	SetDocType(
+		ctx context.Context, projectID, documentID uuid.UUID, docType string, version int, actor uuid.UUID,
+	) (*Document, error)
 	Retry(ctx context.Context, projectID, documentID, revisionID, actorID uuid.UUID) error
 	SoftDelete(ctx context.Context, projectID, documentID, actorID uuid.UUID) error
 

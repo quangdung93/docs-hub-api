@@ -77,9 +77,10 @@ type SummaryItem struct {
 }
 
 // Analyze godoc
-// @Summary Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD
-// @Description Tài liệu phải đã được xác nhận doc_type=urd (PATCH .../documents/{document_id}/doc-type)
-// @Description và có revision mới nhất đã ingest xong (status=ready).
+// @Summary Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD/PRD
+// @Description Tài liệu phải đã được xác nhận doc_type="urd" hoặc "prd"
+// @Description (PATCH .../documents/{document_id}/doc-type) và có revision mới nhất
+// @Description đã ingest xong (status=ready). Prompt gửi AI nêu đúng loại tài liệu.
 // @Tags urd
 // @Security BearerAuth
 // @Produce json
@@ -127,6 +128,37 @@ func (h *Handler) GetAnalysis(c *gin.Context) {
 		return
 	}
 	response.OK(c, AnalysisResponse{Analysis: a, Cases: cases})
+}
+
+// CancelAnalysis godoc
+// @Summary Huỷ 1 phân tích edge case đang dở
+// @Description Gỡ khoá tài liệu để phân tích lại. Dùng khi bấm phân tích nhầm tài
+// @Description liệu, hoặc không muốn nhập hết hướng giải quyết cho danh sách case
+// @Description đã sinh ra. Bản ghi được chuyển sang status="cancelled" chứ không xoá,
+// @Description toàn bộ hướng giải quyết đã nhập sẽ KHÔNG dùng được nữa.
+// @Description Phân tích đã completed/failed/cancelled trả URD_ANALYSIS_NOT_ACTIVE.
+// @Tags urd
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Project ID" format(uuid)
+// @Param document_id path string true "Document ID" format(uuid)
+// @Param analysis_id path string true "Analysis ID" format(uuid)
+// @Success 200 {object} response.Envelope{data=domain.Analysis}
+// @Failure 401 {object} response.Envelope
+// @Failure 403 {object} response.Envelope
+// @Failure 404 {object} response.Envelope
+// @Router /internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id} [delete]
+func (h *Handler) CancelAnalysis(c *gin.Context) {
+	pid, did, aid, ok := analysisIDs(c)
+	if !ok {
+		return
+	}
+	a, err := h.svc.Cancel(c.Request.Context(), pid, did, aid)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	response.OK(c, a)
 }
 
 // UploadCaseImage godoc
@@ -236,6 +268,9 @@ func (h *Handler) SubmitResolutions(c *gin.Context) {
 // @Summary Tóm tắt độ hoàn thiện URD của toàn bộ tài liệu trong project
 // @Description Dùng hiển thị cột "Hoàn thiện" trong bảng Quản lý dự án — chỉ tài
 // @Description liệu nào đã từng phân tích mới xuất hiện trong kết quả.
+// @Description Trả phân tích MỚI NHẤT của mỗi tài liệu, kể cả status="cancelled"
+// @Description (người dùng đã huỷ). Hiển thị dòng cancelled như "Chưa phân tích":
+// @Description tài liệu đó phân tích lại được ngay, không còn bị khoá.
 // @Tags urd
 // @Security BearerAuth
 // @Produce json

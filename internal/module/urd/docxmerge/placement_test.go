@@ -101,6 +101,99 @@ func TestMerge_MucCuoiTaiLieu_ChenTruocSectPr(t *testing.T) {
 		strings.Index(content, "<w:sectPr"))
 }
 
+// mucCoMucConXML mô phỏng đúng dạng URD của team (đo trên ISC_MBX URD v1.0):
+// mỗi chức năng là 1 mục H2, bên trong có các mục con H3 Workflow / Business
+// rules / Wireframe, và mục con cuối kết thúc bằng 1 dòng chú thích ảnh CĂN
+// GIỮA. AI chỉ vào tên chức năng (mục H2) vì đó là tiêu đề duy nhất — tên các
+// mục con lặp lại ở mọi chức năng nên không khớp được.
+const mucCoMucConXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Danh sach hop dong</w:t></w:r></w:p>
+<w:p><w:r><w:t>Man hinh liet ke hop dong theo khach hang</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Workflow:</w:t></w:r></w:p>
+<w:p><w:r><w:t>Nhan vien mo man hinh danh sach</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Business rules (BR):</w:t></w:r></w:p>
+<w:p><w:r><w:t>BR-01 Moi trang toi da 50 dong</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Wireframe, Screen description:</w:t></w:r></w:p>
+<w:p><w:pPr><w:jc w:val="center"/><w:ind w:left="720"/></w:pPr><w:r><w:t>Hinh 1: Man hinh danh sach</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Chi tiet hop dong</w:t></w:r></w:p>
+<w:p><w:r><w:t>Noi dung chi tiet</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+
+// Mục AI chỉ định CÓ mục con: nội dung phải nằm ngay dưới tên mục đó, KHÔNG
+// được trôi xuống cuối mục con cuối cùng. Bản đầu dừng theo cấp tiêu đề nên
+// 15/15 dòng rơi vào "Wireframe, Screen description:" của URD Mobix.
+func TestMerge_MucCoMucCon_ChenNgayDuoiTieuDeChuKhongTroiXuongMucConCuoi(t *testing.T) {
+	content := mergeStructured(t, mucCoMucConXML, []domain.EdgeCase{
+		edgeCase("Hop dong khong co hoa don thi sao?", "An nut thanh toan", "Danh sach hop dong"),
+	})
+
+	require.NotContains(t, content, "Phụ lục: Edge Case bổ sung (AI)")
+	require.Greater(t, strings.Index(content, "An nut thanh toan"),
+		strings.Index(content, "Man hinh liet ke hop dong theo khach hang"),
+		"phải nằm sau nội dung sẵn có của mục")
+	require.Less(t, strings.Index(content, "An nut thanh toan"),
+		strings.Index(content, "Workflow:"),
+		"KHÔNG được trôi qua mục con đầu tiên")
+	require.Less(t, strings.Index(content, "An nut thanh toan"),
+		strings.Index(content, "Wireframe, Screen description:"),
+		"KHÔNG được rơi xuống mục con cuối cùng")
+}
+
+// Hệ quả thứ hai của lỗi cũ: đoạn chèn kế thừa <w:pPr> của đoạn cuối mục con
+// Wireframe — vốn là chú thích ảnh căn giữa — nên quy tắc nghiệp vụ hiện ra
+// giữa trang như chú thích ảnh (8/15 dòng trên URD Mobix).
+func TestMerge_MucCoMucCon_KhongKeThuaDinhDangChuThichAnh(t *testing.T) {
+	content := mergeStructured(t, mucCoMucConXML, []domain.EdgeCase{
+		edgeCase("Loc theo khoang ngay qua dai?", "Gioi han 12 thang", "Danh sach hop dong"),
+	})
+
+	doan := doanChuaChuoi(t, content, "Gioi han 12 thang")
+	require.NotContains(t, doan, `<w:jc w:val="center"/>`, "không được căn giữa như chú thích ảnh")
+	require.NotContains(t, doan, `<w:ind w:left="720"/>`, "không được thụt lề theo chú thích ảnh")
+}
+
+// Tiêu đề cha đi liền tiêu đề con (mục không có nội dung trực tiếp): đoạn chèn
+// thành dòng đầu của mục, nằm giữa hai tiêu đề, không kế thừa style của ai.
+func TestMerge_MucKhongCoNoiDungTrucTiep_ChenGiuaHaiTieuDe(t *testing.T) {
+	const lienTiep = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Gia han</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>Workflow:</w:t></w:r></w:p>
+<w:p><w:r><w:t>Nhan vien bam Gia han</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+
+	content := mergeStructured(t, lienTiep, []domain.EdgeCase{
+		edgeCase("Goi API gia han bi loi mang?", "Bao loi va giu nguyen man hinh", "Gia han"),
+	})
+
+	require.Greater(t, strings.Index(content, "Bao loi va giu nguyen man hinh"),
+		strings.Index(content, "Gia han"))
+	require.Less(t, strings.Index(content, "Bao loi va giu nguyen man hinh"),
+		strings.Index(content, "Workflow:"))
+	require.Contains(t, content,
+		`<w:p><w:r><w:t xml:space="preserve">Goi API gia han bi loi mang?`,
+		"không có nội dung trực tiếp thì đoạn chèn không mang pPr nào")
+}
+
+// doanChuaChuoi trả về nguyên văn <w:p>…</w:p> chứa chuỗi cần tìm, để soi
+// riêng phần định dạng của đúng đoạn đó.
+func doanChuaChuoi(t *testing.T, content, canTim string) string {
+	t.Helper()
+	viTri := strings.Index(content, canTim)
+	require.GreaterOrEqual(t, viTri, 0, "không tìm thấy %q trong document.xml", canTim)
+	dau := strings.LastIndex(content[:viTri], "<w:p>")
+	if moKemThuocTinh := strings.LastIndex(content[:viTri], "<w:p "); moKemThuocTinh > dau {
+		dau = moKemThuocTinh
+	}
+	require.GreaterOrEqual(t, dau, 0, "không tìm thấy thẻ mở <w:p> của đoạn")
+	cuoi := strings.Index(content[viTri:], "</w:p>")
+	require.GreaterOrEqual(t, cuoi, 0, "không tìm thấy thẻ đóng </w:p> của đoạn")
+	return content[dau : viTri+cuoi]
+}
+
 // AI copy tiêu đề từ bản text trích xuất (parser thêm tiền tố "#") — bỏ "#",
 // khoảng trắng thừa và khác hoa/thường vẫn phải khớp đúng mục.
 func TestMerge_KhopTieuDeDuCoTienToThangVaKhacHoaThuong(t *testing.T) {

@@ -69,4 +69,9 @@ const (
 	// chưa nhập hướng giải quyết nên chưa thể tạo phiên bản URD mới. Cần TL
 	// duyệt (xem ADR-0011).
 	URDCaseUnresolved = "URD_CASE_UNRESOLVED" // Còn edge case chưa nhập hướng giải quyết
+	// URDAnalysisNotActive — mã nghiệp vụ BỔ SUNG cho module urd: huỷ một
+	// phân tích đã completed/failed/cancelled. Tách riêng khỏi NotFound để
+	// client phân biệt "gọi nhầm id" với "đã xong rồi, không còn gì để huỷ" —
+	// hai cái cần thông báo khác nhau.
+	URDAnalysisNotActive = "URD_ANALYSIS_NOT_ACTIVE" // Phân tích edge case không còn đang dở
 )

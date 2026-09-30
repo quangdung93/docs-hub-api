@@ -7,6 +7,7 @@ func Register(rg *gin.RouterGroup, h *Handler) {
 	g := rg.Group("/projects/:id/documents/:document_id/urd")
 	g.POST("/analyze", h.Analyze)
 	g.GET("/analyses/:analysis_id", h.GetAnalysis)
+	g.DELETE("/analyses/:analysis_id", h.CancelAnalysis)
 	g.POST("/analyses/:analysis_id/cases/:case_id/image", h.UploadCaseImage)
 	g.POST("/analyses/:analysis_id/resolutions", h.SubmitResolutions)
 }

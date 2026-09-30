@@ -162,6 +162,38 @@ func (r *Repository) MarkCompleted(ctx context.Context, analysisID uuid.UUID) (*
 	return &a, nil
 }
 
+// Cancel chuyển phân tích đang dở sang cancelled, gỡ khoá tài liệu để phân
+// tích lại được.
+//
+// Điều kiện status nằm THẲNG trong câu UPDATE chứ không đọc rồi mới ghi: hai
+// người cùng bấm huỷ, hoặc huỷ đúng lúc lời gọi resolutions cuối cùng đang
+// chạy, thì chỉ một bên đổi được trạng thái — bên kia nhận RowsAffected=0 và
+// báo ErrAnalysisNotActive thay vì ghi đè kết quả của nhau.
+func (r *Repository) Cancel(ctx context.Context, analysisID uuid.UUID) (*domain.Analysis, error) {
+	db := postgres.DBFrom(ctx, r.db)
+	res := db.Model(&analysisModel{}).
+		Where("id=? AND status IN ?", analysisID, domain.ActiveStatuses()).
+		Updates(map[string]any{"status": domain.StatusCancelled, "updated_at": time.Now().UTC()})
+	if res.Error != nil {
+		return nil, fmt.Errorf("huỷ phân tích: %w", postgres.Translate(res.Error))
+	}
+	if res.RowsAffected == 0 {
+		// Không đổi được: hoặc id sai, hoặc phân tích đã rời trạng thái hoạt
+		// động. Đọc lại để phân biệt hai ca cho client.
+		var am analysisModel
+		if err := db.First(&am, "id=?", analysisID).Error; err != nil {
+			return nil, mapErr(err)
+		}
+		return nil, domain.ErrAnalysisNotActive
+	}
+	var am analysisModel
+	if err := db.First(&am, "id=?", analysisID).Error; err != nil {
+		return nil, mapErr(err)
+	}
+	a := toAnalysis(am)
+	return &a, nil
+}
+
 // Summaries trả phân tích MỚI NHẤT (theo created_at) của mỗi document còn
 // sống thuộc project — dùng hiển thị cột "Hoàn thiện" trong bảng danh sách
 // tài liệu. Lấy toàn bộ rồi chọn bản ghi đầu tiên mỗi document_id trong Go

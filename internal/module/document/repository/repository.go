@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +22,21 @@ import (
 type Repository struct{ db *gorm.DB }
 
 func New(db *gorm.DB) *Repository { return &Repository{db: db} }
+
+// Tên cột của bảng audit_logs và giá trị entity_type. Gom thành hằng vì file
+// này ghi audit ở BA chỗ (Retry, SetDocType, SoftDelete) — gõ tay mỗi chỗ thì
+// sai một ký tự là dòng audit vào nhầm cột mà không ai biết, và goconst cũng
+// chặn khi một chuỗi lặp từ 3 lần trở lên.
+const (
+	cotActorUserID = "actor_user_id"
+	cotProjectID   = "project_id"
+	cotAction      = "action"
+	cotEntityType  = "entity_type"
+	cotEntityID    = "entity_id"
+	cotMetadata    = "metadata"
+
+	entityDocument = "document"
+)
 
 type documentModel struct {
 	ID, ProjectID, Title, DocumentKey, Description, SourceType, CreatedBy string
@@ -100,9 +117,43 @@ func (r *Repository) ScopeExists(ctx context.Context, projectID uuid.UUID, s dom
 }
 func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisionParams) (*domain.Document, *domain.Revision, error) {
 	db := postgres.DBFrom(ctx, r.db)
+	// Serialize uploads by project and normalized file name so concurrent
+	// requests cannot allocate the same document version (including explicit
+	// document_id uploads across different scopes).
+	if in.AutoVersion {
+		fileIdentity := in.ProjectID.String() + ":" + strings.ToLower(in.FileName)
+		if err := db.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, fileIdentity).Error; err != nil {
+			return nil, nil, fmt.Errorf("khoa version tai lieu: %w", err)
+		}
+	}
 	var d documentModel
 	err := db.First(&d, "id=? AND project_id=?", in.DocumentID, in.ProjectID).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, gorm.ErrRecordNotFound) && in.AutoVersion {
+		// Reuse only within the same project and selected version/change request.
+		// A file with the same name in another scope starts a new logical document.
+		q := db.Table("documents AS d").Select("d.*").
+			Joins("JOIN document_revisions r ON r.document_id=d.id").
+			Where("d.project_id=? AND d.deleted_at IS NULL AND LOWER(r.file_name)=LOWER(?)", in.ProjectID, in.FileName)
+		if in.Scope.VersionID != nil {
+			q = q.Where("r.project_version_id=?", *in.Scope.VersionID)
+		} else {
+			q = q.Where("r.change_request_id=?", *in.Scope.ChangeRequestID)
+		}
+		err = q.Order("r.revision_no DESC").Limit(1).Scan(&d).Error
+		if err != nil {
+			return nil, nil, mapErr(err)
+		}
+		if d.ID == "" {
+			d = documentModel{
+				ID: in.DocumentID.String(), ProjectID: in.ProjectID.String(), Title: in.Title,
+				DocumentKey: in.DocumentID.String(), Description: in.Description,
+				SourceType: "upload", CreatedBy: in.ActorID.String(), Version: 1,
+			}
+			if err := db.Create(&d).Error; err != nil {
+				return nil, nil, fmt.Errorf("tạo document: %w", err)
+			}
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		d = documentModel{
 			ID: in.DocumentID.String(), ProjectID: in.ProjectID.String(), Title: in.Title,
 			DocumentKey: in.DocumentID.String(), Description: in.Description,
@@ -118,9 +169,13 @@ func (r *Repository) CreateRevision(ctx context.Context, in domain.CreateRevisio
 	if err := db.Model(&revisionModel{}).Where("document_id=?", d.ID).Count(&n).Error; err != nil {
 		return nil, nil, err
 	}
+	documentVersion := in.DocumentVersion
+	if in.AutoVersion {
+		documentVersion = strconv.FormatInt(n+1, 10)
+	}
 	m := revisionModel{
 		ID: in.RevisionID.String(), DocumentID: d.ID, ProjectID: in.ProjectID.String(),
-		RevisionNo: int(n) + 1, DocumentVersion: in.DocumentVersion,
+		RevisionNo: int(n) + 1, DocumentVersion: documentVersion,
 		FileName: in.FileName, MediaType: in.MediaType,
 		SizeBytes: in.SizeBytes, SHA256: in.SHA256, ObjectKey: in.ObjectKey,
 		Status: "queued", CreatedBy: in.ActorID.String(),
@@ -153,8 +208,8 @@ func (r *Repository) enqueue(ctx context.Context, m *revisionModel, actor uuid.U
 		return fmt.Errorf("tạo outbox: %w", err)
 	}
 	audit := map[string]any{
-		"id": auditID, "actor_user_id": actor, "project_id": m.ProjectID,
-		"action": action, "entity_type": "document_revision", "entity_id": m.ID, "metadata": "{}",
+		"id": auditID, cotActorUserID: actor, cotProjectID: m.ProjectID,
+		cotAction: action, cotEntityType: "document_revision", cotEntityID: m.ID, cotMetadata: "{}",
 	}
 	return db.Table("audit_logs").Create(audit).Error
 }
@@ -181,8 +236,8 @@ func (r *Repository) CompleteUpload(ctx context.Context, u *domain.Upload) (*dom
 	params := domain.CreateRevisionParams{
 		DocumentID: u.DocumentID, RevisionID: u.RevisionID, ProjectID: u.ProjectID,
 		ActorID: u.CreatedBy, Scope: u.Scope, Title: u.Title, Description: u.Description,
-		DocumentVersion: u.DocumentVersion, FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
-		ObjectKey: u.ObjectKey, SizeBytes: u.SizeBytes,
+		FileName: u.FileName, MediaType: u.MediaType, SHA256: u.SHA256,
+		ObjectKey: u.ObjectKey, SizeBytes: u.SizeBytes, AutoVersion: true,
 	}
 	d, rev, err := r.CreateRevision(ctx, params)
 	if err != nil {
@@ -295,17 +350,39 @@ func (r *Repository) Update(ctx context.Context, pid, did uuid.UUID, title, desc
 	d, _, err := r.FindDocument(ctx, pid, did)
 	return d, err
 }
-func (r *Repository) SetDocType(ctx context.Context, pid, did uuid.UUID, docType string, v int) (*domain.Document, error) {
+func (r *Repository) SetDocType(
+	ctx context.Context, pid, did uuid.UUID, docType string, v int, actor uuid.UUID,
+) (*domain.Document, error) {
+	db := postgres.DBFrom(ctx, r.db)
+	// Đọc giá trị cũ TRƯỚC khi ghi đè — audit chỉ ghi giá trị mới thì không
+	// phân biệt được "gán nhãn lần đầu" với "gỡ nhãn người khác vừa đặt".
+	var truoc string
+	if err := db.Table("documents").Select("COALESCE(doc_type,'')").
+		Where("id=? AND project_id=?", did, pid).Scan(&truoc).Error; err != nil {
+		return nil, err
+	}
 	updates := map[string]any{
 		"doc_type": docType, "version": gorm.Expr("version+1"), "updated_at": time.Now().UTC(),
 	}
-	res := postgres.DBFrom(ctx, r.db).Model(&documentModel{}).
+	res := db.Model(&documentModel{}).
 		Where("id=? AND project_id=? AND version=?", did, pid, v).Updates(updates)
 	if res.Error != nil {
 		return nil, res.Error
 	}
 	if res.RowsAffected == 0 {
 		return nil, domain.ErrConflict
+	}
+	metadata, err := json.Marshal(map[string]string{"from": truoc, "to": docType})
+	if err != nil {
+		return nil, fmt.Errorf("dựng metadata audit doc_type: %w", err)
+	}
+	audit := map[string]any{
+		"id": uuid.New(), cotActorUserID: actor, cotProjectID: pid,
+		cotAction: "document.doc_type_changed", cotEntityType: entityDocument,
+		cotEntityID: did, cotMetadata: string(metadata),
+	}
+	if err := db.Table("audit_logs").Create(audit).Error; err != nil {
+		return nil, fmt.Errorf("ghi audit doc_type: %w", err)
 	}
 	d, _, err := r.FindDocument(ctx, pid, did)
 	return d, err
@@ -326,25 +403,39 @@ func (r *Repository) Retry(ctx context.Context, pid, did, rid, actor uuid.UUID) 
 	return r.enqueue(ctx, &m, actor, "document.retry")
 }
 func (r *Repository) SoftDelete(ctx context.Context, pid, did, actor uuid.UUID) error {
-	res := postgres.DBFrom(ctx, r.db).Where("id=? AND project_id=?", did, pid).Delete(&documentModel{})
+	db := postgres.DBFrom(ctx, r.db)
+	res := db.Where("id=? AND project_id=?", did, pid).Delete(&documentModel{})
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
 		return domain.ErrNotFound
 	}
+	// Nhả sha256 của tài liệu vừa xoá. Hai chỉ số uk_revisions_*_hash là chỉ số
+	// riêng phần loại trừ 'archived'; revision của tài liệu đã xoá không được
+	// tiếp tục chặn upload lại cùng nội dung.
+	//
+	// Làm đồng bộ trong cùng transaction với xoá mềm và outbox (Service.Delete
+	// bọc TxManager), không phụ thuộc vào worker dọn dẹp RAGFlow.
+	if err := db.Model(&revisionModel{}).
+		Where("document_id=? AND project_id=? AND status<>?", did, pid, domain.RevisionStatusArchived).
+		Updates(map[string]any{
+			"status": domain.RevisionStatusArchived, "updated_at": time.Now().UTC(),
+		}).Error; err != nil {
+		return fmt.Errorf("lưu trữ revision: %w", err)
+	}
 	payload, _ := json.Marshal(map[string]string{"document_id": did.String(), "project_id": pid.String()})
-	if err := postgres.DBFrom(ctx, r.db).Table("outbox_events").Create(map[string]any{
+	if err := db.Table("outbox_events").Create(map[string]any{
 		"id": uuid.New(), "topic": "document.cleanup", "aggregate_type": "document",
 		"aggregate_id": did, "payload": string(payload), "status": "pending",
 	}).Error; err != nil {
 		return fmt.Errorf("tạo cleanup event: %w", err)
 	}
 	audit := map[string]any{
-		"id": uuid.New(), "actor_user_id": actor, "project_id": pid,
-		"action": "document.deleted", "entity_type": "document", "entity_id": did, "metadata": "{}",
+		"id": uuid.New(), cotActorUserID: actor, cotProjectID: pid,
+		cotAction: "document.deleted", cotEntityType: entityDocument, cotEntityID: did, cotMetadata: "{}",
 	}
-	return postgres.DBFrom(ctx, r.db).Table("audit_logs").Create(audit).Error
+	return db.Table("audit_logs").Create(audit).Error
 }
 func (r *Repository) ProjectMeta(ctx context.Context, pid uuid.UUID) (string, string, error) {
 	var m struct{ Name, Code string }

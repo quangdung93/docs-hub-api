@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/domain"
 	"github.com/quangdung93/docs-hub-api/internal/module/document/repository"
 )
@@ -95,6 +96,46 @@ func TestCreateRevision_TrungNoiDungTrongCungChangeRequest(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrDuplicateContent)
 }
 
+// Xoá mềm phải giải phóng hash ở cả hai unique index, nhưng vẫn giữ revision
+// cũ để cleanup RAGFlow có thể đọc remote ID sau khi transaction commit.
+func TestSoftDelete_ChoPhepUploadLaiCungNoiDung(t *testing.T) {
+	for _, kind := range []string{"version", "change_request"} {
+		t.Run(kind, func(t *testing.T) {
+			db := openTestDB(t)
+			repo := repository.New(db)
+			ctx := context.Background()
+			pid, vid, _, cr, actor := duLieuScope(t, db)
+			scope := domain.Scope{VersionID: &vid}
+			if kind == "change_request" {
+				scope = domain.Scope{ChangeRequestID: &cr}
+			}
+			sha := sha64("deleted-" + kind + "-" + pid.String())
+			first, oldRevision, err := repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.NoError(t, err)
+
+			err = postgres.NewTxManager(db).Do(ctx, func(txctx context.Context) error {
+				return repo.SoftDelete(txctx, pid, first.ID, actor)
+			})
+			require.NoError(t, err)
+			var oldStatus string
+			require.NoError(t, db.Table("document_revisions").Select("status").
+				Where("id=?", oldRevision.ID).Scan(&oldStatus).Error)
+			require.Equal(t, "archived", oldStatus)
+			var cleanupCount int64
+			require.NoError(t, db.Table("outbox_events").Where("aggregate_id=? AND topic='document.cleanup'", first.ID).
+				Count(&cleanupCount).Error)
+			require.Equal(t, int64(1), cleanupCount)
+
+			second, _, err := repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.NoError(t, err, "tài liệu đã xoá không còn chặn hash trong cùng scope")
+			require.NotEqual(t, first.ID, second.ID)
+			_, _, err = repo.CreateRevision(ctx, thamSo(pid, actor, scope, sha))
+			require.ErrorIs(t, err, domain.ErrDuplicateContent,
+				"revision của tài liệu còn sống vẫn phải chặn trùng")
+		})
+	}
+}
+
 // Chỉ số là RIÊNG PHẦN theo scope: cùng nội dung nhưng khác version thì hợp lệ.
 // Nếu bản sửa bắt trùng rộng tay hơn ràng buộc thì test này đỏ.
 func TestCreateRevision_KhacVersionThiKhongTinhLaTrung(t *testing.T) {
@@ -131,4 +172,122 @@ func TestCreateRevision_TrungObjectKeyVanLaLoiKyThuat(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, domain.ErrDuplicateContent,
 		"trùng object_key là lỗi nội bộ, không được đội lốt lỗi nghiệp vụ")
+}
+
+func TestCreateRevision_TrungTenCungProjectVersionTuTangVersion(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, versionA, _, _, actor := duLieuScope(t, db)
+
+	first := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("same-name-v1"))
+	first.FileName = "Spec.TXT"
+	first.AutoVersion = true
+	doc1, rev1, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+	require.Equal(t, "1", rev1.DocumentVersion)
+
+	second := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("same-name-v2"))
+	second.FileName = "spec.txt"
+	second.AutoVersion = true
+	doc2, rev2, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.Equal(t, doc1.ID, doc2.ID)
+	require.Equal(t, 2, rev2.RevisionNo)
+	require.Equal(t, "2", rev2.DocumentVersion)
+}
+
+func TestCreateRevision_TrungTenKhacProjectVersionKhongTangVersion(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, versionA, versionB, _, actor := duLieuScope(t, db)
+
+	first := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("scope-v1"))
+	first.FileName, first.AutoVersion = "Spec.TXT", true
+	docA, revA, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+	require.Equal(t, "1", revA.DocumentVersion)
+
+	second := thamSo(pid, actor, domain.Scope{VersionID: &versionB}, sha64("scope-v2"))
+	second.FileName, second.AutoVersion = "spec.txt", true
+	docB, revB, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.NotEqual(t, docA.ID, docB.ID)
+	require.Equal(t, 1, revB.RevisionNo)
+	require.Equal(t, "1", revB.DocumentVersion)
+
+	third := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("scope-v1-next"))
+	third.FileName, third.AutoVersion = "SPEC.txt", true
+	docA2, revA2, err := repo.CreateRevision(ctx, third)
+	require.NoError(t, err)
+	require.Equal(t, docA.ID, docA2.ID)
+	require.Equal(t, "2", revA2.DocumentVersion)
+}
+
+func TestCreateRevision_TrungTenKhacProjectKhongTangVersion(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pidA, versionA, _, _, actorA := duLieuScope(t, db)
+	pidB, versionB, _, _, actorB := duLieuScope(t, db)
+
+	first := thamSo(pidA, actorA, domain.Scope{VersionID: &versionA}, sha64("project-a"))
+	first.AutoVersion = true
+	docA, _, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+
+	second := thamSo(pidB, actorB, domain.Scope{VersionID: &versionB}, sha64("project-b"))
+	second.AutoVersion = true
+	docB, revB, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.NotEqual(t, docA.ID, docB.ID)
+	require.Equal(t, 1, revB.RevisionNo)
+	require.Equal(t, "1", revB.DocumentVersion)
+}
+
+func TestCreateRevision_TrungTenKhacChangeRequestKhongTangVersion(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, versionID, _, crID, actor := duLieuScope(t, db)
+
+	first := thamSo(pid, actor, domain.Scope{VersionID: &versionID}, sha64("version-file"))
+	first.AutoVersion = true
+	docVersion, _, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+
+	second := thamSo(pid, actor, domain.Scope{ChangeRequestID: &crID}, sha64("cr-file"))
+	second.AutoVersion = true
+	docCR, revCR, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.NotEqual(t, docVersion.ID, docCR.ID)
+	require.Equal(t, "1", revCR.DocumentVersion)
+
+	third := thamSo(pid, actor, domain.Scope{ChangeRequestID: &crID}, sha64("cr-file-next"))
+	third.AutoVersion = true
+	docCR2, revCR2, err := repo.CreateRevision(ctx, third)
+	require.NoError(t, err)
+	require.Equal(t, docCR.ID, docCR2.ID)
+	require.Equal(t, "2", revCR2.DocumentVersion)
+}
+
+func TestCreateRevision_ChiDinhDocumentIDVanThemRevisionChoTaiLieuCu(t *testing.T) {
+	db := openTestDB(t)
+	repo := repository.New(db)
+	ctx := context.Background()
+	pid, versionA, versionB, _, actor := duLieuScope(t, db)
+
+	first := thamSo(pid, actor, domain.Scope{VersionID: &versionA}, sha64("explicit-v1"))
+	first.AutoVersion = true
+	doc, _, err := repo.CreateRevision(ctx, first)
+	require.NoError(t, err)
+
+	second := thamSo(pid, actor, domain.Scope{VersionID: &versionB}, sha64("explicit-v2"))
+	second.DocumentID, second.AutoVersion = doc.ID, true
+	updated, revision, err := repo.CreateRevision(ctx, second)
+	require.NoError(t, err)
+	require.Equal(t, doc.ID, updated.ID)
+	require.Equal(t, 2, revision.RevisionNo)
+	require.Equal(t, "2", revision.DocumentVersion)
 }

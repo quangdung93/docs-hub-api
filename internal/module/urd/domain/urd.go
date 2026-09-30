@@ -18,7 +18,17 @@ const (
 	StatusAwaitingInput = "awaiting_input" // đã có danh sách, chờ người dùng nhập hướng giải quyết
 	StatusCompleted     = "completed"      // đã nhập đủ hướng giải quyết, đã tạo phiên bản URD mới
 	StatusFailed        = "failed"         // AI phân tích thất bại
+	// StatusCancelled: người dùng chủ động bỏ phân tích đang dở. Giữ lại bản
+	// ghi thay vì xoá để còn truy được tài liệu đã từng bị phân tích nhầm.
+	// Không nằm trong uk_urd_analyses_active nên huỷ xong là phân tích lại
+	// được ngay.
+	StatusCancelled = "cancelled"
 )
+
+// ActiveStatuses là các trạng thái bị uk_urd_analyses_active coi là "đang
+// hoạt động" — khớp đúng mệnh đề WHERE của chỉ số trong migration 000014.
+// Đổi ở đây mà quên đổi migration (hoặc ngược lại) là khoá tài liệu vĩnh viễn.
+func ActiveStatuses() []string { return []string{StatusAnalyzing, StatusAwaitingInput} }
 
 var (
 	ErrNotFound         = errors.New("không tìm thấy phân tích edge case")
@@ -26,6 +36,10 @@ var (
 	ErrRevisionNotReady = errors.New("phiên bản tài liệu chưa sẵn sàng để phân tích")
 	ErrAnalysisActive   = errors.New("tài liệu đang có phân tích edge case chưa hoàn tất")
 	ErrCaseUnresolved   = errors.New("còn edge case chưa nhập hướng giải quyết")
+	// ErrAnalysisNotActive: phân tích đã completed/failed/cancelled rồi nên
+	// không còn gì để huỷ. Tách riêng khỏi ErrNotFound để client nói đúng với
+	// người dùng thay vì báo "không tìm thấy".
+	ErrAnalysisNotActive = errors.New("phân tích edge case không còn đang dở")
 )
 
 // Analysis là một lần AI phân tích edge case cho 1 revision của tài liệu URD.
@@ -87,6 +101,9 @@ type Repository interface {
 	SaveResolutions(ctx context.Context, analysisID uuid.UUID, cases []EdgeCase) (*Analysis, error)
 	// MarkCompleted đánh dấu phân tích đã tạo xong phiên bản URD mới.
 	MarkCompleted(ctx context.Context, analysisID uuid.UUID) (*Analysis, error)
+	// Cancel chuyển phân tích đang dở sang cancelled để gỡ khoá tài liệu.
+	// Trả ErrAnalysisNotActive nếu phân tích đã rời trạng thái hoạt động.
+	Cancel(ctx context.Context, analysisID uuid.UUID) (*Analysis, error)
 	// Summaries trả phân tích mới nhất (theo created_at) của mỗi document còn
 	// sống thuộc project — dùng hiển thị cột "Hoàn thiện" trong bảng Quản lý
 	// dự án (chỉ document nào có phân tích mới xuất hiện trong map trả về).

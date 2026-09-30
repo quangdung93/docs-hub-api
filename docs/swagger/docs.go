@@ -1043,7 +1043,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Dùng hiển thị cột \"Hoàn thiện\" trong bảng Quản lý dự án — chỉ tài\nliệu nào đã từng phân tích mới xuất hiện trong kết quả.",
+                "description": "Dùng hiển thị cột \"Hoàn thiện\" trong bảng Quản lý dự án — chỉ tài\nliệu nào đã từng phân tích mới xuất hiện trong kết quả.\nTrả phân tích MỚI NHẤT của mỗi tài liệu, kể cả status=\"cancelled\"\n(người dùng đã huỷ). Hiển thị dòng cancelled như \"Chưa phân tích\":\ntài liệu đó phân tích lại được ngay, không còn bị khoá.",
                 "produces": [
                     "application/json"
                 ],
@@ -1311,7 +1311,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).\ndoc_type=\"urd\" để xác nhận, để trống để từ chối gợi ý.",
+                "description": "Chốt gợi ý loại tài liệu sau popup xác nhận khi upload (URD v1.2 mục XI).\ndoc_type=\"urd\" hoặc \"prd\" để xác nhận, để trống để từ chối gợi ý.\nCả hai loại đều mở khoá luồng AI phân tích edge case.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1872,6 +1872,85 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gỡ khoá tài liệu để phân tích lại. Dùng khi bấm phân tích nhầm tài\nliệu, hoặc không muốn nhập hết hướng giải quyết cho danh sách case\nđã sinh ra. Bản ghi được chuyển sang status=\"cancelled\" chứ không xoá,\ntoàn bộ hướng giải quyết đã nhập sẽ KHÔNG dùng được nữa.\nPhân tích đã completed/failed/cancelled trả URD_ANALYSIS_NOT_ACTIVE.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "urd"
+                ],
+                "summary": "Huỷ 1 phân tích edge case đang dở",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Project ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Analysis ID",
+                        "name": "analysis_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/domain.Analysis"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
             }
         },
         "/internal/api/v1/projects/{id}/documents/{document_id}/urd/analyses/{analysis_id}/cases/{case_id}/image": {
@@ -2073,14 +2152,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Tài liệu phải đã được xác nhận doc_type=urd (PATCH .../documents/{document_id}/doc-type)\nvà có revision mới nhất đã ingest xong (status=ready).",
+                "description": "Tài liệu phải đã được xác nhận doc_type=\"urd\" hoặc \"prd\"\n(PATCH .../documents/{document_id}/doc-type) và có revision mới nhất\nđã ingest xong (status=ready). Prompt gửi AI nêu đúng loại tài liệu.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "urd"
                 ],
-                "summary": "Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD",
+                "summary": "Nhờ AI liệt kê edge case chưa được đề cập trong tài liệu URD/PRD",
                 "parameters": [
                     {
                         "type": "string",
@@ -3143,7 +3222,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "doc_type": {
-                    "description": "DocType rỗng nghĩa là chưa xác định/chưa xác nhận; hiện chỉ có giá trị\n\"urd\" (DocTypeURD) do người dùng xác nhận qua ConfirmDocType.",
+                    "description": "DocType rỗng nghĩa là chưa xác định/chưa xác nhận; giá trị hợp lệ là\n\"urd\" hoặc \"prd\", do người dùng xác nhận qua ConfirmDocType.",
                     "type": "string"
                 },
                 "document_key": {
@@ -3347,7 +3426,8 @@ const docTemplate = `{
                 "doc_type": {
                     "type": "string",
                     "enum": [
-                        "urd"
+                        "urd",
+                        "prd"
                     ]
                 },
                 "version": {

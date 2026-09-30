@@ -351,7 +351,7 @@ func (p *RAGFlowProcessor) process(ctx context.Context, w *ragWork) error {
 	}
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
-		if err := tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
+		if err := unarchivedRevision(tx, w.RevisionID).Updates(map[string]any{
 			"status": "ready", "ragflow_sync_status": "ready", "ragflow_synced_at": now,
 			"canonical_text_key": canonicalKey, "parser_version": parserVersion,
 			"ragflow_last_error": nil, "error_code": nil, "error_detail_sanitized": nil, "updated_at": now,
@@ -455,7 +455,7 @@ func (p *RAGFlowProcessor) waitReady(ctx context.Context, datasetID, documentID 
 }
 
 func (p *RAGFlowProcessor) updateRevision(ctx context.Context, revisionID string, updates map[string]any) error {
-	if err := p.db.WithContext(ctx).Table("document_revisions").Where("id=?", revisionID).Updates(updates).Error; err != nil {
+	if err := unarchivedRevision(p.db.WithContext(ctx), revisionID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("cập nhật RAGFlow revision: %w", err)
 	}
 	return nil
@@ -478,7 +478,7 @@ func (p *RAGFlowProcessor) fail(ctx context.Context, w *ragWork, cause error) {
 		return
 	}
 	_ = p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		_ = tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(map[string]any{
+		_ = unarchivedRevision(tx, w.RevisionID).Updates(map[string]any{
 			"status": "failed", "ragflow_sync_status": "failed", "ragflow_last_error": detail,
 			"error_code": "RAGFLOW_INGESTION_FAILED", "error_detail_sanitized": detail,
 		}).Error

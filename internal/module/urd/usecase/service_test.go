@@ -79,7 +79,7 @@ func (*fakeDocRepo) Update(
 	return nil, nil
 }
 func (*fakeDocRepo) SetDocType(
-	context.Context, uuid.UUID, uuid.UUID, string, int,
+	context.Context, uuid.UUID, uuid.UUID, string, int, uuid.UUID,
 ) (*documentdomain.Document, error) {
 	return nil, nil
 }
@@ -193,6 +193,20 @@ func (f *fakeUrdRepo) MarkCompleted(_ context.Context, id uuid.UUID) (*domain.An
 	a.Status = domain.StatusCompleted
 	return a, nil
 }
+
+// Cancel bắt chước câu UPDATE có điều kiện status của repository thật: chỉ đổi
+// được khi phân tích còn đang hoạt động.
+func (f *fakeUrdRepo) Cancel(_ context.Context, id uuid.UUID) (*domain.Analysis, error) {
+	a, ok := f.analyses[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	if a.Status != domain.StatusAnalyzing && a.Status != domain.StatusAwaitingInput {
+		return nil, domain.ErrAnalysisNotActive
+	}
+	a.Status = domain.StatusCancelled
+	return a, nil
+}
 func (*fakeUrdRepo) Summaries(context.Context, uuid.UUID) (map[uuid.UUID]domain.Analysis, error) {
 	return nil, nil
 }
@@ -211,6 +225,7 @@ func (*fakeUrdRepo) SaveRAGFlowChatID(_ context.Context, _ uuid.UUID, proposed s
 type fakeRAG struct {
 	completeChatContent string
 	completeChatErr     error
+	promptDaGui         string
 }
 
 func (*fakeRAG) Health(context.Context) error { return nil }
@@ -246,8 +261,13 @@ func (*fakeRAG) FindChatByName(context.Context, string) (*port.RAGChat, error) {
 }
 func (*fakeRAG) UpdateChatDatasets(context.Context, string, []string) error { return nil }
 func (f *fakeRAG) CompleteChat(
-	context.Context, port.RAGChatCompletionRequest,
+	_ context.Context, req port.RAGChatCompletionRequest,
 ) (port.RAGChatCompletionResult, error) {
+	// Giữ lại prompt đã gửi để test soi được nội dung — phần duy nhất quyết
+	// định AI hiểu đang đọc loại tài liệu nào.
+	if len(req.Messages) > 0 {
+		f.promptDaGui = req.Messages[len(req.Messages)-1].Content
+	}
 	if f.completeChatErr != nil {
 		return port.RAGChatCompletionResult{}, f.completeChatErr
 	}
@@ -295,10 +315,120 @@ func businessCode(t *testing.T, err error) string {
 	return be.Code
 }
 
+// dungPhanTichDangDo dựng sẵn 1 phân tích awaiting_input để thử luồng huỷ.
+func dungPhanTichDangDo(t *testing.T) (*Service, *fakeUrdRepo, uuid.UUID, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	pid, did, rid, aid := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: documentdomain.DocTypeURD},
+		revisions: []documentdomain.Revision{
+			{ID: rid, Status: revisionStatusReady, CanonicalTextKey: "canon"},
+		},
+	}
+	urdRepo := newFakeUrdRepo()
+	urdRepo.analyses[aid] = &domain.Analysis{
+		ID: aid, DocumentID: did, RevisionID: rid,
+		Status: domain.StatusAwaitingInput, TotalCases: 29,
+	}
+	return newTestService(t, docRepo, newFakeStore(), urdRepo, &fakeRAG{}), urdRepo, pid, did, aid
+}
+
+// Huỷ là lối ra DUY NHẤT cho tài liệu bị phân tích nhầm: trước khi có API này
+// phân tích chỉ rời awaiting_input bằng cách nhập đủ hướng giải quyết cho MỌI
+// case, mà uk_urd_analyses_active lại chặn phân tích lại.
+func TestCancel_GoKhoaTaiLieuDangKet(t *testing.T) {
+	svc, urdRepo, pid, did, aid := dungPhanTichDangDo(t)
+
+	a, err := svc.Cancel(withActor(context.Background()), pid, did, aid)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusCancelled, a.Status)
+	require.Equal(t, domain.StatusCancelled, urdRepo.analyses[aid].Status,
+		"phải ghi xuống repo chứ không chỉ đổi bản sao trả về")
+	require.NotContains(t, domain.ActiveStatuses(), a.Status,
+		"trạng thái sau khi huỷ phải nằm NGOÀI uk_urd_analyses_active")
+}
+
+// Huỷ lần hai (hoặc huỷ phân tích đã completed) là lỗi nghiệp vụ riêng, không
+// phải NotFound — client cần nói đúng "đã xong rồi" thay vì "không tìm thấy".
+func TestCancel_PhanTichDaKetThuc_TraLoiNghiepVuRieng(t *testing.T) {
+	svc, urdRepo, pid, did, aid := dungPhanTichDangDo(t)
+	urdRepo.analyses[aid].Status = domain.StatusCompleted
+
+	_, err := svc.Cancel(withActor(context.Background()), pid, did, aid)
+
+	require.Equal(t, errcode.URDAnalysisNotActive, businessCode(t, err))
+}
+
+// Id phân tích đúng nhưng thuộc tài liệu khác: coi như không tồn tại, không
+// được huỷ chéo tài liệu.
+func TestCancel_PhanTichThuocTaiLieuKhac(t *testing.T) {
+	svc, _, pid, _, aid := dungPhanTichDangDo(t)
+
+	_, err := svc.Cancel(withActor(context.Background()), pid, uuid.New(), aid)
+
+	require.Error(t, err)
+	var be *apperr.BusinessError
+	require.NotErrorAs(t, err, &be, "phải là lỗi kỹ thuật 404, không phải lỗi nghiệp vụ")
+}
+
 func TestAnalyze_ChuaXacNhanURD(t *testing.T) {
 	pid, did := uuid.New(), uuid.New()
 	docRepo := &fakeDocRepo{doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: ""}}
 	svc := newTestService(t, docRepo, newFakeStore(), newFakeUrdRepo(), &fakeRAG{})
+
+	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.Equal(t, errcode.URDNotConfirmed, businessCode(t, err))
+}
+
+// dungTaiLieuSanSang dựng tài liệu đã ingest xong, sẵn sàng phân tích, với
+// loại tài liệu cho trước.
+func dungTaiLieuSanSang(t *testing.T, docType string) (*Service, *fakeRAG, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	pid, did, rid := uuid.New(), uuid.New(), uuid.New()
+	docRepo := &fakeDocRepo{
+		doc: documentdomain.Document{ID: did, ProjectID: pid, DocType: docType, Title: "Tai lieu Demo"},
+		revisions: []documentdomain.Revision{
+			{ID: rid, Status: revisionStatusReady, CanonicalTextKey: "canon"},
+		},
+	}
+	store := newFakeStore()
+	store.objects["canon"] = []byte("Noi dung da trich xuat")
+	rag := &fakeRAG{completeChatContent: `{"cases":[{"description":"Case A"}]}`}
+	return newTestService(t, docRepo, store, newFakeUrdRepo(), rag), rag, pid, did
+}
+
+// PRD phân tích được y như URD — cùng luồng, cùng cổng vào.
+func TestAnalyze_PRDPhanTichDuocNhuURD(t *testing.T) {
+	svc, _, pid, did := dungTaiLieuSanSang(t, documentdomain.DocTypePRD)
+
+	a, cases, err := svc.Analyze(withActor(context.Background()), pid, did)
+
+	require.NoError(t, err)
+	require.Len(t, cases, 1)
+	require.Equal(t, domain.StatusAwaitingInput, a.Status)
+}
+
+// Prompt phải gọi đúng tên loại tài liệu đang phân tích. Gửi tài liệu PRD mà
+// bảo AI "đây là URD" là đẩy nó đi sai trọng tâm.
+func TestAnalyze_PromptGoiDungLoaiTaiLieu(t *testing.T) {
+	svc, rag, pid, did := dungTaiLieuSanSang(t, documentdomain.DocTypePRD)
+	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
+	require.NoError(t, err)
+	require.Contains(t, rag.promptDaGui, "PRD (Product Requirement Document)")
+	require.NotContains(t, rag.promptDaGui, "URD")
+
+	svcURD, ragURD, pidURD, didURD := dungTaiLieuSanSang(t, documentdomain.DocTypeURD)
+	_, _, err = svcURD.Analyze(withActor(context.Background()), pidURD, didURD)
+	require.NoError(t, err)
+	require.Contains(t, ragURD.promptDaGui, "URD (User Requirement Document)")
+}
+
+// Loại tài liệu ngoài danh sách phân tích được thì chặn, không phải cứ khác
+// rỗng là cho qua.
+func TestAnalyze_LoaiTaiLieuNgoaiDanhSachThiChan(t *testing.T) {
+	svc, _, pid, did := dungTaiLieuSanSang(t, "srs")
 
 	_, _, err := svc.Analyze(withActor(context.Background()), pid, did)
 

@@ -76,8 +76,9 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 	if err != nil {
 		return nil, nil, err
 	}
-	if d.DocType != documentdomain.DocTypeURD {
-		return nil, nil, apperr.NewBusiness(errcode.URDNotConfirmed, "Tài liệu chưa được xác nhận là URD", false)
+	if !documentdomain.IsAnalyzableDocType(d.DocType) {
+		return nil, nil, apperr.NewBusiness(errcode.URDNotConfirmed,
+			"Tài liệu chưa được xác nhận là URD hoặc PRD", false)
 	}
 	revision := latestReadyRevision(revisions)
 	if revision == nil {
@@ -107,7 +108,7 @@ func (s *Service) Analyze(ctx context.Context, projectID, documentID uuid.UUID) 
 	if err != nil {
 		return nil, nil, apperr.Internal("Không thể đọc nội dung tài liệu").WithCause(err)
 	}
-	raw, err := s.completeChat(ctx, projectID, d.Title, string(text))
+	raw, err := s.completeChat(ctx, projectID, d.DocType, d.Title, string(text))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -352,6 +353,36 @@ func (s *Service) finalizeAnalysis(
 	return completed, taoPhienBanMoi, nil
 }
 
+// Cancel huỷ một phân tích edge case đang dở, gỡ khoá tài liệu.
+//
+// Trước khi có API này, phân tích chỉ rời awaiting_input bằng ĐÚNG MỘT đường:
+// nhập đủ hướng giải quyết cho mọi case. Mà uk_urd_analyses_active chặn phân
+// tích lại, nên một lần bấm nhầm là tài liệu kẹt cho tới khi có người ngồi
+// nhập cho hết. Ca thật ngày 25/09: tài liệu kỹ thuật mcp-integration.md bị
+// gán nhãn URD rồi phân tích, kẹt awaiting_input với 29 case phải nhập.
+//
+// Cần quyền ghi như Analyze: huỷ cũng là thao tác làm mất dữ liệu người khác
+// đang nhập dở, không thể để người chỉ có quyền đọc làm được.
+func (s *Service) Cancel(ctx context.Context, projectID, documentID, analysisID uuid.UUID) (*domain.Analysis, error) {
+	if _, err := s.authorize(ctx, projectID, true); err != nil {
+		return nil, err
+	}
+	a, _, err := s.repo.GetAnalysis(ctx, analysisID)
+	if err != nil {
+		return nil, s.mapErr(err)
+	}
+	// Chặn huỷ chéo tài liệu: id phân tích đúng nhưng thuộc tài liệu khác thì
+	// coi như không tồn tại, giống Get.
+	if a.DocumentID != documentID {
+		return nil, apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
+	}
+	cancelled, err := s.repo.Cancel(ctx, analysisID)
+	if err != nil {
+		return nil, s.mapErr(err)
+	}
+	return cancelled, nil
+}
+
 // Get trả 1 phân tích cụ thể (để FE mở lại modal đang dở hoặc xem lịch sử).
 func (s *Service) Get(ctx context.Context, projectID, documentID, analysisID uuid.UUID) (*domain.Analysis, []domain.EdgeCase, error) {
 	if _, err := s.authorize(ctx, projectID, false); err != nil {
@@ -385,7 +416,9 @@ func (s *Service) ListSummaries(ctx context.Context, projectID uuid.UUID) (map[u
 // RAG theo câu hỏi — toàn văn tài liệu URD được nhúng thẳng vào prompt vì cần
 // AI đọc hết để tìm chỗ còn thiếu edge case, không phải trả lời 1 câu hỏi cụ
 // thể trên tập tài liệu dự án.
-func (s *Service) completeChat(ctx context.Context, projectID uuid.UUID, documentTitle, canonicalText string) (string, error) {
+func (s *Service) completeChat(
+	ctx context.Context, projectID uuid.UUID, docType, documentTitle, canonicalText string,
+) (string, error) {
 	datasetID, err := s.repo.RAGFlowDatasetID(ctx, projectID)
 	if err != nil {
 		return "", apperr.Database("Không thể đọc RAGFlow dataset mapping").WithCause(err)
@@ -399,7 +432,7 @@ func (s *Service) completeChat(ctx context.Context, projectID uuid.UUID, documen
 	}
 	result, err := s.rag.CompleteChat(ctx, port.RAGChatCompletionRequest{
 		ChatID:   chatID,
-		Messages: []port.RAGChatMessage{{Role: "user", Content: urdPrompt(documentTitle, canonicalText)}},
+		Messages: []port.RAGChatMessage{{Role: "user", Content: urdPrompt(docType, documentTitle, canonicalText)}},
 		// Không cần trích dẫn: chỉ parse Content thành JSON (xem report/usecase
 		// completeChat — cùng lý do).
 		WantReference: false,
@@ -484,6 +517,10 @@ func (s *Service) mapErr(err error) error {
 	}
 	if errors.Is(err, domain.ErrNotFound) {
 		return apperr.NotFound(errcode.NotFound, "Không tìm thấy phân tích edge case")
+	}
+	if errors.Is(err, domain.ErrAnalysisNotActive) {
+		return apperr.NewBusiness(errcode.URDAnalysisNotActive,
+			"Phân tích này đã kết thúc, không còn gì để huỷ", false)
 	}
 	return apperr.Database("Lỗi đọc dữ liệu phân tích").WithCause(err)
 }
