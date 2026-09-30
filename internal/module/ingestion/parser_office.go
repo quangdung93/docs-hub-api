@@ -11,6 +11,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/quangdung93/docs-hub-api/pkg/docxheading"
 )
 
 const maxArchiveEntryBytes = maxCanonicalBytes
@@ -59,23 +61,53 @@ func (docxParser) Parse(_ context.Context, reader io.Reader) (ParsedDocument, er
 	if err != nil {
 		return ParsedDocument{}, fmt.Errorf("đọc DOCX: %w", err)
 	}
+	// styles.xml là tùy chọn: thiếu thì vẫn nhận tiêu đề qua styleId HeadingN
+	// hoặc heuristic dự phòng của docxheading.
+	stylesXML, _ := readZIPEntry(archive, "word/styles.xml")
+	paragraphs, err := scanDOCXParagraphs(documentXML)
+	if err != nil {
+		return ParsedDocument{}, err
+	}
+	// Cấp tiêu đề phải tính trên CẢ tài liệu (heuristic xếp hạng cỡ chữ), nên
+	// gom đủ đoạn văn rồi mới ghi ra text.
+	levels := docxheading.Levels(docxheading.ParseStyles(stylesXML), paragraphs)
+	var out strings.Builder
+	for i, p := range paragraphs {
+		appendDOCXParagraph(&out, p.Text, levels[i])
+	}
+	text, err := validateCanonicalText(out.String())
+	if err != nil {
+		return ParsedDocument{}, err
+	}
+	return ParsedDocument{Text: text, ParserVersion: "docx-v2"}, nil
+}
+
+// scanDOCXParagraphs duyệt document.xml, trả mọi đoạn văn (kể cả trong bảng)
+// theo thứ tự xuất hiện, kèm style và định dạng để nhận diện tiêu đề.
+func scanDOCXParagraphs(documentXML []byte) ([]docxheading.Paragraph, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(documentXML))
-	var out, paragraph strings.Builder
+	var paragraphs []docxheading.Paragraph
+	var paragraph strings.Builder
+	var tracker docxheading.Tracker
 	var style string
 	inText := false
+	tableDepth := 0
 	for {
 		token, decodeErr := decoder.Token()
 		if decodeErr == io.EOF {
-			break
+			return paragraphs, nil
 		}
 		if decodeErr != nil {
-			return ParsedDocument{}, fmt.Errorf("parse DOCX XML: %w", decodeErr)
+			return nil, fmt.Errorf("parse DOCX XML: %w", decodeErr)
 		}
 		switch node := token.(type) {
 		case xml.StartElement:
 			switch node.Name.Local {
+			case "tbl":
+				tableDepth++
 			case "p":
 				paragraph.Reset()
+				tracker.Reset()
 				style = ""
 			case "pStyle":
 				style = xmlAttribute(node.Attr, "val")
@@ -86,38 +118,38 @@ func (docxParser) Parse(_ context.Context, reader io.Reader) (ParsedDocument, er
 			case "br", "cr":
 				paragraph.WriteByte('\n')
 			}
+			tracker.Start(node)
 		case xml.CharData:
 			if inText {
 				paragraph.Write([]byte(node))
+				tracker.Text(node)
 			}
 		case xml.EndElement:
+			tracker.End(node)
 			switch node.Name.Local {
+			case "tbl":
+				tableDepth--
 			case "t":
 				inText = false
 			case "p":
-				appendDOCXParagraph(&out, paragraph.String(), style)
+				paragraphs = append(paragraphs, docxheading.Paragraph{
+					StyleID: style, Text: paragraph.String(), InTable: tableDepth > 0, Format: tracker.Format(),
+				})
 			}
 		}
 	}
-	text, err := validateCanonicalText(out.String())
-	if err != nil {
-		return ParsedDocument{}, err
-	}
-	return ParsedDocument{Text: text, ParserVersion: "docx-v1"}, nil
 }
 
-func appendDOCXParagraph(out *strings.Builder, value, style string) {
+// appendDOCXParagraph ghi 1 đoạn văn; tiêu đề cấp N có tiền tố N dấu "#" để AI
+// (và docxmerge khi đối chiếu) nhận ra cấu trúc mục.
+func appendDOCXParagraph(out *strings.Builder, value string, level int) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return
 	}
-	styleLower := strings.ToLower(style)
-	if strings.HasPrefix(styleLower, "heading") {
-		level, err := strconv.Atoi(strings.TrimPrefix(styleLower, "heading"))
-		if err == nil && level >= 1 && level <= 6 {
-			out.WriteString(strings.Repeat("#", level))
-			out.WriteByte(' ')
-		}
+	if level > 0 {
+		out.WriteString(strings.Repeat("#", level))
+		out.WriteByte(' ')
 	}
 	out.WriteString(value)
 	out.WriteByte('\n')
