@@ -3,6 +3,7 @@ package domain
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,6 +46,12 @@ type RevisionRef struct {
 	FileName          string
 	Scope             ResolvedScope
 	RAGFlowDocumentID string
+	// RevisionNo và CreatedAt phân biệt các bản của CÙNG 1 tài liệu trong cùng
+	// scope (vd bản gốc và bản đã hợp nhất edge case của URD ở v1.1) — thiếu
+	// hai trường này thì mọi bản có chung nhãn version + tên file, AI không
+	// biết bản nào mới hơn.
+	RevisionNo int
+	CreatedAt  time.Time
 }
 
 type Repository interface {

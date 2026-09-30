@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	promptVersion     = "ragflow-chat-v2-planner"
+	promptVersion     = "ragflow-chat-v3-revisions"
 	maxTitleLength    = 255
 	maxQuestionLength = 8000
 	scopeMetadataKey  = "docs_hub_scope_id"
@@ -140,7 +140,7 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 		return nil, err
 	}
 	if len(refs) == 0 {
-		return s.save(ctx, input, *scope, resolved, "current_state",
+		return s.save(ctx, input, *scope, resolved, intentCurrentState,
 			"Không tìm thấy đủ thông tin trong phạm vi tài liệu đã chọn.", "", nil, false, started)
 	}
 	datasetID, err := s.scopeRepo.DatasetID(ctx, input.ProjectID)
@@ -191,12 +191,7 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 			return nil, apperr.External("Không thể đồng bộ scope metadata sang RAGFlow").WithCause(err)
 		}
 	}
-	var evidence []port.RAGChunk
-	if plan.Intent == "evolution" && len(resolved) > 1 {
-		evidence = s.retrieveEvolutionEvidence(ctx, datasetID, resolved, refs, input.Question)
-	} else {
-		evidence = s.retrievePlannedEvidence(ctx, datasetID, refs, plan.Queries)
-	}
+	evidence := s.collectEvidence(ctx, datasetID, plan, resolved, refs, input.Question)
 	if len(compared) > 0 && !coversEvidence(resolved, refs, evidence) {
 		return s.save(ctx, input, *scope, resolved, plan.Intent,
 			"Không đủ bằng chứng ở từng phiên bản dự án để so sánh.", "", nil, false, started)
@@ -217,6 +212,22 @@ func (s *Service) Ask(ctx context.Context, input AskInput) (*Answer, error) {
 	citations := mapRAGCitations(input.ProjectID, datasetID, refs, references)
 	return s.save(ctx, input, *scope, resolved, plan.Intent, result.Content, result.Model,
 		citations, len(citations) > 0, started)
+}
+
+// collectEvidence chọn cách lấy bằng chứng bổ sung. So sánh (evolution) lấy
+// riêng từng mốc — từng version, và từng bản khi 1 tài liệu có nhiều bản
+// trong cùng version — để mốc nào cũng có mặt trong prompt.
+func (s *Service) collectEvidence(
+	ctx context.Context, datasetID string, plan questionPlan,
+	resolved []retrievaldomain.ResolvedScope, refs []retrievaldomain.RevisionRef, question string,
+) []port.RAGChunk {
+	if plan.Intent == intentEvolution {
+		units := evidenceUnits(resolved, refs, revisionOrdinals(refs))
+		if len(units) > 1 {
+			return s.retrieveEvolutionEvidence(ctx, datasetID, units, question)
+		}
+	}
+	return s.retrievePlannedEvidence(ctx, datasetID, refs, plan.Queries)
 }
 
 func (s *Service) save(
