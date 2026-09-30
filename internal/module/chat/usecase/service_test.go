@@ -111,6 +111,7 @@ type fakeRAG struct {
 	completion       port.RAGChatCompletionResult
 	completions      []port.RAGChatCompletionResult
 	retrieval        port.RAGRetrievalResult
+	retrievalByDoc   map[string]port.RAGRetrievalResult
 	retrievalInputs  []port.RAGRetrievalRequest
 	metadata         map[string]string
 	metadataIDs      []string
@@ -145,7 +146,87 @@ func (f *fakeRAG) Retrieve(_ context.Context, input port.RAGRetrievalRequest) (p
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.retrievalInputs = append(f.retrievalInputs, input)
+	if len(input.DocumentIDs) == 1 && f.retrievalByDoc != nil {
+		return f.retrievalByDoc[input.DocumentIDs[0]], nil
+	}
 	return f.retrieval, nil
+}
+
+func TestAsk_SoSanhHaiProjectVersionsLayBangChungTungVersion(t *testing.T) {
+	t.Parallel()
+	projectID, actorID := uuid.New(), uuid.New()
+	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.0"}
+	v11 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.1"}
+	repo := &fakeRepo{role: "viewer", chatID: "chat-1", conversation: &domain.Conversation{
+		ID: uuid.New(), ProjectID: projectID, UserID: actorID,
+	}}
+	scopes := &fakeScopeRepo{resolved: []retrievaldomain.ResolvedScope{v10, v11}, dataset: "ds-1",
+		refs: []retrievaldomain.RevisionRef{
+			{DocumentID: uuid.New(), RevisionID: uuid.New(), FileName: "URD-A.md", Scope: v10, RAGFlowDocumentID: "doc-10"},
+			{DocumentID: uuid.New(), RevisionID: uuid.New(), FileName: "URD-A.md", Scope: v11, RAGFlowDocumentID: "doc-11"},
+		}}
+	rag := &fakeRAG{completions: []port.RAGChatCompletionResult{
+		{Content: `{"intent":"specific_version","scope":"specific_version","version_label":"v1.0","queries":["URD chức năng A"]}`},
+		{Content: "v1.0 khác v1.1", Model: "qwen"},
+	}, retrievalByDoc: map[string]port.RAGRetrievalResult{
+		"doc-10": {Chunks: []port.RAGChunk{{ID: "c-10", DocumentID: "doc-10", DatasetID: "ds-1", Content: "A phiên bản 1.0"}}},
+		"doc-11": {Chunks: []port.RAGChunk{{ID: "c-11", DocumentID: "doc-11", DatasetID: "ds-1", Content: "A phiên bản 1.1"}}},
+	}}
+	service := New(repo, scopes, rag, fixedClock{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actorID.String()})
+	answer, err := service.Ask(ctx, AskInput{
+		ProjectID: projectID, ConversationID: repo.conversation.ID,
+		Question: "So sánh phiên bản tài liệu URD chức năng A giữa 2 phiên bản project v1.0 và v1.1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "evolution", answer.Intent)
+	require.Equal(t, []retrievaldomain.ResolvedScope{v10, v11}, answer.ResolvedScope)
+	require.Equal(t, []uuid.UUID{v10.ID, v11.ID}, repo.saved.Scope.VersionIDs)
+	require.Len(t, rag.retrievalInputs, 2)
+	require.Equal(t, []string{"doc-10"}, rag.retrievalInputs[0].DocumentIDs)
+	require.Equal(t, []string{"doc-11"}, rag.retrievalInputs[1].DocumentIDs)
+	prompt := rag.completionInput.Messages[len(rag.completionInput.Messages)-1].Content
+	require.Contains(t, prompt, "A phiên bản 1.0")
+	require.Contains(t, prompt, "A phiên bản 1.1")
+	require.Len(t, answer.Citations, 2)
+}
+
+func TestComparedVersions_KhongNhanNhamVersionTienTo(t *testing.T) {
+	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.0"}
+	v101 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.0.1"}
+	v11 := retrievaldomain.ResolvedScope{ID: uuid.New(), Label: "v1.1"}
+	selected := comparedVersions("So sánh v1.0.1 với v1.1", []retrievaldomain.ResolvedScope{v10, v101, v11})
+	require.Equal(t, []retrievaldomain.ResolvedScope{v101, v11}, selected)
+}
+
+func TestAsk_SoSanhThieuBangChungVersionMoiKhongDuDoan(t *testing.T) {
+	projectID, actorID := uuid.New(), uuid.New()
+	v10 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.0"}
+	v11 := retrievaldomain.ResolvedScope{ID: uuid.New(), Type: "version", Label: "v1.1"}
+	repo := &fakeRepo{role: "viewer", chatID: "chat-1", conversation: &domain.Conversation{
+		ID: uuid.New(), ProjectID: projectID, UserID: actorID,
+	}}
+	scopes := &fakeScopeRepo{resolved: []retrievaldomain.ResolvedScope{v10, v11}, dataset: "ds-1",
+		refs: []retrievaldomain.RevisionRef{
+			{DocumentID: uuid.New(), RevisionID: uuid.New(), Scope: v10, RAGFlowDocumentID: "doc-10"},
+			{DocumentID: uuid.New(), RevisionID: uuid.New(), Scope: v11, RAGFlowDocumentID: "doc-11"},
+		}}
+	rag := &fakeRAG{completions: []port.RAGChatCompletionResult{
+		{Content: `{"intent":"evolution","scope":"all_versions","queries":["Chức năng A"]}`},
+	}, retrievalByDoc: map[string]port.RAGRetrievalResult{
+		"doc-10": {Chunks: []port.RAGChunk{{ID: "c-10", DocumentID: "doc-10", Content: "A phiên bản 1.0"}}},
+	}}
+	service := New(repo, scopes, rag, fixedClock{})
+	ctx := contextx.WithActor(context.Background(), contextx.Actor{UserID: actorID.String()})
+	answer, err := service.Ask(ctx, AskInput{
+		ProjectID: projectID, ConversationID: repo.conversation.ID,
+		Question: "So sánh chức năng A giữa project v1.0 và v1.1",
+	})
+	require.NoError(t, err)
+	require.False(t, answer.Grounded)
+	require.Contains(t, answer.Answer, "Không đủ bằng chứng")
+	require.Equal(t, []retrievaldomain.ResolvedScope{v10, v11}, answer.ResolvedScope)
+	require.Len(t, rag.completionInputs, 1, "không sinh câu trả lời từ một version duy nhất")
 }
 func (f *fakeRAG) CreateChat(_ context.Context, name string, datasetIDs []string) (port.RAGChat, error) {
 	f.createChatCalls++
