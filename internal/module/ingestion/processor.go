@@ -14,6 +14,26 @@ import (
 	"github.com/quangdung93/docs-hub-api/internal/infrastructure/database/postgres"
 )
 
+// revisionStatusArchived khớp domain.RevisionStatusArchived của module document.
+// Khai lại ở đây thay vì import cho khỏi kéo phụ thuộc ngược từ ingestion sang
+// module document — cùng cách urd/usecase làm với "ready".
+const revisionStatusArchived = "archived"
+
+// unarchivedRevision giới hạn mọi lệnh ghi trạng thái vào revision CHƯA bị lưu
+// trữ.
+//
+// Xoá tài liệu đánh revision thành 'archived' để nhả sha256 (xem
+// document/repository.SoftDelete). Nhưng worker có thể đang nạp dở đúng
+// revision đó: người dùng thấy tài liệu treo lâu rồi bấm xoá, lát sau worker
+// nạp xong và ghi 'ready' đè lên. Nhãn lưu trữ biến mất, nội dung bị khoá lại
+// mà không ai hiểu vì sao — đúng tình huống người dùng hay gặp nhất.
+//
+// Chặn ngay ở mệnh đề WHERE chứ không đọc-rồi-kiểm: hai bên chạy song song,
+// đọc trước ghi sau vẫn hở.
+func unarchivedRevision(db *gorm.DB, revisionID string) *gorm.DB {
+	return db.Table("document_revisions").Where("id=? AND status<>?", revisionID, revisionStatusArchived)
+}
+
 type Embeddings interface {
 	Embed(context.Context, []string) ([][]float32, error)
 }
@@ -97,8 +117,8 @@ func (p *Processor) claim(ctx context.Context) (*work, error) { //nolint:lll
 	return &w, nil
 }
 func (p *Processor) process(ctx context.Context, w *work) error { //nolint:lll
-	if err := p.db.WithContext(ctx).Table("document_revisions").
-		Where("id=?", w.RevisionID).Update("status", "processing").Error; err != nil {
+	if err := unarchivedRevision(p.db.WithContext(ctx), w.RevisionID).
+		Update("status", "processing").Error; err != nil {
 		return fmt.Errorf("đổi trạng thái processing: %w", err)
 	}
 	reader, err := p.store.GetReader(ctx, w.ObjectKey)
@@ -187,8 +207,7 @@ func (p *Processor) save(
 			"error_code": nil, "error_detail_sanitized": nil,
 			"updated_at": time.Now().UTC(),
 		}
-		if err := tx.Table("document_revisions").Where("id=?", w.RevisionID).
-			Updates(revisionUpdates).Error; err != nil {
+		if err := unarchivedRevision(tx, w.RevisionID).Updates(revisionUpdates).Error; err != nil {
 			return err
 		}
 		jobUpdates := map[string]any{"status": "succeeded", "updated_at": time.Now().UTC()}
@@ -233,7 +252,7 @@ func (p *Processor) fail(ctx context.Context, w *work, cause error) { //nolint:l
 			"status": "failed", "error_code": "INGESTION_FAILED",
 			"error_detail_sanitized": detail,
 		}
-		_ = tx.Table("document_revisions").Where("id=?", w.RevisionID).Updates(revisionUpdates).Error
+		_ = unarchivedRevision(tx, w.RevisionID).Updates(revisionUpdates).Error
 		return tx.Table("ingestion_jobs").Where("id=?", w.JobID).Updates(map[string]any{"status": "failed", "last_error": detail}).Error
 	})
 }
