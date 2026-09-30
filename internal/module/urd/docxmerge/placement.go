@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/quangdung93/docs-hub-api/internal/module/urd/domain"
+	"github.com/quangdung93/docs-hub-api/pkg/docxheading"
 )
-
-// maxHeadingLevel là cấp tiêu đề sâu nhất Word dùng (Heading1..Heading6).
-const maxHeadingLevel = 6
 
 // bodyParagraph là 1 đoạn văn nằm TRỰC TIẾP trong <w:body> — không nằm trong
 // <w:tbl> — kèm vị trí byte của nó trong document.xml, đủ để chèn nội dung
@@ -29,11 +26,13 @@ type bodyParagraph struct {
 	start int
 	// text là toàn bộ nội dung <w:t> của đoạn, đã gộp lại.
 	text string
-	// headingLevel là 1..6 nếu pStyle là Heading1..Heading6, 0 nếu không phải
-	// tiêu đề mục. Theo đúng quy ước mà parser trích xuất text đang dùng
+	// headingLevel là 1..6 nếu đoạn là tiêu đề mục, 0 nếu không. Tính bằng
+	// pkg/docxheading — CHUNG với parser trích xuất text
 	// (internal/module/ingestion/parser_office.go) — cùng 1 tài liệu thì AI
 	// nhìn thấy tiêu đề nào, ở đây cũng nhận ra tiêu đề đó.
 	headingLevel int
+	styleID      string
+	format       docxheading.Format
 	// pPr là XML nguyên bản của <w:pPr>, copy sang đoạn chèn mới để giữ đúng
 	// style/bullet/đánh số của mục. nil nếu đoạn không có pPr, hoặc pPr có
 	// chứa <w:sectPr> (copy vào sẽ tạo ngắt section — không an toàn).
@@ -47,8 +46,8 @@ type insertion struct {
 }
 
 // scanBody đọc document.xml và trả về danh sách đoạn văn cấp <w:body> theo
-// đúng thứ tự xuất hiện, kèm vị trí byte.
-func scanBody(documentXML []byte) ([]bodyParagraph, error) {
+// đúng thứ tự xuất hiện, kèm vị trí byte và cấp tiêu đề.
+func scanBody(documentXML []byte, styles docxheading.Styles) ([]bodyParagraph, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(documentXML))
 	s := bodyScanner{documentXML: documentXML}
 	for {
@@ -64,7 +63,20 @@ func scanBody(documentXML []byte) ([]bodyParagraph, error) {
 		}
 		s.handle(token, offset, int(decoder.InputOffset()))
 	}
+	assignHeadingLevels(s.paragraphs, styles)
 	return s.paragraphs, nil
+}
+
+// assignHeadingLevels điền headingLevel cho từng đoạn. Chỉ có đoạn cấp body
+// (không trong bảng) nên InTable luôn false.
+func assignHeadingLevels(paragraphs []bodyParagraph, styles docxheading.Styles) {
+	input := make([]docxheading.Paragraph, len(paragraphs))
+	for i, p := range paragraphs {
+		input[i] = docxheading.Paragraph{StyleID: p.styleID, Text: p.text, Format: p.format}
+	}
+	for i, level := range docxheading.Levels(styles, input) {
+		paragraphs[i].headingLevel = level
+	}
 }
 
 // bodyScanner giữ trạng thái khi duyệt token của document.xml.
@@ -73,6 +85,7 @@ type bodyScanner struct {
 	paragraphs  []bodyParagraph
 	current     *bodyParagraph
 	text        strings.Builder
+	tracker     docxheading.Tracker
 	tableDepth  int
 	pPrStart    int
 	inPPr       bool
@@ -87,6 +100,7 @@ func (s *bodyScanner) handle(token xml.Token, start, end int) {
 	case xml.CharData:
 		if s.inText {
 			s.text.Write(node)
+			s.tracker.Text(node)
 		}
 	case xml.EndElement:
 		s.endElement(node, end)
@@ -101,11 +115,13 @@ func (s *bodyScanner) startElement(node xml.StartElement, start int) {
 		if s.tableDepth == 0 && s.current == nil {
 			s.current = &bodyParagraph{start: start}
 			s.text.Reset()
+			s.tracker.Reset()
 			s.pPrHasSect = false
 		}
 	default:
 		if s.current != nil {
 			s.startParagraphChild(node, start)
+			s.tracker.Start(node)
 		}
 	}
 }
@@ -120,7 +136,7 @@ func (s *bodyScanner) startParagraphChild(node xml.StartElement, start int) {
 		}
 	case "pStyle":
 		if s.inPPr {
-			s.current.headingLevel = headingLevel(attrValue(node.Attr, "val"))
+			s.current.styleID = attrValue(node.Attr, "val")
 		}
 	case "sectPr":
 		// <w:sectPr> lồng trong <w:pPr> = ngắt section: không copy pPr này
@@ -134,6 +150,9 @@ func (s *bodyScanner) startParagraphChild(node xml.StartElement, start int) {
 }
 
 func (s *bodyScanner) endElement(node xml.EndElement, end int) {
+	if s.current != nil {
+		s.tracker.End(node)
+	}
 	switch node.Name.Local {
 	case "tbl":
 		s.tableDepth--
@@ -149,6 +168,7 @@ func (s *bodyScanner) endElement(node xml.EndElement, end int) {
 	case "p":
 		if s.current != nil {
 			s.current.text = strings.TrimSpace(s.text.String())
+			s.current.format = s.tracker.Format()
 			s.paragraphs = append(s.paragraphs, *s.current)
 			s.current = nil
 		}
@@ -162,19 +182,6 @@ func attrValue(attrs []xml.Attr, name string) string {
 		}
 	}
 	return ""
-}
-
-// headingLevel đổi pStyle thành cấp tiêu đề: "Heading2" -> 2, khác -> 0.
-func headingLevel(style string) int {
-	lower := strings.ToLower(style)
-	if !strings.HasPrefix(lower, "heading") {
-		return 0
-	}
-	level, err := strconv.Atoi(strings.TrimPrefix(lower, "heading"))
-	if err != nil || level < 1 || level > maxHeadingLevel {
-		return 0
-	}
-	return level
 }
 
 // normalizeHeading chuẩn hoá tiêu đề trước khi so khớp. AI copy tiêu đề từ

@@ -288,8 +288,8 @@ func TestMerge_NhieuCaseVuaChenThangVuaVaoPhuLuc(t *testing.T) {
 	require.NotContains(t, content, "Case 2: ")
 }
 
-// Tài liệu không dùng style Heading (tiêu đề bôi đậm thủ công): không nhận
-// diện được mục nào, toàn bộ lùi về phụ lục — đúng hành vi cũ, không hỏng.
+// Tài liệu không dùng style Heading và tiêu đề cũng không có số mục/cỡ chữ
+// riêng: không nhận diện được mục nào, toàn bộ lùi về phụ lục, không hỏng.
 func TestMerge_TaiLieuKhongCoStyleHeading_VeHetPhuLuc(t *testing.T) {
 	const khongHeading = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -304,6 +304,58 @@ func TestMerge_TaiLieuKhongCoStyleHeading_VeHetPhuLuc(t *testing.T) {
 
 	require.Contains(t, content, "Phụ lục: Edge Case bổ sung (AI)")
 	require.Contains(t, content, "Xu ly x")
+}
+
+// Mô phỏng URD thật (app bác sĩ): tiêu đề chỉ bôi đậm + tăng cỡ chữ, có số
+// mục, nội dung BR/AC nằm trong bảng. Heuristic dự phòng phải nhận ra mục.
+func TestMerge_TieuDeInDamCoSoMuc_ChenThangVaoMuc(t *testing.T) {
+	const inDam = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>C. DANH SÁCH CHỨC NĂNG</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="21"/></w:rPr><w:t>F2 – Vào chế độ theo dõi</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:sz w:val="19"/></w:rPr><w:t>Workflow F2</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>BR-01</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>IV. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>AC-01</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>D. THIẾT KẾ (UI/UX)</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+
+	content := mergeStructured(t, inDam, []domain.EdgeCase{
+		edgeCase("Case BR", "Xu ly BR", "### III. QUY TẮC NGHIỆP VỤ (BUSINESS RULES)"),
+		edgeCase("Case F2", "Xu ly F2", "F2 – Vào chế độ theo dõi"),
+	})
+
+	require.NotContains(t, content, "Phụ lục: Edge Case bổ sung (AI)")
+	// BR: sau bảng BR, trước mục IV.
+	require.Greater(t, strings.Index(content, "Xu ly BR"), strings.Index(content, "BR-01"))
+	require.Less(t, strings.Index(content, "Xu ly BR"), strings.Index(content, "IV. TIÊU CHÍ"))
+	// F2 là cấp 3: cuối mục F2, trước mục III (cấp 2).
+	require.Greater(t, strings.Index(content, "Xu ly F2"), strings.Index(content, "Workflow F2"))
+	require.Less(t, strings.Index(content, "Xu ly F2"), strings.Index(content, "III. QUY TẮC"))
+}
+
+// Word bản tiếng Việt lưu styleId "u1"/"u2" thay vì "Heading1"; tên built-in
+// trong styles.xml vẫn là "heading N" nên phải đọc styles.xml mới nhận ra.
+func TestMerge_StyleTieuDeBanDiaHoa_DocTuStylesXML(t *testing.T) {
+	const documentXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:pPr><w:pStyle w:val="u2"/></w:pPr><w:r><w:t>Tieu chi chap nhan</w:t></w:r></w:p>
+<w:p><w:r><w:t>AC-01</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="u2"/></w:pPr><w:r><w:t>Quy tac nghiep vu</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`
+	const stylesXML = `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:style w:type="paragraph" w:styleId="u2"><w:name w:val="heading 2"/></w:style></w:styles>`
+	original := buildDocx(t, map[string]string{"word/styles.xml": stylesXML, "word/document.xml": documentXML})
+
+	merged, err := Merge(original, []domain.EdgeCase{edgeCase("Case x", "Xu ly x", "Tieu chi chap nhan")})
+	require.NoError(t, err)
+	content := readEntry(t, merged, "word/document.xml")
+
+	require.NotContains(t, content, "Phụ lục: Edge Case bổ sung (AI)")
+	require.Less(t, strings.Index(content, "Xu ly x"), strings.Index(content, "Quy tac nghiep vu"))
 }
 
 func TestNormalizeHeading(t *testing.T) {
@@ -321,12 +373,4 @@ func TestNormalizeHeading(t *testing.T) {
 			require.Equal(t, tc.want, normalizeHeading(tc.in))
 		})
 	}
-}
-
-func TestHeadingLevel(t *testing.T) {
-	require.Equal(t, 1, headingLevel("Heading1"))
-	require.Equal(t, 3, headingLevel("heading3"))
-	require.Equal(t, 0, headingLevel("Normal"))
-	require.Equal(t, 0, headingLevel("Heading9"), "Word chỉ có Heading1..6")
-	require.Equal(t, 0, headingLevel(""))
 }
