@@ -23,8 +23,10 @@
 // giản (1 section); nhận diện mục theo pkg/docxheading (style Heading/
 // outlineLvl, hoặc dự phòng là dòng in đậm có số mục như "A.", "I.", "F2 –"
 // khi tài liệu không dùng style tiêu đề). Tiêu đề không đánh số mà chỉ bôi
-// đậm thì vẫn không nhận ra. Nội dung của mục nằm trong bảng thì đoạn mới được chèn sau
-// bảng chứ không thành 1 dòng mới của bảng. Ảnh minh hoạ chỉ được nhắc tới
+// đậm thì vẫn không nhận ra. Mục có bảng BR/AC (cột đầu là mã "BR-19",
+// "AC-11") thì case thành 1 dòng mới cuối bảng, định dạng theo dòng cuối, số
+// nối tiếp (xem table.go); bảng không có cột mã, chỉ có 1 dòng, hoặc dòng cuối
+// gộp ô dọc thì đoạn mới vẫn được chèn SAU bảng. Ảnh minh hoạ chỉ được nhắc tới
 // bằng tên object key dạng text, KHÔNG nhúng ảnh thật vào docx — nhúng ảnh
 // cần thêm quan hệ (relationships) + content types phức tạp hơn nhiều, để
 // dành cho một bản sau nếu cần; ảnh gốc vẫn xem được qua object store.
@@ -183,11 +185,11 @@ func insertCases(documentXML []byte, cases []domain.EdgeCase, styles docxheading
 	// phiên bản URD mới — hỏng ở đây là người dùng mất trắng công đã nhập
 	// (đã xảy ra với URD dạng PDF, xem usecase.finalizeAnalysis), nên tuyệt
 	// đối không biến 1 tài liệu lạ cấu trúc thành lỗi cứng.
-	paragraphs, err := scanBody(documentXML, styles)
+	paragraphs, tables, err := scanBody(documentXML, styles)
 	if err != nil {
-		paragraphs = nil
+		paragraphs, tables = nil, nil
 	}
-	inserts, leftover := planInsertions(paragraphs, bodyEnd, cases)
+	inserts, leftover := planInsertions(paragraphs, tables, bodyEnd, cases)
 	if len(leftover) > 0 {
 		inserts = append(inserts, insertion{offset: bodyEnd, xml: buildAppendixXML(leftover)})
 	}
